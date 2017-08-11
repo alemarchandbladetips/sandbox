@@ -1,11 +1,4 @@
-//Le moteur à 14 poles a 2520 impulsions/tour avec le long vecteur ( 504 avec le court ?)
-//Le moteur à 22 poles a 3960 impulsions/tour avec le long vecteur et 792 avec le court 
-
-// il manque: 
-// - vérifier que la sortie est bien en degrés_252
-// - vérifier la durée de la boucle et des différents éléments, 
-// en déduire une vitesse max car ça peut destabiliser à haute vitesse
-// - faire la procédure d'initialisation
+// 
 
 const float pi = 3.14159265359;
 const float two_pi = 6.28318530718;
@@ -17,17 +10,11 @@ int16_t j=0;
 // variables
 long i;             // peut servir à compter le nbre d'impulsions( nbre de boucles du pgm)
 long t,t1;             // sert à compter le temps
-float duree_float;  // sert à calculer la durée d'attente
-uint32_t duree_int_cycle;      // passage en int en nombre de cycle de 0.5us
-float n=1;          // nbre de tours/seconde en vitesse max
-int en_marche=1;    // sert à mettre en marche ou arreter le truc
-int reference;      // sert à initialiser le zero
 float u=0;            // ordre en entrée
 float u_integral = 0;
 float u_proportionel = 0;
 int interupt_happened=0;
 uint32_t interupt_counter;
-int flag = 0;
 float ypr_data[3];
 float slice_angle_rd, angle_scale_factor;
 volatile float angle_step_rd, current_angle_rd = 0;
@@ -42,11 +29,6 @@ const int IN3 = 6;   //pins des pwm
 
 
 int16_t nb_pole = 22;
-// comptage pour les vecteurs
-int currentStepA;   
-int currentStepB;
-int currentStepC;
-int sineArraySize;
 
 uint8_t raw_data[48];
 float buffer_float;
@@ -77,20 +59,12 @@ void setup() {
   slice_angle_rd = 2*pi/(nb_pole/2.0);
   angle_scale_factor = 2*pi/slice_angle_rd;
   Serial.println(slice_angle_rd*360/two_pi);
-  
-  int phaseShift = sineArraySize / 3;         // Find phase shift and initial A, B C phase values
-  currentStepA = 0;
-  currentStepB = currentStepA + phaseShift;
-  currentStepC = currentStepB + phaseShift;
- 
-  sineArraySize--; // Convert from array Size to last PWM array number
 
-  t1 = micros();
   u = 0;
   cli(); // Désactive l'interruption globale
   bitClear (TCCR2A, WGM20); // WGM20 = 0
   bitClear (TCCR2A, WGM21); // WGM21 = 0 
-  TCCR2B = 0b00000101; // Clock / 8 soit 0.5 micro-s et WGM22 = 0
+  TCCR2B = 0b00000101; // Clock / 128 soit 8us et WGM22 = 0
   TIMSK2 = 0b00000001; // Interruption locale autorisée par TOIE2
   sei(); // Active l'interruption globale
   interupt_counter = 0;
@@ -114,13 +88,9 @@ void setMotorAngle(float angle_rd)
 /////////////////////////////////////////////////////////////////////
 // Routine d'interruption
 ISR(TIMER2_OVF_vect) {
-  TCNT2 = 256 - 125;//125; // 256-250 = 6. 250*0.5us = 125us
-  //if(interupt_counter++ > 1) // 125us*80 = 10000us (100Hz)
+  TCNT2 = 256 - 125;// 125*8us = 1ms
   {
-    interupt_counter = 0;
     current_angle_rd = fmod((current_angle_rd + angle_step_rd),two_pi);
-    //setMotorAngle(current_angle_rd);
-    //interupt_happened = 1;
     time_counter++;
   }
 }
@@ -131,13 +101,10 @@ ISR(TIMER2_OVF_vect) {
 void loop() {
 int k;
 int x;
+  // Command is applied to the motot
   setMotorAngle(current_angle_rd);
-  //analogWrite(IN1, sinAngleA);
-  //analogWrite(IN2, sinAngleB);
-  //analogWrite(IN3, sinAngleC);
-// lecture nombre entré via serie pour contrôle
-  // algo avec entrée commande ( cas reel )
-  if(time_counter > 999 )
+  
+  if(time_counter > 999 ) // done every 1s
   {
     interupt_happened = interupt_happened != 0 ? 0 : 100;
     time_counter = 0;

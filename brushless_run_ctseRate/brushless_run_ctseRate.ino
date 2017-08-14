@@ -141,6 +141,10 @@ int i,j,x;
         }
         ypr_data[i] = buffer_float*57.2957795; // 180/pi
       }
+      Serial.print(fmod(fmod(ypr_data[0]+180,360)+180,360)-180);
+      Serial.print(" ");
+      Serial.print(ypr_data[1]);
+      Serial.print(" ");
       Serial.print(ypr_data[2]);
       Serial.print(" ");
       Serial.println(u);

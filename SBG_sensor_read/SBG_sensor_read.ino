@@ -14,9 +14,13 @@ unsigned char *ptr_buffer = (unsigned char *)&buffer_float;
 uint32_t buffer_uint32;
 unsigned char *ptr_buffer_uint32 = (unsigned char *)&buffer_uint32;
 
-int redLedPin = 10;
-int greenLedPin = 11;
-int gndLedPin = 12;
+int redLedPin = 5;
+int greenLedPin = 6;
+int gndLedPin = 7;
+
+int red_led_blink = 0;
+int red_led_blink_counter = 0;
+int red_led_blink_status = 0;
 
 long time1, time2, time3;
 
@@ -45,6 +49,28 @@ uint16_t calcCRC(const void *pBuffer, uint16_t bufferSize)
   return crc; 
 }
 
+// Routine d'interruption
+ISR(TIMER2_OVF_vect) {
+  TCNT2 = 256 - 250; // 250 x 16 µS = 4 ms
+  red_led_blink_counter++;
+  if(red_led_blink_counter>20)
+  {
+    red_led_blink_counter = 0;
+    if(red_led_blink)
+    {
+      if(red_led_blink_status)
+      {
+        analogWrite(redLedPin, 0);
+        red_led_blink_status = 0;
+      } else
+      {
+        analogWrite(redLedPin, 120);
+        red_led_blink_status = 1;
+      }
+    }
+  }
+}
+
 void setup() {
   Serial.begin(115200);
   Serial.println("Start");
@@ -56,6 +82,13 @@ void setup() {
   digitalWrite(greenLedPin, LOW);
   Serial.println("Corrupted Data");
   data_availability = 0;
+  
+  cli(); // Désactive l'interruption globale
+  bitClear (TCCR2A, WGM20); // WGM20 = 0
+  bitClear (TCCR2A, WGM21); // WGM21 = 0 
+  TCCR2B = 0b00001111; // 
+  TIMSK2 = 0b00000001; // Interruption locale autorisée par TOIE2
+  sei(); // Active l'interruption globale
 }
 
 void loop() {
@@ -74,7 +107,6 @@ void loop() {
       if(raw_data[0] == 0x02) // second char is OK too
       {
         datalen = raw_data[3] + (raw_data[2]<<8); // Number of data to read
-        if(print_data){ Serial.print(datalen); Serial.print(" "); }
         Serial.readBytes(raw_data+4,datalen); // read the data with the length specified in the header
 
         Serial.readBytes(footer,3); // read the footer
@@ -94,8 +126,9 @@ void loop() {
               ptr_buffer[j] = raw_data[4*i+j+4];
             }
             ypr_data[i] = buffer_float*57.2957795; // 180/pi
-            if(print_data){ Serial.print(ypr_data[i]); Serial.print(" "); }
+            //if(print_data){ Serial.print(ypr_data[i]); Serial.print(" "); }
           }
+          if(print_data){ Serial.print(ypr_data[2]); Serial.print(" "); }
           for(i=0;i<9;i++) // decode sensor data, acc, gyr, mag
           {
             for(j=0;j<4;j++)
@@ -104,19 +137,24 @@ void loop() {
               ptr_buffer[j] = raw_data[4*i+j+16];
             }
             sensor_data[i] = buffer_float;
-            if(print_data){ Serial.print(sensor_data[i]); Serial.print(" "); }
+            //if(print_data){ Serial.print(sensor_data[i]); Serial.print(" "); }
           }
-          for(j=0;j<4;j++)
+          //if(print_data){ Serial.print(raw_data[53]); Serial.print(" "); }
+          if(transmit_raw){ Serial.write(raw_data[53]); }
+          if((raw_data[53] & 0x6E) == 0x6E)
           {
-            if(transmit_raw){ Serial.write(raw_data[j+52]); }
-            if(print_data){ Serial.print(raw_data[j+52]); Serial.print(" "); }
-          }
-          if((raw_data[53] & 0x2F) != 0x2F)
+            if(print_data){ Serial.print(2); Serial.print(" "); }
+            analogWrite(redLedPin, 0);
+            red_led_blink = 0;
+          } else if ((raw_data[53] & 0x6E) == 0x2E)
           {
-            analogWrite(redLedPin, 120);
+            if(print_data){ Serial.print(1); Serial.print(" "); }
+            red_led_blink = 1;
           } else
           {
-            analogWrite(redLedPin, 0);
+            if(print_data){ Serial.print(0); Serial.print(" "); }
+            analogWrite(redLedPin, 120);
+            red_led_blink = 0;
           }
           if(print_data){ Serial.println(" "); }
         } else
@@ -133,6 +171,7 @@ void loop() {
   {
     analogWrite(greenLedPin, 0);
     analogWrite(redLedPin, 0);
+    red_led_blink = 0;
     if(print_data){ Serial.println("No Data"); }
     if(transmit_raw){ Serial.write(0x55);Serial.write(0x55); }
   }

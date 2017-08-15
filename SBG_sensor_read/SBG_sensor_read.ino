@@ -1,10 +1,18 @@
 
 
+const int8_t transmit_raw = 0;
+const int8_t print_data = 1;
+
+
 uint8_t raw_data[100], start_char, footer[3], data_availability;
+uint32_t device_status;
 uint16_t datalen, checkSum, checkSumCalc;
 
 float buffer_float, ypr_data[3], sensor_data[9];
 unsigned char *ptr_buffer = (unsigned char *)&buffer_float;
+
+uint32_t buffer_uint32;
+unsigned char *ptr_buffer_uint32 = (unsigned char *)&buffer_uint32;
 
 int redLedPin = 10;
 int greenLedPin = 11;
@@ -66,50 +74,66 @@ void loop() {
       if(raw_data[0] == 0x02) // second char is OK too
       {
         datalen = raw_data[3] + (raw_data[2]<<8); // Number of data to read
-        //Serial.print(datalen); Serial.print(" ");
+        if(print_data){ Serial.print(datalen); Serial.print(" "); }
         Serial.readBytes(raw_data+4,datalen); // read the data with the length specified in the header
 
         Serial.readBytes(footer,3); // read the footer
         checkSum = footer[1] + ((uint16_t)footer[0]<<8);
         checkSumCalc = calcCRC(raw_data+1,datalen+3);
-        if(footer[2]==0x03 && checkSum==checkSumCalc) // The end char is OK and the computed checksum correspond to the one in the footer.
+        if(footer[2]==0x03 && checkSum==checkSumCalc && raw_data[52] == 0xFF && (raw_data[53] & 0x01) == 0x01) // The end char is OK and the computed checksum correspond to the one in the footer.
         {
-          analogWrite(redLedPin, 0);
+          //analogWrite(redLedPin, 0);
           data_availability = 1;
-          Serial.write(255);
+          if(transmit_raw){ Serial.write(255); }
           
           for(i=0;i<3;i++) // decode YPR data
           {
             for(j=0;j<4;j++)
             {
-              Serial.write(raw_data[4*i+j+4]);
+              if(transmit_raw){ Serial.write(raw_data[4*i+j+4]); }
               ptr_buffer[j] = raw_data[4*i+j+4];
             }
             ypr_data[i] = buffer_float*57.2957795; // 180/pi
-            //Serial.print(ypr_data[i]); Serial.print(" ");
+            if(print_data){ Serial.print(ypr_data[i]); Serial.print(" "); }
           }
           for(i=0;i<9;i++) // decode sensor data, acc, gyr, mag
           {
             for(j=0;j<4;j++)
             {
-              Serial.write(raw_data[4*i+j+16]);
+              if(transmit_raw){ Serial.write(raw_data[4*i+j+16]); }
               ptr_buffer[j] = raw_data[4*i+j+16];
             }
             sensor_data[i] = buffer_float;
-            //Serial.print(sensor_data[i]); Serial.print(" ");
+            if(print_data){ Serial.print(sensor_data[i]); Serial.print(" "); }
           }
-          //Serial.println(" ");
+          for(j=0;j<4;j++)
+          {
+            if(transmit_raw){ Serial.write(raw_data[j+52]); }
+            if(print_data){ Serial.print(raw_data[j+52]); Serial.print(" "); }
+          }
+          if((raw_data[53] & 0x2F) != 0x2F)
+          {
+            analogWrite(redLedPin, 120);
+          } else
+          {
+            analogWrite(redLedPin, 0);
+          }
+          if(print_data){ Serial.println(" "); }
         } else
         {
-          Serial.println("Corrupted Data");
+          if(print_data){ Serial.println("Corrupted Data"); }
+          if(transmit_raw){ Serial.write(0xAA);Serial.write(0xAA); }
           data_availability = 0;
           analogWrite(redLedPin, 120);
+          analogWrite(greenLedPin, 0);
         }
       }
     }
   } else if( (micros() - time1) >15000)
   {
     analogWrite(greenLedPin, 0);
-    Serial.println("No Data");
+    analogWrite(redLedPin, 0);
+    if(print_data){ Serial.println("No Data"); }
+    if(transmit_raw){ Serial.write(0x55);Serial.write(0x55); }
   }
 }

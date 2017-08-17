@@ -1,5 +1,9 @@
 // run a brushless motor, using interuption at constant rate
 
+#define U_MAX 3.5 // max speed command of the motor
+#define SIN_APMLITUDE_MAX 125 // max amplitude of sinus (around a 127 offset)
+#define SIN_APMLITUDE_MIN 60 // max amplitude of sinus (around a 127 offset)
+
 // definition of some constants to ease computations
 const float pi = 3.14159265359;
 const float two_pi = 6.28318530718;
@@ -10,6 +14,7 @@ const float two_pi_on_three = 2.09439510239;
 const uint8_t nb_pole = 22;
 float slice_angle_rd, angle_scale_factor;
 float normalized_angle;
+float sin_amplitude = 50;
 
 // Commande variable
 volatile float angle_step_rd, current_angle_rd_prev, current_angle_rd = 0;
@@ -61,7 +66,8 @@ void setup() {
   angle_scale_factor = 2*pi/slice_angle_rd;
   Serial.println(slice_angle_rd*360/two_pi);
 
-  u = 0;
+  u = 0.5;
+  sin_amplitude = 125;
   cli(); // Désactive l'interruption globale
   bitClear (TCCR2A, WGM20); // WGM20 = 0
   bitClear (TCCR2A, WGM21); // WGM21 = 0 
@@ -77,9 +83,9 @@ void setMotorAngle(float angle_rd)
   normalized_angle = fmod(angle_rd,slice_angle_rd)*angle_scale_factor;
 
   // Computes sin from the normalized angles
-  sinAngleA = round(sin(normalized_angle)*125.0+127.0);
-  sinAngleB = round(sin(normalized_angle+two_pi_on_three)*125.0+127.0);
-  sinAngleC = round(sin(normalized_angle+four_pi_on_three)*125.0+127.0);
+  sinAngleA = round(sin(normalized_angle)*sin_amplitude+127.0);
+  sinAngleB = round(sin(normalized_angle+two_pi_on_three)*sin_amplitude+127.0);
+  sinAngleC = round(sin(normalized_angle+four_pi_on_three)*sin_amplitude+127.0);
 
   // Applies sin on PWM outputs
   analogWrite(IN1, sinAngleA);
@@ -106,24 +112,30 @@ int i,j,x;
 // Applying the command if new
   if(current_angle_rd!=current_angle_rd_prev)
   {
+    //Serial.println(current_angle_rd);
     setMotorAngle(current_angle_rd);
     current_angle_rd_prev = current_angle_rd;
   }
 
 // This generates a speed profile that increments fro speed step every second.
-  if(time_counter > 999 )
+  if(time_counter > 1000 )
   {
     interupt_happened = interupt_happened != 0 ? 0 : 100;
     time_counter = 0;
-    if(u > 2)
+    if(u >= U_MAX)
     {
       speed_step = -0.05;
     }
-    if(u < -2)
+    if(u <= -U_MAX)
     {
       speed_step = 0.05;
     }
     u+=speed_step;
+    u = constrain(u,-U_MAX,U_MAX);
+    sin_amplitude = constrain(80+20*u,SIN_APMLITUDE_MIN,SIN_APMLITUDE_MAX);
+    Serial.print(sin_amplitude);
+    Serial.print(" ");
+    Serial.println(u);
   }
 
   // monitoring the serial port
@@ -151,8 +163,8 @@ int i,j,x;
     }
   }
 
-  //u = 0;
-  
+  u = constrain(u,-U_MAX,U_MAX);
+  //sin_amplitude = constrain(60+20*u,SIN_APMLITUDE_MIN,SIN_APMLITUDE_MAX);
   motor_speed_rps = two_pi*u; // conversion from tr/s to rps
   
   angle_step_rd = motor_speed_rps/1000;

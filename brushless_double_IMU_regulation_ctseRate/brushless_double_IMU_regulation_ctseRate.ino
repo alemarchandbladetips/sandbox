@@ -1,8 +1,19 @@
-// run a brushless motor, using interuption at constant rate
+// Control of a brushless motor ensuring the yaw of IMU sticks to 0, using interuption at constant rate
 
-#define U_MAX 3.5 // max speed command of the motor
+#include <Adafruit_Sensor.h>
+#include <Adafruit_BNO055.h>
+
+#define IUM_PACKET_SIZE 49 // number of bytes to be recieved from IMU
+#define U_MAX 0.5 // max speed command of the motor
 #define SIN_APMLITUDE_MAX 125 // max amplitude of sinus (around a 127 offset)
 #define SIN_APMLITUDE_MIN 60 // max amplitude of sinus (around a 127 offset)
+
+const int8_t transmit_raw = 1;
+const int8_t print_data = 0;
+
+// for BNO
+float angz, angx, angy, omega_z;
+Adafruit_BNO055 bno = Adafruit_BNO055();
 
 // definition of some constants to ease computations
 const float pi = 3.14159265359;
@@ -14,15 +25,20 @@ const float two_pi_on_three = 2.09439510239;
 const uint8_t nb_pole = 22;
 float slice_angle_rd, angle_scale_factor;
 float normalized_angle;
-float sin_amplitude = 50;
 
 // Commande variable
 volatile float angle_step_rd, current_angle_rd_prev, current_angle_rd = 0;
 float motor_speed_rps = 0; // desired speed of the motor, rps
 float u=0;            // Command, tr/s
+float u_total = 0;
 float u_integral = 0; // integral part of the command, tr/s
 float u_proportionel = 0; // proportional part of the command, tr/s
 uint8_t sinAngleA, sinAngleB, sinAngleC; // the 3 sinusoide values for the PWMs
+const float Ki = 0.1; // integral gain
+const float Kp = 0.05; // proportional gain
+const float IMU_freq = 100; // IMU frequency
+const float reg_freq = 1000; // regulation frequency
+float sin_amplitude;
 
 // Pin definition for connection to ESC
 const int EN1 = 12;   // pin enable bls
@@ -35,19 +51,20 @@ uint32_t time_counter; // counting the number of interuptions
 uint8_t interupt_happened; // interuption flag
 
 // variables for the serial read an data recomposition
-float ypr_data[3],sensor_data[9],BNO_speed;
-uint8_t raw_data[100];
+float ypr_data[3],sensor_data[9];
+uint8_t raw_data[IUM_PACKET_SIZE];
 float buffer_float;
 unsigned char *ptr_buffer = (unsigned char *)&buffer_float;
-
-
-
-// Others
-float speed_step = 0.05;
-
  
 void setup() {
   Serial.begin(115200);
+
+  if(!bno.begin())
+  {
+    /* There was a problem detecting the BNO055 ... check your connections */
+    Serial.print("Ooops, no BNO055 detected ... Check your wiring or I2C ADDR!");
+    while(1);
+  }
   
 // augmentation fréquence PWM
   setPwmFrequency(IN1); 
@@ -69,7 +86,6 @@ void setup() {
   Serial.println(slice_angle_rd*360/two_pi);
 
   u = 0;
-  sin_amplitude = 125;
   cli(); // Désactive l'interruption globale
   bitClear (TCCR2A, WGM20); // WGM20 = 0
   bitClear (TCCR2A, WGM21); // WGM21 = 0 
@@ -105,91 +121,84 @@ ISR(TIMER2_OVF_vect)
   time_counter++; // counter in ms (replace the micros())
 }
 
-
 //////////////////////////////////////////////////////////////////////
  
 void loop() {
-int i,j,x;
+int i,j,x; 
 
 // Applying the command if new
   if(current_angle_rd!=current_angle_rd_prev)
   {
-    //Serial.println(current_angle_rd);
     setMotorAngle(current_angle_rd);
     current_angle_rd_prev = current_angle_rd;
   }
-
-// This generates a speed profile that increments fro speed step every second.
-  if(time_counter > 1000 )
-  {
-    interupt_happened = interupt_happened != 0 ? 0 : 100;
-    time_counter = 0;
-    if(u >= 1.5)
-    {
-      speed_step = -0.05;
-    }
-    if(u <= -1.5)
-    {
-      speed_step = 0.05;
-    }
-    u+=speed_step;
-    u = constrain(u,-U_MAX,U_MAX);
-    sin_amplitude = constrain(40+20*abs(u),SIN_APMLITUDE_MIN,SIN_APMLITUDE_MAX);
-    //Serial.print(sin_amplitude);
-    //Serial.print(" ");
-    //Serial.println(u);
-  }
-
-  // monitoring the serial port
-  if (Serial.available() > 52){
+  
+  if (Serial.available() > IUM_PACKET_SIZE){
     x = Serial.read();
     if(x == 255)
     {
-      //Serial.write(255);
-      Serial.readBytes(raw_data,52);
+      if(transmit_raw){ Serial.write(255); }
+      Serial.readBytes(raw_data,IUM_PACKET_SIZE);
       for(i=0;i<3;i++) // decode YPR data
       {
-        for(j=0;j<4;j++) // filling the 4 bytes of the float with the data of serial port
+        for(j=0;j<4;j++)
         {
+          if(transmit_raw){ Serial.write(raw_data[4*i+j]); }
           ptr_buffer[j] = raw_data[4*i+j];
         }
         ypr_data[i] = buffer_float*57.2957795; // 180/pi
+        //Serial.print(ypr_data[i]); Serial.print(" ");
       }
       for(i=0;i<9;i++) // decode sensor data, acc, gyr, mag
       {
         for(j=0;j<4;j++)
         {
+          if(transmit_raw){ Serial.write(raw_data[4*i+j+12]); }
           ptr_buffer[j] = raw_data[4*i+j+12];
         }
         sensor_data[i] = buffer_float;
       }
-      for(j=0;j<4;j++) // filling the 4 bytes of the float with the data of serial port
+      imu::Vector<3> gyro=bno.getVector(Adafruit_BNO055::VECTOR_GYROSCOPE);
+      omega_z = gyro.z();
+      imu::Vector<3> attitude=bno.getVector(Adafruit_BNO055::VECTOR_EULER);
+      angz=attitude.x();
+      angy=attitude.y();
+      angx=attitude.z();
+      buffer_float = omega_z;
+      for(j=0;j<4;j++)
       {
-        ptr_buffer[j] = raw_data[j+48];
+        if(transmit_raw){ Serial.write(ptr_buffer[j]); }
       }
-        BNO_speed = buffer_float; 
-      /*
-      Serial.print(fmod(fmod(ypr_data[0]+180,360)+180,360)-180);
-      Serial.print(" ");
-      Serial.print(ypr_data[1]);
-      Serial.print(" ");
-      Serial.print(ypr_data[2]);
-      Serial.print(" ");*/
-      Serial.print(sensor_data[0]*57.2957795);
-      Serial.print(" ");
-      Serial.print(sensor_data[1]*57.2957795);
-      Serial.print(" ");
-      Serial.print(sensor_data[2]*57.2957795);
-      Serial.println(" ");
+      buffer_float = angz;
+      for(j=0;j<4;j++)
+      {
+        if(transmit_raw){ Serial.write(ptr_buffer[j]); }
+      }
+      u_integral += Ki*ypr_data[2]/IMU_freq;
+      u_integral = constrain(u_integral,-U_MAX,U_MAX);
+      u_proportionel = Kp * ypr_data[2];
+      u_proportionel = constrain(u_proportionel,-U_MAX/2,U_MAX/2);
+      if((raw_data[48] & 0x2E) != 0x2E)
+      {
+        u_integral = 0;
+        u_proportionel = 0;
+        if(print_data){ Serial.print(u); Serial.print(" "); }
+      }
+      u = u_integral + u_proportionel;
+      u = constrain(u,-U_MAX,U_MAX);
+      if(print_data){ Serial.print(u_proportionel); Serial.print(" "); }
+      if(print_data){ Serial.print(u_integral); Serial.print(" "); }
+      if(print_data){ Serial.print(u); Serial.print(" "); }
+      if(print_data){ Serial.print(sin_amplitude/125); Serial.print(" "); }
+      if(print_data){ Serial.println(angx); }
     }
   }
 
-  u = constrain(u,-U_MAX,U_MAX);
-  //u = 1;
-  sin_amplitude = constrain(40+20*abs(u),SIN_APMLITUDE_MIN,SIN_APMLITUDE_MAX);
-  motor_speed_rps = two_pi*u; // conversion from tr/s to rps
+  u_total = u - omega_z/two_pi;
+  sin_amplitude = constrain(40+20*abs(u_total),SIN_APMLITUDE_MIN,SIN_APMLITUDE_MAX);
+  motor_speed_rps = two_pi*u_total;//tps*two_pi;
   
-  angle_step_rd = motor_speed_rps/1000;
+  angle_step_rd = motor_speed_rps/reg_freq;
   
 }
 

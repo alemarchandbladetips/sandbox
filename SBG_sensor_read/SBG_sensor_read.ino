@@ -1,7 +1,7 @@
 
 
-const int8_t transmit_raw = 0;
-const int8_t print_data = 1;
+const int8_t transmit_raw = 1;
+const int8_t print_data = 0;
 
 
 uint8_t raw_data[100], start_char, footer[3], data_availability;
@@ -137,9 +137,9 @@ void loop() {
               ptr_buffer[j] = raw_data[4*i+j+16];
             }
             sensor_data[i] = buffer_float;
-            //if(print_data){ Serial.print(sensor_data[i]); Serial.print(" "); }
+            if(print_data){ Serial.print(sensor_data[i]); Serial.print(" "); }
           }
-          //if(print_data){ Serial.print(raw_data[53]); Serial.print(" "); }
+          if(print_data){ Serial.print(raw_data[53]); Serial.print(" "); }
           if(transmit_raw){ Serial.write(raw_data[53]); }
           if((raw_data[53] & 0x6E) == 0x6E)
           {

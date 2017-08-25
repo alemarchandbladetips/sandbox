@@ -126,7 +126,7 @@ int i,j,x;
     time_counter = 0;
     if(u >= 1.5)
     {
-      speed_step = -0.05;
+      speed_step = 0.0;
     }
     if(u <= -1.5)
     {
@@ -141,51 +141,28 @@ int i,j,x;
   }
 
   // monitoring the serial port
-  if (Serial.available() > 52){
+  if (Serial.available() > 16){
     x = Serial.read();
     if(x == 255)
     {
       //Serial.write(255);
-      Serial.readBytes(raw_data,52);
-      for(i=0;i<3;i++) // decode YPR data
+      Serial.readBytes(raw_data,16);
+      for(i=0;i<4;i++) // decode YPR data
       {
         for(j=0;j<4;j++) // filling the 4 bytes of the float with the data of serial port
         {
           ptr_buffer[j] = raw_data[4*i+j];
         }
-        ypr_data[i] = buffer_float*57.2957795; // 180/pi
+        Serial.print(buffer_float);
+        Serial.print(" ");
       }
-      for(i=0;i<9;i++) // decode sensor data, acc, gyr, mag
-      {
-        for(j=0;j<4;j++)
-        {
-          ptr_buffer[j] = raw_data[4*i+j+12];
-        }
-        sensor_data[i] = buffer_float;
-      }
-      for(j=0;j<4;j++) // filling the 4 bytes of the float with the data of serial port
-      {
-        ptr_buffer[j] = raw_data[j+48];
-      }
-        BNO_speed = buffer_float; 
-      /*
-      Serial.print(fmod(fmod(ypr_data[0]+180,360)+180,360)-180);
-      Serial.print(" ");
-      Serial.print(ypr_data[1]);
-      Serial.print(" ");
-      Serial.print(ypr_data[2]);
-      Serial.print(" ");*/
-      Serial.print(sensor_data[0]*57.2957795);
-      Serial.print(" ");
-      Serial.print(sensor_data[1]*57.2957795);
-      Serial.print(" ");
-      Serial.print(sensor_data[2]*57.2957795);
       Serial.println(" ");
     }
   }
 
   u = constrain(u,-U_MAX,U_MAX);
-  //u = 1;
+  
+  //u = 0;
   sin_amplitude = constrain(40+20*abs(u),SIN_APMLITUDE_MIN,SIN_APMLITUDE_MAX);
   motor_speed_rps = two_pi*u; // conversion from tr/s to rps
   

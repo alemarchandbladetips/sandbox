@@ -1,8 +1,15 @@
 // run a brushless motor, using interuption at constant rate
 
-#define U_MAX 3.5 // max speed command of the motor
+#define U_MAX 1 // max speed command of the motor
 #define SIN_APMLITUDE_MAX 125 // max amplitude of sinus (around a 127 offset)
 #define SIN_APMLITUDE_MIN 60 // max amplitude of sinus (around a 127 offset)
+#define GIMBAL_PACKET_SIZE 33 // number of bytes to be recieved from 
+#define PACKET_START 0xAA // starting char of package
+#define PACKET_STOP 0x55 // starting char of package
+
+// constant used to enable/disable communication, debug, timing checks
+const int8_t transmit_raw = 0;
+const int8_t print_data = 1;
 
 // definition of some constants to ease computations
 const float pi = 3.14159265359;
@@ -35,7 +42,7 @@ uint32_t time_counter; // counting the number of interuptions
 uint8_t interupt_happened; // interuption flag
 
 // variables for the serial read an data recomposition
-float ypr_data[3],sensor_data[9],BNO_speed;
+float all_data[8];
 uint8_t raw_data[100];
 float buffer_float;
 unsigned char *ptr_buffer = (unsigned char *)&buffer_float;
@@ -68,7 +75,7 @@ void setup() {
   angle_scale_factor = 2*pi/slice_angle_rd;
   Serial.println(slice_angle_rd*360/two_pi);
 
-  u = 0;
+  u = 0.0;
   sin_amplitude = 125;
   cli(); // Désactive l'interruption globale
   bitClear (TCCR2A, WGM20); // WGM20 = 0
@@ -81,18 +88,23 @@ void setup() {
 
 void setMotorAngle(float angle_rd)
 {
-  // Computes normalized angle 0->2pi for one slice
-  normalized_angle = fmod(angle_rd,slice_angle_rd)*angle_scale_factor;
-
-  // Computes sin from the normalized angles
-  sinAngleA = round(sin(normalized_angle)*sin_amplitude+127.0);
-  sinAngleB = round(sin(normalized_angle+two_pi_on_three)*sin_amplitude+127.0);
-  sinAngleC = round(sin(normalized_angle+four_pi_on_three)*sin_amplitude+127.0);
-
-  // Applies sin on PWM outputs
-  analogWrite(IN1, sinAngleA);
-  analogWrite(IN2, sinAngleB);
-  analogWrite(IN3, sinAngleC);
+  if(current_angle_rd!=current_angle_rd_prev)
+  {
+    // Computes normalized angle 0->2pi for one slice
+    normalized_angle = fmod(angle_rd,slice_angle_rd)*angle_scale_factor;
+  
+    // Computes sin from the normalized angles
+    sinAngleA = round(sin(normalized_angle)*sin_amplitude+127.0);
+    sinAngleB = round(sin(normalized_angle+two_pi_on_three)*sin_amplitude+127.0);
+    sinAngleC = round(sin(normalized_angle+four_pi_on_three)*sin_amplitude+127.0);
+  
+    // Applies sin on PWM outputs
+    analogWrite(IN1, sinAngleA);
+    analogWrite(IN2, sinAngleB);
+    analogWrite(IN3, sinAngleC);
+    
+    current_angle_rd_prev = current_angle_rd;
+  }
 }
 
 /////////////////////////////////////////////////////////////////////
@@ -112,52 +124,27 @@ void loop() {
 int i,j,x;
 
 // Applying the command if new
-  if(current_angle_rd!=current_angle_rd_prev)
-  {
+  
     //Serial.println(current_angle_rd);
     setMotorAngle(current_angle_rd);
-    current_angle_rd_prev = current_angle_rd;
-  }
 
 // This generates a speed profile that increments fro speed step every second.
   if(time_counter > 1000 )
   {
     interupt_happened = interupt_happened != 0 ? 0 : 100;
     time_counter = 0;
-    if(u >= 1.5)
+    
+    if(u == 1)
     {
       speed_step = 0.0;
     }
-    if(u <= -1.5)
+    if(u <= 0)
     {
       speed_step = 0.05;
     }
     u+=speed_step;
     u = constrain(u,-U_MAX,U_MAX);
-    sin_amplitude = constrain(40+20*abs(u),SIN_APMLITUDE_MIN,SIN_APMLITUDE_MAX);
-    //Serial.print(sin_amplitude);
-    //Serial.print(" ");
-    //Serial.println(u);
-  }
-
-  // monitoring the serial port
-  if (Serial.available() > 16){
-    x = Serial.read();
-    if(x == 255)
-    {
-      //Serial.write(255);
-      Serial.readBytes(raw_data,16);
-      for(i=0;i<4;i++) // decode YPR data
-      {
-        for(j=0;j<4;j++) // filling the 4 bytes of the float with the data of serial port
-        {
-          ptr_buffer[j] = raw_data[4*i+j];
-        }
-        Serial.print(buffer_float);
-        Serial.print(" ");
-      }
-      Serial.println(" ");
-    }
+    sin_amplitude = constrain(80+20*abs(u),SIN_APMLITUDE_MIN,SIN_APMLITUDE_MAX);
   }
 
   u = constrain(u,-U_MAX,U_MAX);

@@ -8,21 +8,17 @@
 #include <Adafruit_Sensor.h>
 #include <Adafruit_BNO055.h>
 #include "math.h"
-#include <SoftwareSerial.h>
 
-#define IUM_PACKET_SIZE 49 // number of bytes to be recieved from IMU not counting starting char acc 3*4 + gyr 3*4 + quat 4*4 + accuracy 1*4 + pozyx 4*1 + stop char 1
+#define IUM_PACKET_SIZE 45 // number of bytes to be recieved from IMU not counting starting char acc 3*4 + gyr 3*4 + quat 4*4 + accuracy 1*4 + stop char 1
 #define PACKET_START 0xAA // starting char of package
 #define PACKET_STOP 0x55 // starting char of package
-
-#define POZYX_PACKET_SIZE 5 // number of bytes to be recieved from 
-#define POZYX_PACKET_START 137 // starting char of package
-#define POZYX_PACKET_STOP 173 // starting char of package
-
 #define U_MAX 0.5 // max speed command of the motor
+#define SIN_APMLITUDE_MAX 125 // max amplitude of sinus (around a 127 offset)
+#define SIN_APMLITUDE_MIN 60 // max amplitude of sinus (around a 127 offset)
 
-// constant used to enable/disable communication, debug, timing checks
-const int8_t transmit_raw = 1;
-const int8_t print_data = 0;
+// Choose between transmitting data to next level or printing for debug
+const int8_t transmit_raw = 0;
+const int8_t print_data = 1;
 const int8_t print_timing = 0;
 
 // definition of some constants to ease computations
@@ -45,14 +41,12 @@ float u=0;            // Command, tr/s
 float u_integral = 0; // integral part of the command, tr/s
 float u_proportionel = 0; // proportional part of the command, tr/s
 float speed_step;
-float angle_error_deg;
 uint8_t sinAngleA, sinAngleB, sinAngleC; // the 3 sinusoide values for the PWMs
 const float yaw_ref = 90;
-const float Ki = 0.01;//0.1; // integral gain
-const float Kp = 0.0075; // proportional gain
+const float Ki = 0.05;//0.1; // integral gain
+const float Kp = 0.02; // proportional gain
 const float IMU_freq = 100; // IMU frequency
 const float reg_freq = 1000; // regulation frequency
-float nominal_speed_rps = 0;
 
 // Pin definition for connection to ESC
 const int EN1 = 12;   // pin enable bls
@@ -63,7 +57,6 @@ const int IN3 = 6;   //pins des pwm
 const int led_pin = 13;
 int led_status = 0;
 int led_counter = 0;
-int led_half_period = 50;
 
 // interuptions gestion
 uint32_t time_counter, time_counter2=0; // counting the number of interuptions
@@ -71,15 +64,11 @@ uint8_t interupt_happened; // interuption flag
 
 // variables for the serial read an data recomposition
 float ypr_data[3];
-uint8_t pozyx_data[4] = {0,0,0,0};
-uint8_t pozyx_data_buffer[6] = {0,0,0,0,0,0};
-uint8_t raw_data[48];
+uint8_t raw_data[48]={0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0};
 float buffer_float;
 unsigned char *ptr_buffer = (unsigned char *)&buffer_float;
 uint32_t buffer_uint32;
 unsigned char *ptr_buffer_uint32 = (unsigned char *)&buffer_uint32;
-int16_t buffer_int16;
-unsigned char *ptr_buffer_int16 = (unsigned char *)&buffer_int16;
 
 // for BNO
 Adafruit_BNO055 bno = Adafruit_BNO055();
@@ -88,24 +77,17 @@ float omega[3], quaternion[4], rpy[3], proper_acc[3];
 float motor_angle_offset = 0;
 uint32_t accuracy_flags;
 uint8_t imu_init = 0;
-float alpha_omega = 0.33;
 
 // For acc integration
 float linear_accel_vector[3], pos_ENU[3], posp_ENU[3], pospp_ENU[3];
 
-long t0,t1,t2,t3,t4,t5,t6,t_;
+long t0,t1,t2,t3,t4;
 
 const int pwmSin[] = {127, 138, 149, 160, 170, 181, 191, 200, 209, 217, 224, 231, 237, 242, 246, 250, 252, 254, 254, 254, 252, 250, 246, 242, 237, 231, 224, 217, 209, 200, 191, 181, 170, 160, 149, 138, 127, 116, 105, 94, 84, 73, 64, 54, 45, 37, 30, 23, 17, 12, 8, 4, 2, 0, 0, 0, 2, 4, 8, 12, 17, 23, 30, 37, 45, 54, 64, 73, 84, 94, 105, 116 };
 int sineArraySize;
-
-//debug
-int dbg_n = 0;;
-
-SoftwareSerial mySerial(8, 11); // RX, TX
  
 void setup() {
   Serial.begin(115200);
-  mySerial.begin(19200);
 
   if(!bno.begin(Adafruit_BNO055::OPERATION_MODE_NDOF))
   {
@@ -161,8 +143,6 @@ void setup() {
 }
 //////////////////////////////////////////////////////////////////////////////
 
-// Computes and send the PWM values for a disered angle
-
 void setMotorAngle(float angle_rd)
 {
   if(current_angle_rd!=current_angle_rd_prev)
@@ -185,23 +165,19 @@ void setMotorAngle(float angle_rd)
 
 /////////////////////////////////////////////////////////////////////
 // Routine d'interruption
-// Just increment the desired angle
 
 ISR(TIMER2_OVF_vect) 
 {
   TCNT2 = 256 - 125; // 125*8us = 1ms
-  // increment the desired angle from the increment computed from the command
-  current_angle_rd = fmod((current_angle_rd + angle_step_rd)+two_pi,two_pi); 
+  interupt_happened = 1; // interuption flag to trigger computation in main loop
+  current_angle_rd = fmod((current_angle_rd + angle_step_rd)+two_pi,two_pi); // increment the desired angle
+  //setMotorAngle(current_angle_rd);
+  time_counter++; // counter in ms (replace the micros())
   time_counter2++;
 }
 //////////////////////////////////////////////////////////////////////
 
-// transformation from quaternion to Roll Pitch Yaw angles
-// input: q[4]: quaternion in flt
-// output: rpy[3]: Euler angles in flt (rd)
-// Measured execution time for a random quaternion : 500us to 750us
-
-void quat2rpy(float q[4], float rpy[3]) // 
+void quat2rpy(float q[4], float rpy[3]) // 500us<t<750us
 {
   rpy[0] = atan2(2*q[1]*q[3] + 2*q[2]*q[0], 1 - 2*q[1]*q[1] - 2*q[2]*q[2]);
   rpy[1] = asin(2*q[2]*q[3] - 2*q[1]*q[0]);
@@ -209,11 +185,6 @@ void quat2rpy(float q[4], float rpy[3]) //
 }
 
 //////////////////////////////////////////////////////////////////////
-
-// Projection of a vector using a quaternion
-// input: q[4]: quaternion in flt
-// input: v_in[3]: vector to be projected in the new base in flt
-// output: v_out[3]: v_in rotated thanks to quaternion input
 
 void vector_quat_proj(float q[4], float v_in[3], float v_out[3])
 {
@@ -224,9 +195,6 @@ void vector_quat_proj(float q[4], float v_in[3], float v_out[3])
 
 //////////////////////////////////////////////////////////////////////
 
-// Set an angle between -180 and 180 deg
-// input: angle in deg
-
 float mod180(float angle)
 {
   return fmod(angle+3780,360)-180;
@@ -236,238 +204,117 @@ float mod180(float angle)
 //////////////////////////////////////////////////////////////////////
 
 
+
+
+
+ 
 void loop() {
-int i,j,x,n;
+int i,j,x;
 
 // Applying the command if new
   
   setMotorAngle(current_angle_rd);               //  une fois par ms // Question : combien de temps elle prend ? 500us
     
 
-  if (Serial.available() > IUM_PACKET_SIZE) // Number of data corresponding to the IMU packet size is waiting in the biffer of serial
+  if (Serial.available() > IUM_PACKET_SIZE)
   { 
 /////////////////////// Lecture des données du port série venant de l'arduino "du BNO du haut"
     if(print_timing) { t0 = micros(); }
-    Serial.println(t0-t_);
-    t_ = t0;
-    x = Serial.read(); // read first data
-    if(x == PACKET_START) // check that first data correspond to start char
+    //Serial.println(Serial.available()); Serial.print(" ");
+    x = Serial.read();
+    //Serial.print(x); Serial.print(" ");
+    if(x == PACKET_START)
     {
-      Serial.readBytes(raw_data,IUM_PACKET_SIZE); // Reading the IMU packet
+      Serial.readBytes(raw_data,IUM_PACKET_SIZE);
       setMotorAngle(current_angle_rd); 
-      
 /////////////////////// Décodage des données et transformation du quaternion en RPY
       
       if(print_timing) { t1 = micros();}
-
-      if(raw_data[IUM_PACKET_SIZE-1] == PACKET_STOP) // check taht the last data correspond to the packet end char
+      //Serial.print(raw_data[IUM_PACKET_SIZE-1]); Serial.print(" ");
+      if(raw_data[IUM_PACKET_SIZE-1] == PACKET_STOP)
       {
-
-        // led blink to verify data reception
         led_counter ++;
-        if(led_status == 1 && led_counter>=led_half_period)
+        if(led_status == 1 && led_counter>=5)
         {
           digitalWrite(led_pin, LOW);
           led_status = 0;
           led_counter = 0;
-        } else if(led_counter>=led_half_period)
+        } else if(led_counter>=5)
         {
           digitalWrite(led_pin, HIGH);
           led_status = 1;
           led_counter = 0;
         }
-        
         for(i=0;i<3;i++) // decode sensor data, proper acc
         {
-          for(j=0;j<4;j++) // filling the 4 bytes of the buffer using a pointer
+          for(j=0;j<4;j++)
           {
+            //if(transmit_raw){ Serial.write(raw_data[4*i+j+12]); }
             ptr_buffer[j] = raw_data[4*i+j];
           }
           proper_acc[i] = buffer_float;
+          //if(print_data){ Serial.print(buffer_float); Serial.print(" "); }
         }
         
         for(i=0;i<3;i++) // decode sensor data, gyr
         {
-          for(j=0;j<4;j++) // filling the 4 bytes of the buffer using a pointer
+          for(j=0;j<4;j++)
           {
+            //if(transmit_raw){ Serial.write(raw_data[4*i+j+12]); }
             ptr_buffer[j] = raw_data[4*i+j+12];
           }
           omega[i] = buffer_float;
+          //if(print_data){ Serial.print(buffer_float); Serial.print(" "); }
         }
         
         for(i=0;i<4;i++) // decode QUAT data
         {
-          for(j=0;j<4;j++)  // filling the 4 bytes of the buffer using a pointer
+          for(j=0;j<4;j++)
           {
+            //if(transmit_raw){ Serial.write(raw_data[4*i+j]); }
             ptr_buffer[j] = raw_data[4*i+j+24];
           }
           quaternion[i] = buffer_float; 
+          //if(print_data){ Serial.print(buffer_float); Serial.print(" "); }
         }
         
-        for(j=0;j<4;j++) // filling the 4 bytes of the buffer using a pointer
+        for(j=0;j<4;j++)
         {
+          //if(transmit_raw){ Serial.write(raw_data[4*i+j+12]); }
           ptr_buffer_uint32[j] = raw_data[j+40];
         }
         accuracy_flags = buffer_uint32;
-
-        for(i=0;i<4;i++) // decode QUAT data
-        {
-          pozyx_data[i] = raw_data[i+44];
-        }
-
-        // transformation of quaternion in rpy angles
+        //if(print_data){ Serial.print((accuracy_flags & 0x03)); Serial.print(" "); }
+        
         quat2rpy(quaternion,rpy);
 
         setMotorAngle(current_angle_rd); 
-        
-        
-///////////////////////////////////// Calcul de la commande
+///////////////////////////////////// Lecture du BNO du bas
+        if(print_timing) { t2 = micros(); }
 
-      if(print_timing) { t2 = micros(); }
+        // gyro data 
+        imu::Vector<3> gyro=bno.getVector(Adafruit_BNO055::VECTOR_GYROSCOPE);
+        omega[2] = gyro.z();
+
+        if(print_timing) { t3 = micros();}
+        setMotorAngle(current_angle_rd); 
+///////////////////////////////////// Calcul de la commande
   
   // Computing command
-        u = 0;
-        angle_error_deg = mod180(rpy[2]* rad_to_deg-yaw_ref);
+        u_integral += Ki*mod180(rpy[2]* rad_to_deg-yaw_ref)/IMU_freq;
+        u_integral = constrain(u_integral,-U_MAX,U_MAX); // constrain 8<t<20us
+        u_proportionel = Kp * mod180(rpy[2]* rad_to_deg-yaw_ref);
+        u_proportionel = constrain(u_proportionel,-U_MAX,U_MAX);
         
-        if(1)
-        {
-          //angle_error_deg = mod180(rpy[2]* rad_to_deg-yaw_ref);
-          u_integral += Ki*mod180(angle_error_deg)/IMU_freq;
-          u_integral = constrain(u_integral,-U_MAX,U_MAX); // constrain 8<t<20us
-          u_proportionel = Kp * mod180(angle_error_deg);
-          u_proportionel = constrain(u_proportionel,-U_MAX,U_MAX);
-          
-          u = u_proportionel + u_integral; // computing the PI correction
-  
-          if(abs(angle_error_deg<3) && imu_init==0 && (accuracy_flags & 0x03) == 0x03)
-          {
-            led_half_period = 25;
-            if(time_counter2 >5000)
-            {
-              imu_init = 1;
-              motor_angle_offset = fmod(current_angle_rd+pi,two_pi)-pi;
-              led_half_period = 5;
-            }
-          } else
-          {
-            time_counter2 = 0;
-          }
-        }
-
-        u = constrain(u,-U_MAX,U_MAX) + 0.95*nominal_speed_rps/two_pi; // adding current rotation speed to PI correction
-        
-        sin_amplitude = constrain(0.5+0.012*abs(u),0,1); // Modulation of amplitude vs rotation speed to work at quasi constant curent
-
-        // Transformation from rotation speed to angle increment (incrementation is done in the interuption
+        u = u_proportionel + u_integral;//u_proportionel;// + u_integral + omega[2]/two_pi;
+        u = constrain(u,-U_MAX,U_MAX) + omega[2]/two_pi;
+        //u=0.05;
+        sin_amplitude = constrain(0.3+0.012*abs(u),0,1);
         motor_speed_rps = two_pi*u;//tps*two_pi;
         angle_step_rd = motor_speed_rps/reg_freq;
 
-        setMotorAngle(current_angle_rd);
-        
-///////////////////////////////////// 
-
-        // Data transmition
-
-        if(print_timing) { t3 = micros(); }
- 
-        if(transmit_raw){ Serial.write(PACKET_START); }
-        for(i=0;i<3;i++)
-        {
-          //buffer_float = mod180(rpy[i]* rad_to_deg);
-          buffer_int16 = (int16_t)(mod180(rpy[i]* rad_to_deg)*32768/180);
-          if(print_data){ Serial.print(buffer_int16); Serial.print(" "); }
-          for(j=0;j<2;j++)
-          {
-            if(transmit_raw){ Serial.write(ptr_buffer_int16[j]); }
-          }
-        }
-
-        buffer_int16 = (int16_t)(mod180((current_angle_rd-motor_angle_offset+rpy[2])*rad_to_deg-yaw_ref)*32768/180);
-        if(print_data){ Serial.print(buffer_float); Serial.print(" "); }
-        for(j=0;j<2;j++)
-        {
-          if(transmit_raw){ Serial.write(ptr_buffer_int16[j]); }
-        }
-        
-        for(i=0;i<3;i++)
-        {
-          buffer_int16 = (int16_t)(omega[i]*32768/2000);
-          //if(print_data){ Serial.print(buffer_float); Serial.print(" "); }
-          for(j=0;j<2;j++)
-          {
-            if(transmit_raw){ Serial.write(ptr_buffer_int16[j]); }
-          }
-        }
-
-        buffer_int16 = (int16_t)(motor_speed_rps*32768/2000);
-        if(print_data){ Serial.print(buffer_float); Serial.print(" "); }
-        for(j=0;j<2;j++)
-        {
-          if(transmit_raw){ Serial.write(ptr_buffer_int16[j]); }
-        }
-
-        for(i=0;i<4;i++)
-        {
-          if(print_data){ Serial.print(pozyx_data[i]); Serial.print(" "); }
-          if(transmit_raw){ Serial.write(pozyx_data[i]); }
-        }
-        
-        if(transmit_raw){ Serial.write(PACKET_STOP); }
-
-        setMotorAngle(current_angle_rd);
-
-  ///////////////////////////////////// Lecture du BNO du bas
-
         if(print_timing) { t4 = micros(); }
-
-        // gyro data, only gyro data on z axis will be used
-        imu::Vector<3> gyro=bno.getVector(Adafruit_BNO055::VECTOR_GYROSCOPE);
-        nominal_speed_rps = alpha_omega*gyro.z()+(1-alpha_omega)*nominal_speed_rps;
-
-        setMotorAngle(current_angle_rd); 
-/*
-/////////////////////////////////////// Reading POZYX data
-
-        if(print_timing) { t5 = micros();}
-
-        n = mySerial.available();
-
-        for(i=0;i<n-1;i++)
-        {
-          dbg_n++;
-          for(j=0;j<5;j++)
-          {
-            pozyx_data_buffer[j] = pozyx_data_buffer[j+1];
-          }
-          x = mySerial.read();
-          //Serial.print(x); Serial.print(" ");
-          pozyx_data_buffer[5] = x;
-          if( (pozyx_data_buffer[0] == POZYX_PACKET_START) && (pozyx_data_buffer[5] == POZYX_PACKET_STOP))
-          {
-            //Serial.print(" ->");Serial.println(dbg_n);
-            dbg_n = 0;
-            for(j=0;j<4;j++)
-            {
-              pozyx_data[j] = pozyx_data_buffer[j+1];
-            }
-          }
-          setMotorAngle(current_angle_rd);
-        }
-*/
- ///////////////////////////////////// Printing timings (optional)
-
-        if(print_timing) { t6 = micros(); }
-        if(print_timing) { 
-          /*Serial.print(t1-t0);Serial.print(" ");
-          Serial.print(t2-t1);Serial.print(" ");
-          Serial.print(t3-t2);Serial.print(" ");
-          Serial.print(t4-t3);Serial.print(" ");
-          Serial.print(t6-t4);Serial.print(" ");
-          //Serial.print(t6-t5);Serial.print(" ");
-          Serial.print(t6-t0);Serial.print(" ");*/
-          
-          //Serial.println(" "); 
-          }
+        if(print_timing) { Serial.print(t1-t0);Serial.print(" ");Serial.print(t2-t1);Serial.print(" ");Serial.print(t3-t2);Serial.print(" ");Serial.print(t4-t3);Serial.print(" ");Serial.print(t4-t0);Serial.println(" "); }
       }
     }
   }

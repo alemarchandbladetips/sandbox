@@ -3,13 +3,16 @@
 #define U_MAX 1 // max speed command of the motor
 #define SIN_APMLITUDE_MAX 125 // max amplitude of sinus (around a 127 offset)
 #define SIN_APMLITUDE_MIN 60 // max amplitude of sinus (around a 127 offset)
-#define GIMBAL_PACKET_SIZE 33 // number of bytes to be recieved from 
+
 #define PACKET_START 0xAA // starting char of package
 #define PACKET_STOP 0x55 // starting char of package
 
+#define POSITION_MAX 1095
+#define POSITION_SLICE 91.25
+
 // constant used to enable/disable communication, debug, timing checks
-const int8_t transmit_raw = 0;
-const int8_t print_data = 1;
+const int8_t transmit_raw = 1;
+const int8_t print_data = 0;
 
 // definition of some constants to ease computations
 const float pi = 3.14159265359;
@@ -27,9 +30,14 @@ float sin_amplitude = 50;
 volatile float angle_step_rd, current_angle_rd_prev, current_angle_rd = 0;
 float motor_speed_rps = 0; // desired speed of the motor, rps
 float u=0;            // Command, tr/s
+float norm_u = 0;            // Command, tr/s
+float sign_u = 1;
 float u_integral = 0; // integral part of the command, tr/s
 float u_proportionel = 0; // proportional part of the command, tr/s
 uint8_t sinAngleA, sinAngleB, sinAngleC; // the 3 sinusoide values for the PWMs
+
+float speed_mmps;
+float position_mm;
 
 // Pin definition for connection to ESC
 const int EN1 = 12;   // pin enable bls
@@ -38,14 +46,12 @@ const int IN2 = 10;   //pins des pwm
 const int IN3 = 6;   //pins des pwm
 
 // interuptions gestion
-uint32_t time_counter; // counting the number of interuptions
+int32_t time_counter,time_counter2; // counting the number of interuptions
 uint8_t interupt_happened; // interuption flag
 
 // variables for the serial read an data recomposition
-float all_data[8];
-uint8_t raw_data[100];
-float buffer_float;
-unsigned char *ptr_buffer = (unsigned char *)&buffer_float;
+int16_t buffer_int16;
+unsigned char *ptr_buffer_int16 = (unsigned char *)&buffer_int16;
 
 
 
@@ -73,9 +79,17 @@ void setup() {
 // Pre-computation of variables for 
   slice_angle_rd = 2*pi/(nb_pole/2.0);
   angle_scale_factor = 2*pi/slice_angle_rd;
-  Serial.println(slice_angle_rd*360/two_pi);
+  //Serial.println(slice_angle_rd*360/two_pi);
 
-  u = 0.0;
+  current_angle_rd = 0;
+  current_angle_rd_prev = -1;
+  time_counter = 0;
+  time_counter2 = 0;
+
+  setMotorAngle(current_angle_rd);
+
+  norm_u = 2;
+  sign_u = 1;
   sin_amplitude = 125;
   cli(); // Désactive l'interruption globale
   bitClear (TCCR2A, WGM20); // WGM20 = 0
@@ -113,8 +127,9 @@ ISR(TIMER2_OVF_vect)
 {
   TCNT2 = 256 - 125; // 125*8us = 1ms
   interupt_happened = 1; // interuption flag to trigger computation in main loop
-  current_angle_rd = fmod((current_angle_rd + angle_step_rd),two_pi); // increment the desired angle
+  current_angle_rd = constrain(current_angle_rd + angle_step_rd,-0.1,6*two_pi+0.1);//fmod((current_angle_rd + angle_step_rd),two_pi); // increment the desired angle
   time_counter++; // counter in ms (replace the micros())
+  time_counter2++; // counter in ms (replace the micros())
 }
 
 
@@ -126,32 +141,108 @@ int i,j,x;
 // Applying the command if new
   
     //Serial.println(current_angle_rd);
-    setMotorAngle(current_angle_rd);
+  setMotorAngle(current_angle_rd);
 
-// This generates a speed profile that increments fro speed step every second.
-  if(time_counter > 1000 )
+  if( current_angle_rd + angle_step_rd > 6*two_pi)
   {
-    interupt_happened = interupt_happened != 0 ? 0 : 100;
-    time_counter = 0;
-    
-    if(u == 1.5)
-    {
-      speed_step = 0.0;
-    }
-    if(u <= 0)
-    {
-      speed_step = 0.05;
-    }
-    u+=speed_step;
- 
-    u = constrain(u,-U_MAX,U_MAX);
-    sin_amplitude = constrain(80+20*abs(u),SIN_APMLITUDE_MIN,SIN_APMLITUDE_MAX);
+    sign_u = -1;
+  } else if(current_angle_rd + angle_step_rd < 0)
+  {
+    sign_u = 1;
   }
 
-  u = constrain(u,-U_MAX,U_MAX);
+  //if(time_counter2 >= 5000)
+  {
+    /*
+    if( position_mm < POSITION_SLICE)
+    { // ctse = 0.3
+      norm_u = 0.3;
+    } else if( position_mm < 2*POSITION_SLICE)
+    { // linear 0.3 to 1
+      norm_u = 0.3 + 0.7 * (position_mm-POSITION_SLICE)/(POSITION_SLICE);
+    } else if( position_mm < 3*POSITION_SLICE)
+    { // cste = 1.5
+      norm_u = 1.5;
+    } else if( position_mm < 4*POSITION_SLICE)
+    { // cste = 1
+      norm_u = 1;
+    } else if( position_mm < 5*POSITION_SLICE)
+    { // cste = 2
+      norm_u = 2;
+    } else if( position_mm < 6*POSITION_SLICE)
+    { // cste = 1
+      norm_u = 2 - 1.5 * ((position_mm - 5*POSITION_SLICE)/(POSITION_SLICE))*((position_mm - 5*POSITION_SLICE)/(POSITION_SLICE));
+    } else if( position_mm < 7*POSITION_SLICE)
+    { // cste = 1
+      norm_u = 0.5 + 1 * ((position_mm - 6*POSITION_SLICE)/(POSITION_SLICE))*((position_mm - 6*POSITION_SLICE)/(POSITION_SLICE));
+    } else if( position_mm < 8*POSITION_SLICE)
+    { // cste = 1
+      norm_u = 2;
+    } else if( position_mm < 10*POSITION_SLICE)
+    { // cste = 1
+      norm_u = 1.5 + sin(two_pi*(position_mm - 8*POSITION_SLICE)/POSITION_SLICE);
+    } 
+    else if( position_mm < 11*POSITION_SLICE)
+    { // cste = 1
+      norm_u = 1.5;
+    } else
+    {
+      norm_u = 0.5;
+    }
+    */
+    norm_u = 0;
+    if(time_counter2>0 && time_counter2<3000)
+    {
+      norm_u = 3*sin(two_pi*(time_counter2)/6000);
+    } else if(time_counter2>5000 && time_counter2<8000)
+    {
+      norm_u = 3*sin(two_pi*(time_counter2-2000)/6000);
+    } else if (time_counter2>8000)
+    {
+      time_counter2 = -2000;
+    }
+    //norm_u = 1;
+  } /*else
+  {
+    norm_u = 0;
+  }*/
+
+  u =   norm_u * sign_u;
+
+  speed_mmps = u*two_pi*(29.045777);
+  position_mm = current_angle_rd*(29.045777);
+
+  if(time_counter >= 10)
+  {
+    time_counter = 0;
+    if (print_data)
+    {
+      Serial.print(speed_mmps); Serial.print(" ");
+      Serial.print(position_mm); Serial.println(" ");
+    }
+    if (transmit_raw)
+    {
+      Serial.write(PACKET_START);
+      buffer_int16 = (int16_t)(speed_mmps*32768/2000);
+      for(j=0;j<2;j++)
+      {
+        if(transmit_raw){ Serial.write(ptr_buffer_int16[j]); }
+      }
+
+      buffer_int16 = (int16_t)(position_mm*32768/1200);
+      for(j=0;j<2;j++)
+      {
+        if(transmit_raw){ Serial.write(ptr_buffer_int16[j]); }
+      }
+      Serial.write(PACKET_STOP);
+
+    }
+  }
+
+  //u = constrain(u,-U_MAX,U_MAX);
   
-  //u = 0;
-  sin_amplitude = constrain(80+20*abs(u),SIN_APMLITUDE_MIN,SIN_APMLITUDE_MAX);
+  
+  sin_amplitude = constrain(100+20*abs(u),SIN_APMLITUDE_MIN,SIN_APMLITUDE_MAX);
   motor_speed_rps = two_pi*u; // conversion from tr/s to rps
   
   angle_step_rd = motor_speed_rps/1000;

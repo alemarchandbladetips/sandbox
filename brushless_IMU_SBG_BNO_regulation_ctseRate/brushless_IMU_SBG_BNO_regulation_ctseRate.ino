@@ -10,7 +10,7 @@
 #include "math.h"
 #include <SoftwareSerial.h>
 
-#define IUM_PACKET_SIZE 29 // number of bytes to be recieved from IMU not counting starting char acc 3*2 + gyr 3*2 + quat 4*2 + accuracy 1*4 + pozyx 4*1 + stop char 1
+#define IUM_PACKET_SIZE 16 // number of bytes to be recieved from IMU not counting starting char + gyr 3*2 + quat 4*2 + accuracy 1 + stop char 1
 #define PACKET_START 0xAA // starting char of package
 #define PACKET_STOP 0x55 // starting char of package
 
@@ -33,7 +33,7 @@ const float two_pi_on_three = 2.09439510239;
 const float rad_to_deg = 57.2957795; // 180/pi
 
 // motor related constants and variables
-const uint8_t nb_pole = 14;
+const uint8_t nb_pole = 22;
 float slice_angle_rd, angle_scale_factor;
 int16_t normalized_angle;
 float sin_amplitude = 0.3;
@@ -47,7 +47,7 @@ float u_proportionel = 0; // proportional part of the command, tr/s
 float speed_step;
 float angle_error_deg;
 uint8_t sinAngleA, sinAngleB, sinAngleC; // the 3 sinusoide values for the PWMs
-const float yaw_ref = 90;
+const float yaw_ref = 180;
 const float Ki = 0.01;//0.1; // integral gain
 const float Kp = 0.0075; // proportional gain
 const float IMU_freq = 100; // IMU frequency
@@ -99,7 +99,8 @@ const int pwmSin[] = {127, 138, 149, 160, 170, 181, 191, 200, 209, 217, 224, 231
 int sineArraySize;
 
 //debug
-int dbg_n = 0;;
+int dbg_n = 0;
+float u_dbg[3];
  
 void setup() {
   Serial.begin(115200);
@@ -191,6 +192,7 @@ ISR(TIMER2_OVF_vect)
   // increment the desired angle from the increment computed from the command
   current_angle_rd = fmod((current_angle_rd + angle_step_rd)+two_pi,two_pi); 
   time_counter2++;
+  time_counter++;
 }
 //////////////////////////////////////////////////////////////////////
 
@@ -204,6 +206,13 @@ void quat2rpy(float q[4], float rpy[3]) //
   rpy[0] = atan2(2*q[1]*q[3] + 2*q[2]*q[0], 1 - 2*q[1]*q[1] - 2*q[2]*q[2]);
   rpy[1] = asin(2*q[2]*q[3] - 2*q[1]*q[0]);
   rpy[2] = atan2(2*q[1]*q[2] + 2*q[3]*q[0], 1 - 2*q[1]*q[1] - 2*q[3]*q[3]);
+}
+
+void quat2rpy_ellipse(float q[4], float rpy[3]) // 
+{
+  rpy[0] = -atan2(2*q[2]*q[3] - 2*q[1]*q[0], 1 - 2*q[1]*q[1] - 2*q[2]*q[2]);
+  rpy[1] = asin(2*q[1]*q[3] + 2*q[2]*q[0]);
+  rpy[2] = -atan2(2*q[1]*q[2] - 2*q[3]*q[0], 1 - 2*q[2]*q[2] - 2*q[3]*q[3]);
 }
 
 //////////////////////////////////////////////////////////////////////
@@ -240,17 +249,41 @@ int i,j,x,n;
 // Applying the command if new
   
   setMotorAngle(current_angle_rd);               //  une fois par ms // Question : combien de temps elle prend ? 500us
+
+  if(time_counter>=20) // We don't recieve info from the IMU for more than 20ms, we will control the motor in open loop.
+  { // This is a security, should not happen in nominal operation mode.
+    Serial.println(time_counter);
+    time_counter = 0;
+    digitalWrite(led_pin, LOW);
+   
     
+    // gyro data, only gyro data on z axis will be used
+    imu::Vector<3> gyro=bno.getVector(Adafruit_BNO055::VECTOR_GYROSCOPE);
+    nominal_speed_rps = alpha_omega*gyro.z()+(1-alpha_omega)*nominal_speed_rps;
+
+    u = nominal_speed_rps/two_pi; // adding current rotation speed to PI correction
+        
+    sin_amplitude = constrain(0.7+0.1*abs(u),0,1); // Modulation of amplitude vs rotation speed to work at quasi constant current
+
+    // Transformation from rotation speed to angle increment (incrementation is done in the interuption
+    motor_speed_rps = two_pi*u;//tps*two_pi;
+    angle_step_rd = motor_speed_rps/reg_freq;
+
+    setMotorAngle(current_angle_rd); 
+  }
 
   if (Serial.available() > IUM_PACKET_SIZE) // Number of data corresponding to the IMU packet size is waiting in the biffer of serial
   { 
+    
 /////////////////////// Lecture des données du port série venant de l'arduino "du BNO du haut"
     if(print_timing) { t0 = micros(); }
 
     t_ = t0;
     x = Serial.read(); // read first data
+    Serial.println(x);
     if(x == PACKET_START) // check that first data correspond to start char
     {
+      Serial.println("ff");
       Serial.readBytes(raw_data,IUM_PACKET_SIZE); // Reading the IMU packet
       setMotorAngle(current_angle_rd); 
       
@@ -260,10 +293,9 @@ int i,j,x,n;
 
       if(raw_data[IUM_PACKET_SIZE-1] == PACKET_STOP) // check taht the last data correspond to the packet end char
       {
-
+        time_counter = 0;
         // led blink to verify data reception
         led_counter ++;
-        Serial.println(led_counter);
         if(led_status == 1 && led_counter>=led_half_period)
         {
           digitalWrite(led_pin, LOW);
@@ -276,46 +308,31 @@ int i,j,x,n;
           led_counter = 0;
         }
         
-        for(i=0;i<3;i++) // decode sensor data, proper acc
+        for(i=0;i<3;i++) // decode sensor data, gyr
         {
           for(j=0;j<2;j++) // filling the 4 bytes of the buffer using a pointer
           {
             ptr_buffer_int16[j] = raw_data[2*i+j];
           }
-          proper_acc[i] = buffer_int16*40.0/32768.0;
-        }
-        
-        for(i=0;i<3;i++) // decode sensor data, gyr
-        {
-          for(j=0;j<2;j++) // filling the 4 bytes of the buffer using a pointer
-          {
-            ptr_buffer_int16[j] = raw_data[2*i+j+6];
-          }
-          omega[i] = buffer_int16*2000.0/32768.0;
+          omega[i] = buffer_int16*1000.0/32768.0;
         }
         
         for(i=0;i<4;i++) // decode QUAT data
         {
           for(j=0;j<2;j++)  // filling the 4 bytes of the buffer using a pointer
           {
-            ptr_buffer_int16[j] = raw_data[2*i+j+12];
+            ptr_buffer_int16[j] = raw_data[2*i+j+6];
           }
           quaternion[i] = buffer_int16/32768.0; 
         }
         
-        for(j=0;j<4;j++) // filling the 4 bytes of the buffer using a pointer
-        {
-          ptr_buffer_uint32[j] = raw_data[j+20];
-        }
-        accuracy_flags = buffer_uint32;
-
-        for(i=0;i<4;i++) // decode QUAT data
-        {
-          pozyx_data[i] = raw_data[i+24];
-        }
+        accuracy_flags = raw_data[14];
 
         // transformation of quaternion in rpy angles
-        quat2rpy(quaternion,rpy);
+        quat2rpy_ellipse(quaternion,rpy);
+
+        // mounting of Ellipse Z pointing up
+        rpy[0] += pi;
 
         setMotorAngle(current_angle_rd); 
         
@@ -327,35 +344,44 @@ int i,j,x,n;
   // Computing command
         u = 0;
         angle_error_deg = mod180(rpy[2]* rad_to_deg-yaw_ref);
+
         
-        if(1)
-        {
-          //angle_error_deg = mod180(rpy[2]* rad_to_deg-yaw_ref);
+        if((accuracy_flags & 0x66) == 0x26)
+        { // if the gyro has saturated, we go in open loop mode, just compensating speed measured by base gyro. (correspond to the "else")
+          Serial.println("b");
+          // integral part of the command
           u_integral += Ki*mod180(angle_error_deg)/IMU_freq;
-          u_integral = constrain(u_integral,-U_MAX,U_MAX); // constrain 8<t<20us
-          u_proportionel = Kp * mod180(angle_error_deg);
+          u_integral = constrain(u_integral,-U_MAX,U_MAX);
+
+          // proportional part of the command
+          u_proportionel = Kp * angle_error_deg;
           u_proportionel = constrain(u_proportionel,-U_MAX,U_MAX);
           
           u = u_proportionel + u_integral; // computing the PI correction
   
-          if(abs(angle_error_deg<3) && imu_init==0 && (accuracy_flags & 0x03) == 0x03)
-          {
-            led_half_period = 25;
+          if(abs(angle_error_deg<3) && imu_init==0 && ((accuracy_flags & 0x66) == 0x66))
+          { //heading has converge, if it is the first time, we will set the 0 of blade0
+            led_half_period = 25; // 2hz led blink
             if(time_counter2 >5000)
-            {
-              imu_init = 1;
+            { // waiting for 5s immobility to take reference
+              imu_init = 1; // so we will not set a ref again
               motor_angle_offset = fmod(current_angle_rd+pi,two_pi)-pi;
-              led_half_period = 5;
+              led_half_period = 5; // led blinks 10Hz
+              Serial.println("dddddddd");
             }
           } else
           {
             time_counter2 = 0;
           }
+        } else
+        {
+          u_integral = 0;
+          Serial.println("c");
         }
 
-        u = constrain(u,-U_MAX,U_MAX) + 0.95*nominal_speed_rps/two_pi; // adding current rotation speed to PI correction
+        u = constrain(u,-U_MAX,U_MAX) + nominal_speed_rps/two_pi; // adding current rotation speed to PI correction
         
-        sin_amplitude = constrain(0.45+0.012*abs(u),0,1); // Modulation of amplitude vs rotation speed to work at quasi constant curent
+        sin_amplitude = constrain(0.7+0.1*abs(u),0,1); // Modulation of amplitude vs rotation speed to work at quasi constant current
 
         // Transformation from rotation speed to angle increment (incrementation is done in the interuption
         motor_speed_rps = two_pi*u;//tps*two_pi;
@@ -365,14 +391,15 @@ int i,j,x,n;
         
 ///////////////////////////////////// 
 
-        // Data transmition
+        // Data transmition, to the control part of the drone
 
         if(print_timing) { t3 = micros(); }
  
-        if(transmit_raw){ Serial.write(PACKET_START); }
+        if(transmit_raw){ Serial.write(PACKET_START); } // starting byte
+        
+        // Roll and pitch
         for(i=0;i<2;i++)
         {
-          //buffer_float = mod180(rpy[i]* rad_to_deg);
           buffer_int16 = (int16_t)(mod180(rpy[i]* rad_to_deg)*32768/180);
           if(print_data){ Serial.print(buffer_int16); Serial.print(" "); }
           for(j=0;j<2;j++)
@@ -381,33 +408,26 @@ int i,j,x,n;
           }
         }
 
-        buffer_int16 = (int16_t)(mod180((current_angle_rd-motor_angle_offset+rpy[2])*rad_to_deg-yaw_ref)*32768/180);
+        // blade0 angle
+        buffer_int16 = (int16_t)(mod180((current_angle_rd-motor_angle_offset+rpy[2])*rad_to_deg-yaw_ref)*32768/180); // we put the data in the int16 buffer
         if(print_data){ Serial.print(buffer_float); Serial.print(" "); }
         for(j=0;j<2;j++)
         {
-          if(transmit_raw){ Serial.write(ptr_buffer_int16[j]); }
+          if(transmit_raw){ Serial.write(ptr_buffer_int16[j]); } // we transmit each bytes of the int16 buffer using this pointer
         }
-        
+
+        // rotation speeds (roll and pitch derivatives)
         for(i=0;i<2;i++)
         {
           buffer_int16 = (int16_t)(omega[i]*32768/2000);
-          //if(print_data){ Serial.print(buffer_float); Serial.print(" "); }
+          if(print_data){ Serial.print(buffer_float); Serial.print(" "); }
           for(j=0;j<2;j++)
           {
             if(transmit_raw){ Serial.write(ptr_buffer_int16[j]); }
           }
         }
 
-        for(i=0;i<3;i++)
-        {
-          buffer_int16 = (int16_t)(proper_acc[i]*32768/40);
-          //if(print_data){ Serial.print(buffer_float); Serial.print(" "); }
-          for(j=0;j<2;j++)
-          {
-            if(transmit_raw){ Serial.write(ptr_buffer_int16[j]); }
-          }
-        }
-
+        // blade rotation speed
         buffer_int16 = (int16_t)(motor_speed_rps*32768/2000);
         if(print_data){ Serial.print(buffer_float); Serial.print(" "); }
         for(j=0;j<2;j++)
@@ -415,13 +435,25 @@ int i,j,x,n;
           if(transmit_raw){ Serial.write(ptr_buffer_int16[j]); }
         }
 
+        // proper accelerations in world frame
+        for(i=0;i<3;i++)
+        {
+          buffer_int16 = 0;//(int16_t)(proper_acc[i]*32768/40);
+          //if(print_data){ Serial.print(buffer_float); Serial.print(" "); }
+          for(j=0;j<2;j++)
+          {
+            if(transmit_raw){ Serial.write(ptr_buffer_int16[j]); }
+          }
+        }
+
+        // pozyx data
         for(i=0;i<4;i++)
         {
-          if(print_data){ Serial.print(pozyx_data[i]); Serial.print(" "); }
-          if(transmit_raw){ Serial.write(pozyx_data[i]); }
+          if(print_data){ Serial.print(0); Serial.print(" "); }
+          if(transmit_raw){ Serial.write(0); }
         }
         
-        if(transmit_raw){ Serial.write(PACKET_STOP); }
+        if(transmit_raw){ Serial.write(PACKET_STOP); } // ending byte
 
         setMotorAngle(current_angle_rd);
 

@@ -15,7 +15,7 @@ const int8_t transmit_raw = 1;
 const int8_t print_data = 0;
 
 Adafruit_BNO055 bno = Adafruit_BNO055();
-float euler_angle[3], omega[3], quaternion[4], rpy[3], proper_acc[3];
+float euler_angle[3], omega[3], quaternion[4], rpy[3], proper_acc[3], proper_acc_world[3];
 uint8_t sys, gyr, accel, mag = 0;
 uint32_t accuracy_mask = 0;
 uint8_t first_update = 0;
@@ -27,12 +27,28 @@ float buffer_float;
 unsigned char *ptr_buffer = (unsigned char *)&buffer_float;
 uint32_t buffer_uint32;
 unsigned char *ptr_buffer_uint32 = (unsigned char *)&buffer_uint32;
+int16_t buffer_int16;
+unsigned char *ptr_buffer_int16 = (unsigned char *)&buffer_int16;
 
 long t0,t1;
 uint8_t has_data = 0;
 
 // DBG
 long t_dbg;
+
+//////////////////////////////////////////////////////////////////////
+
+// Projection of a vector using a quaternion
+// input: q[4]: quaternion in flt
+// input: v_in[3]: vector to be projected in the new base in flt
+// output: v_out[3]: v_in rotated thanks to quaternion input
+
+void vector_quat_proj(float q[4], float v_in[3], float v_out[3])
+{
+  v_out[0] = (1 - 2*q[2]*q[2] - 2*q[3]*q[3]) * v_in[0] + (2*q[1]*q[2] - 2*q[3]*q[0]) * v_in[1]     + (2*q[1]*q[3] + 2*q[2]*q[0]) * v_in[2];
+  v_out[1] = (2*q[1]*q[2] + 2*q[3]*q[0]) * v_in[0]     + (1 - 2*q[1]*q[1] - 2*q[3]*q[3]) * v_in[1] + (2*q[2]*q[3] - 2*q[1]*q[0]) * v_in[2];
+  v_out[2] = (2*q[1]*q[3] - 2*q[2]*q[0]) * v_in[0]     + (2*q[2]*q[3] + 2*q[1]*q[0]) * v_in[1]     + (1 - 2*q[1]*q[1] - 2*q[2]*q[2]) * v_in[2];
+}
 
 /////////////////////////////////////////////////////////////////////
 
@@ -99,35 +115,35 @@ void loop() {
       if(transmit_raw){ Serial.write(0xAA);}
   
       // Transmition of acc data
-      for(i=0;i<3;i++) 
+      for(i=0;i<3;i++)
       {
-        buffer_float = proper_acc[i];
-        if(print_data){ Serial.print(buffer_float); Serial.print(" ");}
-        for(j=0;j<4;j++)
+        buffer_int16 = (int16_t)(proper_acc_world[i]*32768/40);
+        if(print_data){ Serial.print(buffer_int16); Serial.print(" "); }
+        for(j=0;j<2;j++)
         {
-          if(transmit_raw){ Serial.write(ptr_buffer[j]);}
+          if(transmit_raw){ Serial.write(ptr_buffer_int16[j]); }
         }
       }
       
       // Transmition of gyro data
-      for(i=0;i<3;i++) 
+      for(i=0;i<3;i++)
       {
-        buffer_float = omega[i];
-        if(print_data){ Serial.print(buffer_float); Serial.print(" "); }
-        for(j=0;j<4;j++)
+        buffer_int16 = (int16_t)(omega[i]*32768/2000);
+        if(print_data){ Serial.print(buffer_int16); Serial.print(" "); }
+        for(j=0;j<2;j++)
         {
-          if(transmit_raw){ Serial.write(ptr_buffer[j]);}
+          if(transmit_raw){ Serial.write(ptr_buffer_int16[j]); }
         }
       }
   
       // transmition of quaternion data
-      for(i=0;i<4;i++) // Transmition of quat data
+      for(i=0;i<4;i++)
       {
-        buffer_float = quaternion[i];
-        if(print_data){ Serial.print(buffer_float); Serial.print(" ");}
-        for(j=0;j<4;j++)
+        buffer_int16 = (int16_t)(quaternion[i]*32768);
+        if(print_data){ Serial.print(buffer_int16); Serial.print(" "); }
+        for(j=0;j<2;j++)
         {
-          if(transmit_raw){ Serial.write(ptr_buffer[j]);}
+          if(transmit_raw){ Serial.write(ptr_buffer_int16[j]); }
         }
       }
   
@@ -174,6 +190,8 @@ void loop() {
     // Accuracy flags
     bno.getCalibration(&sys, &gyr, &accel, &mag);
     accuracy_mask = (uint32_t)mag + (((uint32_t)accel)<<2) + (((uint32_t)gyr)<<4) + (((uint32_t)sys)<<6);
+
+    vector_quat_proj(quaternion,proper_acc,proper_acc_world);
 
     has_data = 1;
     

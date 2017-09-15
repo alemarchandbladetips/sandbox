@@ -252,7 +252,7 @@ int i,j,x,n;
 
   if(time_counter>=20) // We don't recieve info from the IMU for more than 20ms, we will control the motor in open loop.
   { // This is a security, should not happen in nominal operation mode.
-    Serial.println(time_counter);
+
     time_counter = 0;
     digitalWrite(led_pin, LOW);
    
@@ -263,7 +263,7 @@ int i,j,x,n;
 
     u = nominal_speed_rps/two_pi; // adding current rotation speed to PI correction
         
-    sin_amplitude = constrain(0.7+0.1*abs(u),0,1); // Modulation of amplitude vs rotation speed to work at quasi constant current
+    sin_amplitude = constrain(0.4+0.1*abs(u),0,1); // Modulation of amplitude vs rotation speed to work at quasi constant current
 
     // Transformation from rotation speed to angle increment (incrementation is done in the interuption
     motor_speed_rps = two_pi*u;//tps*two_pi;
@@ -280,10 +280,9 @@ int i,j,x,n;
 
     t_ = t0;
     x = Serial.read(); // read first data
-    Serial.println(x);
+    //Serial.println(x);
     if(x == PACKET_START) // check that first data correspond to start char
     {
-      Serial.println("ff");
       Serial.readBytes(raw_data,IUM_PACKET_SIZE); // Reading the IMU packet
       setMotorAngle(current_angle_rd); 
       
@@ -346,9 +345,9 @@ int i,j,x,n;
         angle_error_deg = mod180(rpy[2]* rad_to_deg-yaw_ref);
 
         
-        if((accuracy_flags & 0x66) == 0x26)
+        if((accuracy_flags & 0x26) == 0x26)
         { // if the gyro has saturated, we go in open loop mode, just compensating speed measured by base gyro. (correspond to the "else")
-          Serial.println("b");
+
           // integral part of the command
           u_integral += Ki*mod180(angle_error_deg)/IMU_freq;
           u_integral = constrain(u_integral,-U_MAX,U_MAX);
@@ -367,7 +366,7 @@ int i,j,x,n;
               imu_init = 1; // so we will not set a ref again
               motor_angle_offset = fmod(current_angle_rd+pi,two_pi)-pi;
               led_half_period = 5; // led blinks 10Hz
-              Serial.println("dddddddd");
+              
             }
           } else
           {
@@ -376,7 +375,6 @@ int i,j,x,n;
         } else
         {
           u_integral = 0;
-          Serial.println("c");
         }
 
         u = constrain(u,-U_MAX,U_MAX) + nominal_speed_rps/two_pi; // adding current rotation speed to PI correction

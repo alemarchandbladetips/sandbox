@@ -1,6 +1,6 @@
 // run a brushless motor, using interuption at constant rate
 
-#define U_MAX 1 // max speed command of the motor
+#define U_MAX 2 // max speed command of the motor
 #define SIN_APMLITUDE_MAX 125 // max amplitude of sinus (around a 127 offset)
 #define SIN_APMLITUDE_MIN 60 // max amplitude of sinus (around a 127 offset)
 #define GIMBAL_PACKET_SIZE 33 // number of bytes to be recieved from 
@@ -145,13 +145,13 @@ int i,j,x;
     u+=speed_step;
  
     u = constrain(u,-U_MAX,U_MAX);
-    sin_amplitude = constrain(80+20*abs(u),SIN_APMLITUDE_MIN,SIN_APMLITUDE_MAX);
+    sin_amplitude = constrain(10,SIN_APMLITUDE_MIN,SIN_APMLITUDE_MAX);
   }
 
   u = constrain(u,-U_MAX,U_MAX);
   
   //u = 0;
-  sin_amplitude = constrain(80+20*abs(u),SIN_APMLITUDE_MIN,SIN_APMLITUDE_MAX);
+  sin_amplitude = constrain(40+20*abs(u),SIN_APMLITUDE_MIN,SIN_APMLITUDE_MAX);
   motor_speed_rps = two_pi*u; // conversion from tr/s to rps
   
   angle_step_rd = motor_speed_rps/1000;

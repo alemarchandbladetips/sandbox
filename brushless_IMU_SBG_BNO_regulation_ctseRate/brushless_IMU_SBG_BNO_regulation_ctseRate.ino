@@ -250,7 +250,7 @@ int i,j,x,n;
   
   setMotorAngle(current_angle_rd);               //  une fois par ms // Question : combien de temps elle prend ? 500us
 
-  if(time_counter>=20) // We don't recieve info from the IMU for more than 20ms, we will control the motor in open loop.
+  if(time_counter>=15) // We don't recieve info from the IMU for more than 20ms, we will control the motor in open loop.
   { // This is a security, should not happen in nominal operation mode.
 
     time_counter = 0;

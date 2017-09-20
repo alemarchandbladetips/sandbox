@@ -89,6 +89,7 @@ float motor_angle_offset = 0;
 uint32_t accuracy_flags;
 uint8_t imu_init = 0;
 float alpha_omega = 0.33;
+float blade_speed;
 
 // For acc integration
 float linear_accel_vector[3], pos_ENU[3], posp_ENU[3], pospp_ENU[3];
@@ -263,7 +264,6 @@ int i,j,x,n;
 
         // led blink to verify data reception
         led_counter ++;
-        Serial.println(led_counter);
         if(led_status == 1 && led_counter>=led_half_period)
         {
           digitalWrite(led_pin, LOW);
@@ -327,7 +327,7 @@ int i,j,x,n;
   // Computing command
         u = 0;
         angle_error_deg = mod180(rpy[2]* rad_to_deg-yaw_ref);
-        
+
         if(1)
         {
           //angle_error_deg = mod180(rpy[2]* rad_to_deg-yaw_ref);
@@ -353,7 +353,7 @@ int i,j,x,n;
           }
         }
 
-        u = constrain(u,-U_MAX,U_MAX) + 0.95*nominal_speed_rps/two_pi; // adding current rotation speed to PI correction
+        u = constrain(u,-U_MAX,U_MAX) + nominal_speed_rps/two_pi; // adding current rotation speed to PI correction
         
         sin_amplitude = constrain(0.45+0.012*abs(u),0,1); // Modulation of amplitude vs rotation speed to work at quasi constant curent
 
@@ -368,7 +368,8 @@ int i,j,x,n;
         // Data transmition
 
         if(print_timing) { t3 = micros(); }
- 
+
+        // roll and pitch from top IMU
         if(transmit_raw){ Serial.write(PACKET_START); }
         for(i=0;i<2;i++)
         {
@@ -381,13 +382,15 @@ int i,j,x,n;
           }
         }
 
+        // blade0 angle from motor angle
         buffer_int16 = (int16_t)(mod180((current_angle_rd-motor_angle_offset+rpy[2])*rad_to_deg-yaw_ref)*32768/180);
         if(print_data){ Serial.print(buffer_float); Serial.print(" "); }
         for(j=0;j<2;j++)
         {
           if(transmit_raw){ Serial.write(ptr_buffer_int16[j]); }
         }
-        
+
+        // roll and pitch derivatives from top IMU
         for(i=0;i<2;i++)
         {
           buffer_int16 = (int16_t)(omega[i]*32768/2000);
@@ -398,6 +401,15 @@ int i,j,x,n;
           }
         }
 
+        // blade rotation speed from butom IMU
+        buffer_int16 = (int16_t)(blade_speed*rad_to_deg*32768/2000);
+        if(print_data){ Serial.print(buffer_float); Serial.print(" "); }
+        for(j=0;j<2;j++)
+        {
+          if(transmit_raw){ Serial.write(ptr_buffer_int16[j]); }
+        }
+
+        // accelerations from top IMU
         for(i=0;i<3;i++)
         {
           buffer_int16 = (int16_t)(proper_acc[i]*32768/40);
@@ -408,13 +420,7 @@ int i,j,x,n;
           }
         }
 
-        buffer_int16 = (int16_t)(motor_speed_rps*32768/2000);
-        if(print_data){ Serial.print(buffer_float); Serial.print(" "); }
-        for(j=0;j<2;j++)
-        {
-          if(transmit_raw){ Serial.write(ptr_buffer_int16[j]); }
-        }
-
+        // Pozyx data
         for(i=0;i<4;i++)
         {
           if(print_data){ Serial.print(pozyx_data[i]); Serial.print(" "); }
@@ -431,7 +437,8 @@ int i,j,x,n;
 
         // gyro data, only gyro data on z axis will be used
         imu::Vector<3> gyro=bno.getVector(Adafruit_BNO055::VECTOR_GYROSCOPE);
-        nominal_speed_rps = alpha_omega*gyro.z()+(1-alpha_omega)*nominal_speed_rps;
+        blade_speed = gyro.z();
+        nominal_speed_rps = alpha_omega*blade_speed+(1-alpha_omega)*nominal_speed_rps;
 
         setMotorAngle(current_angle_rd); 
 

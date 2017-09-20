@@ -14,6 +14,8 @@ uint8_t pozyx_data_buffer[POZYX_PACKET_SIZE];
 const int8_t transmit_raw = 1;
 const int8_t print_data = 0;
 
+const float rad_to_deg = 57.2957795; // 180/pi
+
 Adafruit_BNO055 bno = Adafruit_BNO055();
 float euler_angle[3], omega[3], quaternion[4], rpy[3], proper_acc[3], proper_acc_world[3];
 uint8_t sys, gyr, accel, mag = 0;
@@ -99,7 +101,7 @@ void loop() {
   time_since_last = micros()-last_time;
   if(time_since_last >= time_period_us)
   {
-    if(print_data){ Serial.print(time_since_last); Serial.print(" ");}
+    //if(print_data){ Serial.print(time_since_last); Serial.print(" ");}
     if(first_update)
     {
       last_time = micros();
@@ -118,7 +120,7 @@ void loop() {
       for(i=0;i<3;i++)
       {
         buffer_int16 = (int16_t)(proper_acc_world[i]*32768/40);
-        if(print_data){ Serial.print(buffer_int16); Serial.print(" "); }
+        //if(print_data){ Serial.print(buffer_int16); Serial.print(" "); }
         for(j=0;j<2;j++)
         {
           if(transmit_raw){ Serial.write(ptr_buffer_int16[j]); }
@@ -128,8 +130,8 @@ void loop() {
       // Transmition of gyro data
       for(i=0;i<3;i++)
       {
-        buffer_int16 = (int16_t)(omega[i]*32768/2000);
-        if(print_data){ Serial.print(buffer_int16); Serial.print(" "); }
+        buffer_int16 = (int16_t)(omega[i]*rad_to_deg*32768/2000);
+        //if(print_data){ Serial.print(buffer_int16); Serial.print(" "); }
         for(j=0;j<2;j++)
         {
           if(transmit_raw){ Serial.write(ptr_buffer_int16[j]); }
@@ -149,7 +151,7 @@ void loop() {
   
       // Accuracy flags
       buffer_uint32 = accuracy_mask;
-      if(print_data){ Serial.print(buffer_uint32); Serial.print(" "); }
+      //if(print_data){ Serial.print(buffer_uint32); Serial.print(" "); }
       for(j=0;j<4;j++)
       {
         if(transmit_raw){ Serial.write(ptr_buffer_uint32[j]);}
@@ -157,7 +159,7 @@ void loop() {
 
       for(i=0;i<4;i++) // Transmition of quat data
       {
-        if(print_data){ Serial.print(pozyx_data[i]); Serial.print(" ");}
+        //if(print_data){ Serial.print(pozyx_data[i]); Serial.print(" ");}
         if(transmit_raw){ Serial.write(pozyx_data[i]);}
       }
   

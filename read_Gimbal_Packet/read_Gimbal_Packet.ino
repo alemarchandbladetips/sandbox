@@ -42,8 +42,8 @@ int i,j,x;
     //Serial.print(x);
     if(x == PACKET_START) // check that first data correspond to start char
     {
-      //Serial.println(micros()-t0);
-      //t0 = micros();
+      Serial.println(micros()-t0);
+      t0 = micros();
       Serial.readBytes(raw_data,GIMBAL_PACKET_SIZE); // Reading the IMU packet
       //Serial.print(raw_data[GIMBAL_PACKET_SIZE-1]);
       if(raw_data[GIMBAL_PACKET_SIZE-1] == PACKET_STOP) // check taht the last data correspond to the packet end char
@@ -57,7 +57,6 @@ int i,j,x;
           if(i<3)
           { // roll, pitch, tips0 angle
             rpy[i] = (float)buffer_int16*180.0/32768.0;
-            //if(i>0)
             //if(print_data){ Serial.print(rpy[i]); Serial.print(" "); }
           } else if(i<6)
           { // derivatives of roll, pitch, tips0 angle
@@ -78,13 +77,6 @@ int i,j,x;
         //if(print_data){ Serial.print(pozyx_p[0]-100); Serial.print(" "); }
         pozyx_p[1] = raw_data[21];
         //if(print_data){ Serial.print(pozyx_p[1]); Serial.print(" "); }
-
-
-        if(print_data){ Serial.print(rpy[0]); Serial.print(" "); }
-        if(print_data){ Serial.print(rpy[1]); Serial.print(" "); }
-        if(print_data){ Serial.print(rpy_p[0]); Serial.print(" "); }
-        if(print_data){ Serial.print(rpy_p[1]); Serial.print(" "); }
-        
         
         if(print_data){ Serial.println(" ");}
       }

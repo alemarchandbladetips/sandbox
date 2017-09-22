@@ -47,7 +47,7 @@ float u_proportionel = 0; // proportional part of the command, tr/s
 float speed_step;
 float angle_error_deg;
 uint8_t sinAngleA, sinAngleB, sinAngleC; // the 3 sinusoide values for the PWMs
-const float yaw_ref = 180;
+const float yaw_ref = 90;//180;
 const float Ki = 0.01;//0.1; // integral gain
 const float Kp = 0.0075; // proportional gain
 const float IMU_freq = 100; // IMU frequency
@@ -60,10 +60,17 @@ const int IN1 = 9;    //pins des pwm
 const int IN2 = 10;   //pins des pwm
 const int IN3 = 6;   //pins des pwm
 
-const int led_pin = 13;
-int led_status = 0;
-int led_counter = 0;
-int led_half_period = 50;
+// yellow led
+const int ledy_pin = 13;
+int ledy_status = 0;
+int ledy_counter = 0;
+int ledy_half_period = 50;
+
+// red led
+const int ledr_pin = 11;
+int ledr_status = 0;
+int ledr_counter = 0;
+int ledr_half_period = 50;
 
 // interuptions gestion
 uint32_t time_counter, time_counter2=0; // counting the number of interuptions
@@ -122,14 +129,21 @@ void setup() {
   pinMode(IN1, OUTPUT); 
   pinMode(IN2, OUTPUT); 
   pinMode(IN3, OUTPUT);
-  
-  pinMode(led_pin, OUTPUT); 
-  digitalWrite(led_pin, HIGH);
 
+  // yellow led
+  pinMode(ledy_pin, OUTPUT); 
+  digitalWrite(ledy_pin, HIGH);
+  ledy_status = 1;
+
+  // red led
+  pinMode(ledr_pin, OUTPUT); 
+  digitalWrite(ledr_pin, LOW);
+  ledr_status = 1;
+  
 // pin Enable
   pinMode(EN1, OUTPUT); 
   digitalWrite(EN1, HIGH);
-  led_status = 1;
+  
 
   sineArraySize = sizeof(pwmSin)/sizeof(int); 
 
@@ -155,8 +169,8 @@ void setup() {
   }
   t0 = micros();
 
-  digitalWrite(led_pin, LOW);
-  led_status = 0;
+  digitalWrite(ledy_pin, LOW);
+  ledy_status = 0;
 }
 //////////////////////////////////////////////////////////////////////////////
 
@@ -201,7 +215,7 @@ ISR(TIMER2_OVF_vect)
 // output: rpy[3]: Euler angles in flt (rd)
 // Measured execution time for a random quaternion : 500us to 750us
 
-void quat2rpy(float q[4], float rpy[3]) // 
+void quat2rpy_ellipse_east(float q[4], float rpy[3]) // 
 {
   rpy[0] = atan2(2*q[1]*q[3] + 2*q[2]*q[0], 1 - 2*q[1]*q[1] - 2*q[2]*q[2]);
   rpy[1] = asin(2*q[2]*q[3] - 2*q[1]*q[0]);
@@ -254,8 +268,9 @@ int i,j,x,n;
   { // This is a security, should not happen in nominal operation mode.
 
     time_counter = 0;
-    digitalWrite(led_pin, LOW);
-   
+    digitalWrite(ledy_pin, LOW);
+    digitalWrite(ledr_pin, HIGH);
+    ledr_counter = 0;
     
     // gyro data, only gyro data on z axis will be used
     imu::Vector<3> gyro=bno.getVector(Adafruit_BNO055::VECTOR_GYROSCOPE);
@@ -294,17 +309,25 @@ int i,j,x,n;
       {
         time_counter = 0;
         // led blink to verify data reception
-        led_counter ++;
-        if(led_status == 1 && led_counter>=led_half_period)
+        ledy_counter ++;
+        ledr_counter ++;
+        if(ledy_status == 1 && ledy_counter>=ledy_half_period)
         {
-          digitalWrite(led_pin, LOW);
-          led_status = 0;
-          led_counter = 0;
-        } else if(led_counter>=led_half_period)
+          digitalWrite(ledy_pin, LOW);
+          ledy_status = 0;
+          ledy_counter = 0;
+        } else if(ledy_counter>=ledy_half_period)
         {
-          digitalWrite(led_pin, HIGH);
-          led_status = 1;
-          led_counter = 0;
+          digitalWrite(ledy_pin, HIGH);
+          ledy_status = 1;
+          ledy_counter = 0;
+        }
+
+        // default led
+        if(ledr_counter > 100*30)
+        {
+          ledr_counter = 100*30;
+          digitalWrite(ledr_pin, LOW);
         }
         
         for(i=0;i<3;i++) // decode sensor data, gyr
@@ -328,7 +351,7 @@ int i,j,x,n;
         accuracy_flags = raw_data[14];
 
         // transformation of quaternion in rpy angles
-        quat2rpy_ellipse(quaternion,rpy);
+        quat2rpy_ellipse_east(quaternion,rpy);
 
         // mounting of Ellipse Z pointing up
         rpy[0] += pi;
@@ -338,7 +361,7 @@ int i,j,x,n;
         
 ///////////////////////////////////// Calcul de la commande
 
-      if(print_timing) { t2 = micros(); }
+        if(print_timing) { t2 = micros(); }
   
   // Computing command
         u = 0;
@@ -360,12 +383,12 @@ int i,j,x,n;
   
           if(abs(angle_error_deg<3) && imu_init==0 && ((accuracy_flags & 0x66) == 0x66))
           { //heading has converge, if it is the first time, we will set the 0 of blade0
-            led_half_period = 25; // 2hz led blink
+            ledy_half_period = 25; // 2hz led blink
             if(time_counter2 >5000)
             { // waiting for 5s immobility to take reference
               imu_init = 1; // so we will not set a ref again
               motor_angle_offset = fmod(current_angle_rd+pi,two_pi)-pi;
-              led_half_period = 5; // led blinks 10Hz
+              ledy_half_period = 5; // led blinks 10Hz
               
             }
           } else
@@ -408,7 +431,7 @@ int i,j,x,n;
 
         // blade0 angle
         buffer_int16 = (int16_t)(mod180((current_angle_rd-motor_angle_offset+rpy[2])*rad_to_deg-yaw_ref)*32768/180); // we put the data in the int16 buffer
-        if(print_data){ Serial.print(buffer_float); Serial.print(" "); }
+        if(print_data){ Serial.print(buffer_int16); Serial.print(" "); }
         for(j=0;j<2;j++)
         {
           if(transmit_raw){ Serial.write(ptr_buffer_int16[j]); } // we transmit each bytes of the int16 buffer using this pointer
@@ -418,7 +441,7 @@ int i,j,x,n;
         for(i=0;i<2;i++)
         {
           buffer_int16 = (int16_t)(omega[i]*32768/2000);
-          if(print_data){ Serial.print(buffer_float); Serial.print(" "); }
+          if(print_data){ Serial.print(buffer_int16); Serial.print(" "); }
           for(j=0;j<2;j++)
           {
             if(transmit_raw){ Serial.write(ptr_buffer_int16[j]); }
@@ -426,8 +449,8 @@ int i,j,x,n;
         }
 
         // blade rotation speed
-        buffer_int16 = (int16_t)(motor_speed_rps*32768/2000);
-        if(print_data){ Serial.print(buffer_float); Serial.print(" "); }
+        buffer_int16 = (int16_t)(motor_speed_rps*rad_to_deg*32768/2000);
+        if(print_data){ Serial.print(buffer_int16); Serial.print(" "); }
         for(j=0;j<2;j++)
         {
           if(transmit_raw){ Serial.write(ptr_buffer_int16[j]); }
@@ -447,13 +470,15 @@ int i,j,x,n;
         // pozyx data
         for(i=0;i<4;i++)
         {
-          if(print_data){ Serial.print(0); Serial.print(" "); }
+          //if(print_data){ Serial.print(0); Serial.print(" "); }
           if(transmit_raw){ Serial.write(0); }
         }
         
         if(transmit_raw){ Serial.write(PACKET_STOP); } // ending byte
 
         setMotorAngle(current_angle_rd);
+
+        if(print_data){ Serial.println(" "); }
 
   ///////////////////////////////////// Lecture du BNO du bas
 
@@ -479,7 +504,15 @@ int i,j,x,n;
           
           //Serial.println(" "); 
           }
+      } else
+      { // last char is not the starting char, light the default led up
+        digitalWrite(ledr_pin, HIGH);
+        ledr_counter = 0;
       }
+    } else
+    { // First char is not the starting char, light the default led up
+      digitalWrite(ledr_pin, HIGH);
+      ledr_counter = 0;
     }
   }
 }

@@ -1,10 +1,11 @@
-#include <RingBuf.h>
+#include <SoftwareSerial2.h>
 
 #include <Adafruit_Sensor.h>
 #include <Adafruit_BNO055.h>
 #include "math.h"
 
-int i,j,x;
+int i,j;
+uint8_t x;
 uint8_t gps_msg[44];
 uint8_t gps_header[2];
 int32_t int32_buffer;
@@ -31,6 +32,8 @@ int8_t expected_size = 40;
 
 uint8_t first_update, header_read;
 
+SoftwareSerial mySerial(10, 11); // RX, TX
+
 //////////////////////////////////////////////////////////////////////
 
 // Projection of a vector using a quaternion
@@ -55,42 +58,44 @@ void setup() {
   {
     // There was a problem detecting the BNO055 ... check your connections 
     Serial.print("Ooops, no BNO055 detected ... Check your wiring or I2C ADDR!");
-    while(1);
   }
-
-  //RingBuf *RingBuf_new(1, 128);
-
-  Serial.println("Start");  
   
+  Serial.println("Start");
   i = 0;
   last_time = micros();
   first_update = 1;
   header_read = 0;
+  mySerial.begin(57600);
 }
 
 /////////////////////////////////////////////////////////////////////
 
 void loop() {
   // put your main code here, to run repeatedly:
+
+//Serial.println(mySerial.available());
+  
   if(header_read==0 && Serial.available()>3)
   {
     x = Serial.read();
-    if (x==0xB5)
+    Serial.print(x);Serial.print(" ");
+    if (x==0xB5) //181
     {
       x = Serial.read();
-      if (x==0x62)
+      Serial.print(x); Serial.print(" ");
+      if (x==0x62) //98
       {
-        Serial.readBytes(gps_header,2);
+        Serial.readBytes(gps_header,2); 
 
-        Serial.print("Head");Serial.print(" ");Serial.println(Serial.available());
+         Serial.print(gps_header[0]); Serial.print(" ");Serial.print(gps_header[1]);Serial.print(" ");Serial.println("Head");
         
         if (gps_header[0] == 0x01 && gps_header[1] == 0x3C )
         { // position
-          expected_size = 42;
+          expected_size = 44;
           header_read = 1;
         } else if (gps_header[0] == 0x01 && gps_header[1] == 0x12 )
         { // speed
-          expected_size = 38;
+          expected_size = 40;
           header_read = 1;
         }
       }
@@ -99,11 +104,11 @@ void loop() {
 
   if(header_read==1 && Serial.available()>expected_size-1)
   {
-    Serial.print(Serial.available());Serial.print(" ");
+    //Serial.print(mySerial.available());Serial.print(" ");
     header_read = 0;
     if (gps_header[0] == 0x01 && gps_header[1] == 0x3C )
     { // position
-      Serial.readBytes(gps_msg,42);
+      Serial.readBytes(gps_msg,44);
 
       Serial.println("pos");
       
@@ -134,7 +139,7 @@ void loop() {
       expected_size = 40;
     } else if (gps_header[0] == 0x01 && gps_header[1] == 0x12 )
     { // speed
-      Serial.readBytes(gps_msg,38);
+      Serial.readBytes(gps_msg,40);
 
       Serial.println("speed");
 
@@ -156,7 +161,7 @@ void loop() {
       expected_size = 44;
     }
   }
-  
+  /*
   time_since_last = micros()-last_time;
   if(time_since_last >= time_period_us)
   {
@@ -194,6 +199,5 @@ void loop() {
     }
     Serial.println(" ");
   }
-
-  
+*/
 }

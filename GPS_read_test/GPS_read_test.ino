@@ -23,7 +23,7 @@ Adafruit_BNO055 bno = Adafruit_BNO055();
 uint8_t sys, gyr, accel, mag = 0;
 float quaternion[4], proper_acc[3];
 
-uint32_t last_time,time_since_last;
+uint32_t last_time,time_since_last, t0;
 uint32_t time_period_us = 10000;
 
 uint32_t accuracy_mask;
@@ -65,7 +65,7 @@ void setup() {
   last_time = micros();
   first_update = 1;
   header_read = 0;
-  mySerial.begin(57600);
+  mySerial.begin(19200);
 }
 
 /////////////////////////////////////////////////////////////////////
@@ -75,19 +75,19 @@ void loop() {
 
 //Serial.println(mySerial.available());
   
-  if(header_read==0 && Serial.available()>3)
+  if(header_read==0 && mySerial.available()>3)
   {
-    x = Serial.read();
-    Serial.print(x);Serial.print(" ");
+    x = mySerial.read();
+    //Serial.print(x);Serial.print(" ");
     if (x==0xB5) //181
     {
-      x = Serial.read();
-      Serial.print(x); Serial.print(" ");
+      x = mySerial.read();
+      //Serial.print(x); Serial.print(" ");
       if (x==0x62) //98
       {
-        Serial.readBytes(gps_header,2); 
+        mySerial.readBytes(gps_header,2); 
 
-         Serial.print(gps_header[0]); Serial.print(" ");Serial.print(gps_header[1]);Serial.print(" ");Serial.println("Head");
+        //Serial.print(gps_header[0]); Serial.print(" ");Serial.print(gps_header[1]);Serial.print(" ");Serial.println("Head");
         
         if (gps_header[0] == 0x01 && gps_header[1] == 0x3C )
         { // position
@@ -101,16 +101,17 @@ void loop() {
       }
     }
   }
-
-  if(header_read==1 && Serial.available()>expected_size-1)
+  time_since_last = micros()-last_time;
+  if(header_read==1 && mySerial.available()>expected_size-1 )
   {
+    t0 = micros();
     //Serial.print(mySerial.available());Serial.print(" ");
     header_read = 0;
     if (gps_header[0] == 0x01 && gps_header[1] == 0x3C )
     { // position
-      Serial.readBytes(gps_msg,44);
+      mySerial.readBytes(gps_msg,44);
 
-      Serial.println("pos");
+      Serial.println("pos ");
       
       for(i=0;i<3;i++)
       {
@@ -119,8 +120,9 @@ void loop() {
           ptr_int32_buffer[j] = gps_msg[4*i+j+10];
         }
         NED_coordinates[i] = ((float)(int32_buffer)+((float)gps_msg[i+22]*0.01));
-        //Serial.print(NED_coordinates[i]);Serial.print(" ");
+        Serial.print(NED_coordinates[i]);Serial.print(" ");
       }
+      Serial.println(" ");
       for(i=0;i<3;i++)
       {
         for(j=0;j<4;j++)
@@ -136,12 +138,11 @@ void loop() {
       }
       //Serial.print(uint32_buffer);Serial.print(" ");
       //Serial.println(" ");
-      expected_size = 40;
     } else if (gps_header[0] == 0x01 && gps_header[1] == 0x12 )
     { // speed
-      Serial.readBytes(gps_msg,40);
+      mySerial.readBytes(gps_msg,40);
 
-      Serial.println("speed");
+      Serial.println("speed ");
 
       for(i=0;i<3;i++)
       {
@@ -150,16 +151,17 @@ void loop() {
           ptr_int32_buffer[j] = gps_msg[4*i+j+6];
         }
         NED_speed[i] = ((float)(int32_buffer));
-        //Serial.print(NED_speed[i]);Serial.print(" ");
+        Serial.print(NED_speed[i]);Serial.print(" ");
       }
+      Serial.println(" ");
       for(j=0;j<4;j++)
       {
         ptr_uint32_buffer[j] = gps_msg[j+30];
       }
       //Serial.print(uint32_buffer);Serial.print(" ");
       //Serial.println(" ");
-      expected_size = 44;
     }
+    //Serial.print(micros()-t0);Serial.print(" ");
   }
   /*
   time_since_last = micros()-last_time;
@@ -191,6 +193,7 @@ void loop() {
     accuracy_mask = (uint32_t)mag + (((uint32_t)accel)<<2) + (((uint32_t)gyr)<<4) + (((uint32_t)sys)<<6);
 
     vector_quat_proj(quaternion,proper_acc,NED_acc);
+    /*
     for(i=0;i<3;i++)
     {
       Serial.print(NED_coordinates[i]);Serial.print(" ");
@@ -198,6 +201,5 @@ void loop() {
       Serial.print(NED_acc[i]);Serial.print(" ");
     }
     Serial.println(" ");
-  }
-*/
+  }*/
 }

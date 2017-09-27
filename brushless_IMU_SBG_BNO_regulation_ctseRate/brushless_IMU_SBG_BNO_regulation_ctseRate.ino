@@ -48,8 +48,8 @@ float speed_step;
 float angle_error_deg;
 uint8_t sinAngleA, sinAngleB, sinAngleC; // the 3 sinusoide values for the PWMs
 const float yaw_ref = 90;//180;
-const float Ki = 0.01;//0.1; // integral gain
-const float Kp = 0.0075; // proportional gain
+const float Ki = 0.03;//0.1; // integral gain
+const float Kp = 0.02; // proportional gain
 const float IMU_freq = 100; // IMU frequency
 const float reg_freq = 1000; // regulation frequency
 float nominal_speed_rps = 0;

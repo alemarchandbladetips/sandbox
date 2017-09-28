@@ -1,21 +1,36 @@
-#include <SoftwareSerial2.h>
+#include <SoftwareSerial.h>
 
 #include <Adafruit_Sensor.h>
 #include <Adafruit_BNO055.h>
 #include "math.h"
 
+#define PACKET_START 0xAA // starting char of package
+#define PACKET_STOP 0x55 // starting char of package
+
+#define LED_PIN 10
+
+// constant used to enable/disable communication, debug, timing checks
+const int8_t transmit_raw = 1;
+const int8_t print_data = 1;
+const int8_t print_timing = 0;
+
 int i,j;
 uint8_t x;
-uint8_t gps_msg[44];
+uint8_t gps_msg_speed[44]; uint8_t gps_msg_pos[44];
 uint8_t gps_header[2];
 int32_t int32_buffer;
 unsigned char *ptr_int32_buffer = (unsigned char *)&int32_buffer;
 uint32_t uint32_buffer;
 unsigned char *ptr_uint32_buffer = (unsigned char *)&uint32_buffer;
+int16_t buffer_int16;
+unsigned char *ptr_buffer_int16 = (unsigned char *)&buffer_int16;
+int32_t buffer_int32;
+unsigned char *ptr_buffer_int32 = (unsigned char *)&buffer_int32;
 
 float NED_coordinates[3];
 float NED_coordinates_accuracy[3];
-float NED_speed[3];
+int32_t NED_speed[3];
+uint32_t NED_speed_accuracy;
 float NED_acc[3];
 
 // for BNO
@@ -30,9 +45,11 @@ uint32_t accuracy_mask;
 
 int8_t expected_size = 40;
 
-uint8_t first_update, header_read;
+int8_t led_counter, led_status = 0;
 
-SoftwareSerial mySerial(10, 11); // RX, TX
+uint8_t first_update, header_read, position_recieved;
+
+SoftwareSerial mySerial(9, 2); // RX, TX
 
 //////////////////////////////////////////////////////////////////////
 
@@ -52,20 +69,21 @@ void vector_quat_proj(float q[4], float v_in[3], float v_out[3])
 
 void setup() {
   // put your setup code here, to run once:
+  Serial1.begin(57600);
   Serial.begin(57600);
-
-  if(!bno.begin(Adafruit_BNO055::OPERATION_MODE_NDOF))
-  {
-    // There was a problem detecting the BNO055 ... check your connections 
-    Serial.print("Ooops, no BNO055 detected ... Check your wiring or I2C ADDR!");
-  }
-  
+  //Serial.begin(115200);
+  pinMode(LED_PIN, OUTPUT);
+  digitalWrite(LED_PIN, HIGH);
+  led_status = 1;
   Serial.println("Start");
+  delay(1000);
   i = 0;
   last_time = micros();
   first_update = 1;
   header_read = 0;
-  mySerial.begin(19200);
+  position_recieved = 0;
+  mySerial.begin(57600);
+  led_counter = 0;
 }
 
 /////////////////////////////////////////////////////////////////////
@@ -74,20 +92,35 @@ void loop() {
   // put your main code here, to run repeatedly:
 
 //Serial.println(mySerial.available());
+  digitalWrite(LED_PIN, LOW);
+  led_status = 0;
   
-  if(header_read==0 && mySerial.available()>3)
+  if(header_read==0 && Serial1.available()>3)
   {
-    x = mySerial.read();
-    //Serial.print(x);Serial.print(" ");
+    //digitalWrite(13, HIGH);
+    x = Serial1.read();
+    
     if (x==0xB5) //181
     {
-      x = mySerial.read();
-      //Serial.print(x); Serial.print(" ");
+      x = Serial1.read();
       if (x==0x62) //98
       {
-        mySerial.readBytes(gps_header,2); 
+        Serial1.readBytes(gps_header,2); 
 
-        //Serial.print(gps_header[0]); Serial.print(" ");Serial.print(gps_header[1]);Serial.print(" ");Serial.println("Head");
+        led_counter++;
+        if(led_counter >=5)
+        {
+          if(led_status==1)
+          {
+            digitalWrite(LED_PIN, LOW);
+            led_status = 0;
+          } else
+          {
+            digitalWrite(LED_PIN, HIGH);
+            led_status = 1;
+          }
+          led_counter = 0;
+        }
         
         if (gps_header[0] == 0x01 && gps_header[1] == 0x3C )
         { // position
@@ -101,105 +134,99 @@ void loop() {
       }
     }
   }
-  time_since_last = micros()-last_time;
-  if(header_read==1 && mySerial.available()>expected_size-1 )
+  if(header_read==1 && Serial1.available()>expected_size-1 )
   {
     t0 = micros();
-    //Serial.print(mySerial.available());Serial.print(" ");
     header_read = 0;
     if (gps_header[0] == 0x01 && gps_header[1] == 0x3C )
     { // position
-      mySerial.readBytes(gps_msg,44);
-
-      Serial.println("pos ");
-      
-      for(i=0;i<3;i++)
-      {
-        for(j=0;j<4;j++)
-        {
-          ptr_int32_buffer[j] = gps_msg[4*i+j+10];
-        }
-        NED_coordinates[i] = ((float)(int32_buffer)+((float)gps_msg[i+22]*0.01));
-        Serial.print(NED_coordinates[i]);Serial.print(" ");
-      }
-      Serial.println(" ");
-      for(i=0;i<3;i++)
-      {
-        for(j=0;j<4;j++)
-        {
-          ptr_uint32_buffer[j] = gps_msg[4*i+j+26];
-        }
-        NED_coordinates_accuracy[i] = (float)(uint32_buffer)*0.01;
-        //Serial.print(NED_coordinates_accuracy[i]);Serial.print(" ");
-      }
-      for(j=0;j<4;j++)
-      {
-        ptr_uint32_buffer[j] = gps_msg[j+38];
-      }
-      //Serial.print(uint32_buffer);Serial.print(" ");
-      //Serial.println(" ");
+      Serial1.readBytes(gps_msg_pos,44);
+      position_recieved = 1;
     } else if (gps_header[0] == 0x01 && gps_header[1] == 0x12 )
     { // speed
-      mySerial.readBytes(gps_msg,40);
+      Serial1.readBytes(gps_msg_speed,40);
+    }
+  }
 
-      Serial.println("speed ");
-
+  if (position_recieved == 1)
+  {
+    position_recieved = 0;
+//////
+    for(i=0;i<3;i++)
+      {
+        for(j=0;j<4;j++)
+        {
+          ptr_int32_buffer[j] = gps_msg_pos[4*i+j+10];
+        }
+        NED_coordinates[i] = ((float)(int32_buffer)+((float)gps_msg_pos[i+22]*0.01));
+        Serial.print(NED_coordinates[i]);Serial.print(" ");
+      }
+      //Serial.println(Serial.available());
       for(i=0;i<3;i++)
       {
         for(j=0;j<4;j++)
         {
-          ptr_int32_buffer[j] = gps_msg[4*i+j+6];
+          ptr_uint32_buffer[j] = gps_msg_pos[4*i+j+26];
         }
-        NED_speed[i] = ((float)(int32_buffer));
-        Serial.print(NED_speed[i]);Serial.print(" ");
+        NED_coordinates_accuracy[i] = (float)(uint32_buffer)*0.01;
+        Serial.print(NED_coordinates[i]);Serial.print(" ");
       }
-      Serial.println(" ");
-      for(j=0;j<4;j++)
-      {
-        ptr_uint32_buffer[j] = gps_msg[j+30];
-      }
-      //Serial.print(uint32_buffer);Serial.print(" ");
-      //Serial.println(" ");
-    }
-    //Serial.print(micros()-t0);Serial.print(" ");
-  }
-  /*
-  time_since_last = micros()-last_time;
-  if(time_since_last >= time_period_us)
-  {
-    Serial.print(time_since_last); Serial.print(" ");
-    if(first_update)
-    {
-      last_time = micros();
-      first_update = 0;
-    } else
-    {
-      last_time = micros();//+= time_period_us;
-    }
-    imu::Vector<3> acc=bno.getVector(Adafruit_BNO055::VECTOR_LINEARACCEL);
-    proper_acc[0] = acc.x();
-    proper_acc[1] = acc.y();
-    proper_acc[2] = acc.z();
-    
-    // quaternion
-    imu::Quaternion quat = bno.getQuat();
-    quaternion[0] = quat.w();
-    quaternion[1] = quat.x();
-    quaternion[2] = quat.y();
-    quaternion[3] = quat.z();
-
-    // Accuracy flags
-    bno.getCalibration(&sys, &gyr, &accel, &mag);
-    accuracy_mask = (uint32_t)mag + (((uint32_t)accel)<<2) + (((uint32_t)gyr)<<4) + (((uint32_t)sys)<<6);
-
-    vector_quat_proj(quaternion,proper_acc,NED_acc);
-    /*
+//////
     for(i=0;i<3;i++)
     {
-      Serial.print(NED_coordinates[i]);Serial.print(" ");
+      for(j=0;j<4;j++)
+      {
+        ptr_int32_buffer[j] = gps_msg_speed[4*i+j+6];
+      }
+      NED_speed[i] = ((float)(int32_buffer));
       Serial.print(NED_speed[i]);Serial.print(" ");
-      Serial.print(NED_acc[i]);Serial.print(" ");
+      }
+      //Serial.println(Serial.available());
+      for(j=0;j<4;j++)
+      {
+        ptr_uint32_buffer[j] = gps_msg_speed[j+30];
+      }
+      NED_speed_accuracy = uint32_buffer;
+
+    // Data transmition, to the control part of the drone
+
+    if(transmit_raw){ mySerial.write(PACKET_START); } // starting byte
+    
+    // NED_coordinates
+    for(i=0;i<3;i++)
+    {
+      buffer_int32 = (int32_t)constrain((NED_coordinates[i]*100.0),-2147483648,2147483647);
+      if(print_data){ Serial.print(buffer_int32); Serial.print(" ");}
+      for(j=0;j<4;j++)
+      {
+        if(transmit_raw){ mySerial.write(ptr_buffer_int32[j]); }
+      }
     }
-    Serial.println(" ");
-  }*/
+
+    // NED_coordinates_accuracy
+    for(i=0;i<3;i++)
+    {
+      buffer_int16 = (int16_t)constrain((NED_coordinates_accuracy[i]*100.0),-32768,32767);
+      if(print_data){ Serial.print(buffer_int16); Serial.print(" ");}
+      for(j=0;j<2;j++)
+      {
+        if(transmit_raw){ mySerial.write(ptr_buffer_int16[j]); } // we transmit each bytes of the int16 buffer using this pointer
+      }
+    }
+
+    // NED_coordinates_accuracy
+    for(i=0;i<3;i++)
+    {
+      buffer_int16 = (int16_t)constrain((NED_speed[i]*1.0),-32768,32767);
+      if(print_data){ Serial.print(buffer_int16); Serial.print(" ");}
+      for(j=0;j<2;j++)
+      {
+        if(transmit_raw){ mySerial.write(ptr_buffer_int16[j]); } // we transmit each bytes of the int16 buffer using this pointer
+      }
+    }
+
+    if(print_data){ Serial.println(" ");}
+
+    if(transmit_raw){ mySerial.write(PACKET_STOP); } // ending byte
+  }
 }

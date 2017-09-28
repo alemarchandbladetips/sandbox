@@ -96,6 +96,8 @@ float motor_angle_offset = 0;
 uint32_t accuracy_flags;
 uint8_t imu_init = 0;
 float alpha_omega = 0.33;
+//const float BNO_corrective_gain = 0.95491; // MESURÉ SUR LA PYRAMIDE
+const float BNO_corrective_gain = 0.95087; // MESURÉ SUR le petit proto
 
 // For acc integration
 float linear_accel_vector[3], pos_ENU[3], posp_ENU[3], pospp_ENU[3];
@@ -277,7 +279,7 @@ int i,j,x,n;
     
     // gyro data, only gyro data on z axis will be used
     imu::Vector<3> gyro=bno.getVector(Adafruit_BNO055::VECTOR_GYROSCOPE);
-    nominal_speed_rps = alpha_omega*gyro.z()+(1-alpha_omega)*nominal_speed_rps;
+    nominal_speed_rps = BNO_corrective_gain*gyro.z();
 
     u = nominal_speed_rps/two_pi; // adding current rotation speed to PI correction
         
@@ -489,7 +491,7 @@ int i,j,x,n;
 
         // gyro data, only gyro data on z axis will be used
         imu::Vector<3> gyro=bno.getVector(Adafruit_BNO055::VECTOR_GYROSCOPE);
-        nominal_speed_rps = alpha_omega*gyro.z()+(1-alpha_omega)*nominal_speed_rps;
+        nominal_speed_rps = BNO_corrective_gain*gyro.z();
 
         setMotorAngle(current_angle_rd); 
 

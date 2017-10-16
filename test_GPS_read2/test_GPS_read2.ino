@@ -25,7 +25,7 @@ SoftwareSerial mySerial(9, 2); // RX, TX
 
 void setup() {
   // put your setup code here, to run once:
-  mySerial.begin(57600);
+  mySerial.begin(38400);
   Serial.begin(115200);
 
 }

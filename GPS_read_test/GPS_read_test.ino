@@ -7,7 +7,7 @@
 #define PACKET_START 0xAA // starting char of package
 #define PACKET_STOP 0x55 // starting char of package
 
-#define LED_PIN 10
+#define LED_PIN 13
 
 // constant used to enable/disable communication, debug, timing checks
 const int8_t transmit_raw = 1;
@@ -49,7 +49,7 @@ int8_t led_counter, led_status = 0;
 
 uint8_t first_update, header_read, position_recieved;
 
-SoftwareSerial mySerial(9, 2); // RX, TX
+SoftwareSerial mySerial(9, 8); // RX, TX
 
 //////////////////////////////////////////////////////////////////////
 
@@ -82,7 +82,7 @@ void setup() {
   first_update = 1;
   header_read = 0;
   position_recieved = 0;
-  mySerial.begin(57600);
+  mySerial.begin(38400);
   led_counter = 0;
 }
 
@@ -92,22 +92,23 @@ void loop() {
   // put your main code here, to run repeatedly:
 
 //Serial.println(mySerial.available());
-  digitalWrite(LED_PIN, LOW);
-  led_status = 0;
-  
+
   if(header_read==0 && Serial1.available()>3)
   {
     //digitalWrite(13, HIGH);
     x = Serial1.read();
+    //Serial.print(x); Serial.print(" ");
     
     if (x==0xB5) //181
     {
       x = Serial1.read();
+      //Serial.print(x); Serial.print(" ");
       if (x==0x62) //98
       {
         Serial1.readBytes(gps_header,2); 
 
         led_counter++;
+        //Serial.print(led_counter);Serial.print(" ");
         if(led_counter >=5)
         {
           if(led_status==1)
@@ -119,6 +120,7 @@ void loop() {
             digitalWrite(LED_PIN, HIGH);
             led_status = 1;
           }
+          //Serial.println(led_status);
           led_counter = 0;
         }
         
@@ -133,6 +135,7 @@ void loop() {
         }
       }
     }
+    //Serial.println(" ");
   }
   if(header_read==1 && Serial1.available()>expected_size-1 )
   {
@@ -159,7 +162,7 @@ void loop() {
           ptr_int32_buffer[j] = gps_msg_pos[4*i+j+10];
         }
         NED_coordinates[i] = ((float)(int32_buffer)+((float)gps_msg_pos[i+22]*0.01));
-        Serial.print(NED_coordinates[i]);Serial.print(" ");
+        //Serial.print(NED_coordinates[i]);Serial.print(" ");
       }
       //Serial.println(Serial.available());
       for(i=0;i<3;i++)
@@ -169,7 +172,7 @@ void loop() {
           ptr_uint32_buffer[j] = gps_msg_pos[4*i+j+26];
         }
         NED_coordinates_accuracy[i] = (float)(uint32_buffer)*0.01;
-        Serial.print(NED_coordinates[i]);Serial.print(" ");
+        //Serial.print(NED_coordinates_accuracy[i]);Serial.print(" ");
       }
 //////
     for(i=0;i<3;i++)
@@ -179,8 +182,9 @@ void loop() {
         ptr_int32_buffer[j] = gps_msg_speed[4*i+j+6];
       }
       NED_speed[i] = ((float)(int32_buffer));
-      Serial.print(NED_speed[i]);Serial.print(" ");
+      //Serial.print(NED_speed[i]);Serial.print(" ");
       }
+      
       //Serial.println(Serial.available());
       for(j=0;j<4;j++)
       {
@@ -224,8 +228,9 @@ void loop() {
         if(transmit_raw){ mySerial.write(ptr_buffer_int16[j]); } // we transmit each bytes of the int16 buffer using this pointer
       }
     }
+    Serial.println(" ");
 
-    if(print_data){ Serial.println(" ");}
+    //if(print_data){ Serial.println(" ");}
 
     if(transmit_raw){ mySerial.write(PACKET_STOP); } // ending byte
   }

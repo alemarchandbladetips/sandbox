@@ -8,9 +8,8 @@
 #include <Adafruit_Sensor.h>
 #include <Adafruit_BNO055.h>
 #include "math.h"
-#include <SoftwareSerial.h>
 
-#define IUM_PACKET_SIZE 16 // number of bytes to be recieved from IMU not counting starting char + gyr 3*2 + quat 4*2 + accuracy 1 + stop char 1
+#define IUM_PACKET_SIZE 40 // number of bytes to be recieved from IMU not counting starting char + gyr 3*2 + quat 4*2 + accuracy 1 + stop char 1
 #define PACKET_START 0xAA // starting char of package
 #define PACKET_STOP 0x55 // starting char of package
 
@@ -21,7 +20,7 @@
 #define U_MAX 0.5 // max speed command of the motor
 
 // constant used to enable/disable communication, debug, timing checks
-const int8_t transmit_raw = 1;
+const int8_t transmit_raw = 0;
 const int8_t print_data = 0;
 const int8_t print_timing = 0;
 
@@ -73,7 +72,7 @@ int ledr_counter = 0;
 int ledr_half_period = 50;
 
 // interuptions gestion
-uint32_t time_counter, time_counter2=0; // counting the number of interuptions
+uint32_t time_counter, time_counter3, time_counter2=0; // counting the number of interuptions
 uint8_t interupt_happened; // interuption flag
 
 // variables for the serial read an data recomposition
@@ -87,6 +86,8 @@ uint32_t buffer_uint32;
 unsigned char *ptr_buffer_uint32 = (unsigned char *)&buffer_uint32;
 int16_t buffer_int16;
 unsigned char *ptr_buffer_int16 = (unsigned char *)&buffer_int16;
+int32_t buffer_int32;
+unsigned char *ptr_buffer_int32 = (unsigned char *)&buffer_int32;
 
 // for BNO
 Adafruit_BNO055 bno = Adafruit_BNO055();
@@ -101,6 +102,15 @@ const float BNO_corrective_gain = 0.95491; // MESURÉ SUR LA PYRAMIDE
 
 // For acc integration
 float linear_accel_vector[3], pos_ENU[3], posp_ENU[3], pospp_ENU[3];
+int32_t NED_coordinates[3], NED_coordinates_offset[3];
+int16_t NED_coordinates_accuracy[3];
+int16_t NED_speed[3];
+int16_t NED_coordinates_accuracy_max;
+int16_t NED_coordinates_accuracy_max_thr1 = 2000;
+int16_t NED_coordinates_accuracy_max_thr2 = 5000;
+uint8_t gps_init = 0;
+
+uint8_t sanity_flag;
 
 long t0,t1,t2,t3,t4,t5,t6,t_;
 
@@ -119,9 +129,9 @@ void setup() {
   {
     // There was a problem detecting the BNO055 ... check your connections 
     Serial.print("Ooops, no BNO055 detected ... Check your wiring or I2C ADDR!");
-    while(1);
+    //while(1);
   }
-
+  gps_init = 0;
 // augmentation fréquence PWM
 
   setPwmFrequency(IN1); 
@@ -167,11 +177,11 @@ void setup() {
   TCCR2B = 0b00000101; // Clock / 128 soit 8 micro-s et WGM22 = 0
   TIMSK2 = 0b00000001; // Interruption locale autorisée par TOIE2
   sei(); // Active l'interruption globale
-
+/*
   while(gyr!=3)
   {
     bno.getCalibration(&sys, &gyr, &accel, &mag);
-  }
+  }*/
   t0 = micros();
 
   digitalWrite(ledy_pin, LOW);
@@ -212,6 +222,7 @@ ISR(TIMER2_OVF_vect)
   current_angle_rd = fmod((current_angle_rd + angle_step_rd)+two_pi,two_pi); 
   time_counter2++;
   time_counter++;
+  time_counter3++;
 }
 //////////////////////////////////////////////////////////////////////
 
@@ -263,13 +274,13 @@ float mod180(float angle)
 
 
 void loop() {
-int i,j,x,n;
+int i,j,x,n, nSerial;
 
 // Applying the command if new
   
   setMotorAngle(current_angle_rd);               //  une fois par ms // Question : combien de temps elle prend ? 500us
-
-  if(time_counter>=15) // We don't recieve info from the IMU for more than 20ms, we will control the motor in open loop.
+/*
+  if(time_counter>=20) // We don't recieve info from the IMU for more than 20ms, we will control the motor in open loop.
   { // This is a security, should not happen in nominal operation mode.
 
     time_counter = 0;
@@ -291,10 +302,11 @@ int i,j,x,n;
 
     setMotorAngle(current_angle_rd); 
   }
-
-  if (Serial.available() > IUM_PACKET_SIZE) // Number of data corresponding to the IMU packet size is waiting in the biffer of serial
+*/
+  nSerial = Serial.available();
+  if ( nSerial > IUM_PACKET_SIZE) // Number of data corresponding to the IMU packet size is waiting in the biffer of serial
   { 
-    
+    //Serial.println(time_counter2);
 /////////////////////// Lecture des données du port série venant de l'arduino "du BNO du haut"
     if(print_timing) { t0 = micros(); }
 
@@ -334,7 +346,8 @@ int i,j,x,n;
           ledr_counter = 100*30;
           digitalWrite(ledr_pin, LOW);
         }
-        
+
+        //// IMU datas
         for(i=0;i<3;i++) // decode sensor data, gyr
         {
           for(j=0;j<2;j++) // filling the 4 bytes of the buffer using a pointer
@@ -354,6 +367,41 @@ int i,j,x,n;
         }
         
         accuracy_flags = raw_data[14];
+
+        /// GPS DATA
+        for (i = 0; i < 3; i++)
+        {
+          for (j = 0; j < 4; j++)
+          {
+            ptr_buffer_int32[j] = raw_data[4 * i + j + 15];
+          }
+          NED_coordinates[i] = buffer_int32;
+          //if(print_data){ Serial.print(NED_coordinates[i]); Serial.print(" ");}
+        }
+
+        // NED_coordinates_accuracy
+        for (i = 0; i < 3; i++)
+        {
+          for (j = 0; j < 2; j++)
+          {
+            ptr_buffer_int16[j] = raw_data[2 * i + j + 27];
+          }
+          NED_coordinates_accuracy[i] = buffer_int16;
+          //if(print_data){ Serial.print(NED_coordinates_accuracy[i]); Serial.print(" ");}
+          //Serial.print(NED_coordinates_accuracy[i]); Serial.print(" ");
+        }
+        NED_coordinates_accuracy_max = max(NED_coordinates_accuracy[0],NED_coordinates_accuracy[1]);
+        //Serial.print(NED_coordinates_accuracy_max); Serial.print(" ");
+        // NED_coordinates_accuracy
+        for (i = 0; i < 3; i++)
+        {
+          for (j = 0; j < 2; j++)
+          {
+            ptr_buffer_int16[j] = raw_data[2 * i + j + 33];
+          }
+          NED_speed[i] = buffer_int16;
+          if(print_data){ Serial.print(NED_speed[i]); Serial.print(" ");}
+        }
 
         // transformation of quaternion in rpy angles
         quat2rpy_ellipse_east(quaternion,rpy);
@@ -414,8 +462,44 @@ int i,j,x,n;
         angle_step_rd = motor_speed_rps/reg_freq;
 
         setMotorAngle(current_angle_rd);
+
+///////////////////////////////////// reference setting for GPS
+
+        if(gps_init==0 && NED_coordinates_accuracy_max<NED_coordinates_accuracy_max_thr1 && NED_coordinates_accuracy_max!=0)
+        {
+          if(time_counter3 >10000)
+          {
+            for(i=0;i<3;i++)
+            {
+              NED_coordinates_offset[i] = NED_coordinates[i];
+            }
+            gps_init = 1;
+          }
+        } else
+        {
+          time_counter3 = 0;
+        }
         
 ///////////////////////////////////// 
+
+        sanity_flag = (imu_init == 1) 
+                    + (((accuracy_flags & 0x26) == 0x26) << 1 )
+                    + (((accuracy_flags & 0x66) == 0x66) << 2 )
+                    + ((gps_init == 1) << 4)
+                    + ((NED_coordinates_accuracy_max < NED_coordinates_accuracy_max_thr1 && NED_coordinates_accuracy_max!=0) << 5)
+                    + ((NED_coordinates_accuracy_max < NED_coordinates_accuracy_max_thr2 && NED_coordinates_accuracy_max!=0) << 6)
+                    + (((accuracy_flags & 0x80) == 0x80) << 7); 
+/*
+        Serial.print((imu_init == 1) ); Serial.print(" ");
+        Serial.print(((accuracy_flags & 0x26) == 0x26)); Serial.print(" ");
+        Serial.print(((accuracy_flags & 0x66) == 0x66)); Serial.print(" ");
+        Serial.print(0); Serial.print(" ");
+        Serial.print((gps_init == 1)); Serial.print(" ");
+        Serial.print((NED_coordinates_accuracy_max < NED_coordinates_accuracy_max_thr1 && NED_coordinates_accuracy_max!=0)); Serial.print(" ");
+        Serial.print((NED_coordinates_accuracy_max < NED_coordinates_accuracy_max_thr2 && NED_coordinates_accuracy_max!=0)); Serial.print(" ");
+        Serial.print(((accuracy_flags & 0x80) == 0x80)); Serial.print(" ");
+        Serial.print(sanity_flag); Serial.println(" ");
+*/
 
         // Data transmition, to the control part of the drone
 
@@ -427,7 +511,7 @@ int i,j,x,n;
         for(i=0;i<2;i++)
         {
           buffer_int16 = (int16_t)(mod180(rpy[i]* rad_to_deg)*32768/180);
-          if(print_data){ Serial.print(buffer_int16); Serial.print(" "); }
+          //if(print_data){ Serial.print(buffer_int16); Serial.print(" "); }
           for(j=0;j<2;j++)
           {
             if(transmit_raw){ Serial.write(ptr_buffer_int16[j]); }
@@ -436,7 +520,7 @@ int i,j,x,n;
 
         // blade0 angle
         buffer_int16 = (int16_t)(mod180((current_angle_rd-motor_angle_offset+rpy[2])*rad_to_deg-yaw_ref)*32768/180); // we put the data in the int16 buffer
-        if(print_data){ Serial.print(buffer_int16); Serial.print(" "); }
+        //if(print_data){ Serial.print(buffer_int16); Serial.print(" "); }
         for(j=0;j<2;j++)
         {
           if(transmit_raw){ Serial.write(ptr_buffer_int16[j]); } // we transmit each bytes of the int16 buffer using this pointer
@@ -446,7 +530,7 @@ int i,j,x,n;
         for(i=0;i<2;i++)
         {
           buffer_int16 = (int16_t)(omega[i]*32768/2000);
-          if(print_data){ Serial.print(buffer_int16); Serial.print(" "); }
+          //if(print_data){ Serial.print(buffer_int16); Serial.print(" "); }
           for(j=0;j<2;j++)
           {
             if(transmit_raw){ Serial.write(ptr_buffer_int16[j]); }
@@ -455,29 +539,35 @@ int i,j,x,n;
 
         // blade rotation speed
         buffer_int16 = (int16_t)(motor_speed_rps*rad_to_deg*32768/2000);
-        if(print_data){ Serial.print(buffer_int16); Serial.print(" "); }
+        //if(print_data){ Serial.print(buffer_int16); Serial.print(" "); }
         for(j=0;j<2;j++)
         {
           if(transmit_raw){ Serial.write(ptr_buffer_int16[j]); }
         }
 
-        // proper accelerations in world frame
-        for(i=0;i<3;i++)
+        // transmition of GPS position data
+        for (i = 0; i < 3; i++)
         {
-          buffer_int16 = 0;//(int16_t)(proper_acc[i]*32768/40);
-          //if(print_data){ Serial.print(buffer_float); Serial.print(" "); }
-          for(j=0;j<2;j++)
+          buffer_int32 = NED_coordinates[i]-NED_coordinates_offset[i];
+          //if(print_data){ Serial.print(buffer_int32); Serial.print(" "); }
+          for (j = 0; j < 4; j++)
           {
-            if(transmit_raw){ Serial.write(ptr_buffer_int16[j]); }
+            if (transmit_raw) { Serial.write(ptr_buffer_int32[j]); }
           }
         }
 
-        // pozyx data
-        for(i=0;i<4;i++)
+        // transmition of GPS speed data
+        for (i = 0; i < 3; i++)
         {
-          //if(print_data){ Serial.print(0); Serial.print(" "); }
-          if(transmit_raw){ Serial.write(0); }
+          buffer_int16 = NED_speed[i];
+          if(print_data){ Serial.print(buffer_int16); Serial.print(" "); }
+          for (j = 0; j < 2; j++)
+          {
+            if (transmit_raw) { Serial.write(ptr_buffer_int16[j]); }
+          }
         }
+
+        if(transmit_raw){ Serial.write(sanity_flag); }
         
         if(transmit_raw){ Serial.write(PACKET_STOP); } // ending byte
 
@@ -494,6 +584,8 @@ int i,j,x,n;
         nominal_speed_rps = BNO_corrective_gain*gyro.z();
 
         setMotorAngle(current_angle_rd); 
+
+       // time_counter2 = 0;
 
  ///////////////////////////////////// Printing timings (optional)
 
@@ -513,11 +605,13 @@ int i,j,x,n;
       { // last char is not the starting char, light the default led up
         digitalWrite(ledr_pin, HIGH);
         ledr_counter = 0;
+        //Serial.print("Corr1"); Serial.print(" "); Serial.println(nSerial); 
       }
     } else
     { // First char is not the starting char, light the default led up
       digitalWrite(ledr_pin, HIGH);
       ledr_counter = 0;
+      //Serial.print("Corr2"); Serial.print(" "); Serial.println(nSerial); 
     }
   }
 }

@@ -27,11 +27,12 @@ unsigned char *ptr_buffer_int16 = (unsigned char *)&buffer_int16;
 int32_t buffer_int32;
 unsigned char *ptr_buffer_int32 = (unsigned char *)&buffer_int32;
 
-float NED_coordinates[3];
+float NED_coordinates[3], NED_coordinates_prev[3], NED_coordinates_offset[3];
 float NED_coordinates_accuracy[3];
 int32_t NED_speed[3];
 uint32_t NED_speed_accuracy;
 float NED_acc[3];
+uint8_t gps_flag, diffSoln, carrSoln, carrSoln_prev, relPosValid, gpsSanity = 0;
 
 // for BNO
 Adafruit_BNO055 bno = Adafruit_BNO055();
@@ -155,6 +156,13 @@ void loop() {
   {
     position_recieved = 0;
 //////
+    gps_flag = gps_msg_pos[41];
+    diffSoln = (gps_flag&0x02)>>1;
+    relPosValid = (gps_flag&0x04)>>2;
+    carrSoln = (gps_flag&0x18)>>3;
+
+    gpsSanity = (diffSoln==1 && relPosValid==1 && carrSoln>0);
+    
     for(i=0;i<3;i++)
       {
         for(j=0;j<4;j++)
@@ -174,6 +182,23 @@ void loop() {
         NED_coordinates_accuracy[i] = (float)(uint32_buffer)*0.01;
         //Serial.print(NED_coordinates_accuracy[i]);Serial.print(" ");
       }
+
+      if((carrSoln==1 && carrSoln_prev==2) || (carrSoln==2 && carrSoln_prev==1))
+      {
+        for(i=0;i<3;i++)
+        {
+          NED_coordinates_offset[i] = NED_coordinates_prev[i]-NED_coordinates[i];
+        }
+      }
+
+      for(i=0;i<3;i++)
+      {
+        NED_coordinates[i] = NED_coordinates[i]+NED_coordinates_offset[i];
+        NED_coordinates_prev[i] = NED_coordinates[i];
+      }
+      carrSoln_prev = carrSoln;
+
+      
 //////
     for(i=0;i<3;i++)
     {
@@ -210,7 +235,7 @@ void loop() {
     // NED_coordinates_accuracy
     for(i=0;i<3;i++)
     {
-      buffer_int16 = (int16_t)constrain((NED_coordinates_accuracy[i]*100.0),-32768,32767);
+      buffer_int16 = (int16_t)constrain((NED_coordinates_accuracy[i]*100.0),-32768,32767)*(int16_t)gpsSanity;
       if(print_data){ Serial.print(buffer_int16); Serial.print(" ");}
       for(j=0;j<2;j++)
       {

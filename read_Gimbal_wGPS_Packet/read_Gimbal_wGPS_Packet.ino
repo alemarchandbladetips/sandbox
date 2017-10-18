@@ -46,7 +46,7 @@ int i,j,x;
     //Serial.print(x); Serial.print(" ");
     if(x == PACKET_START) // check that first data correspond to start char
     {
-      //Serial.print((int32_t)(micros()-t0-10000));Serial.print(" ");
+      //Serial.print((int32_t)(micros()-t0));Serial.write(9);
       t0 = micros();
       Serial.readBytes(raw_data,GIMBAL_PACKET_SIZE-1); // Reading the IMU packet
       //Serial.print(raw_data[GIMBAL_PACKET_SIZE-1]);
@@ -76,8 +76,8 @@ int i,j,x;
             ptr_buffer_int32[j] = raw_data[4*i+j+12];
           }
           NED_coordinates[i] = buffer_int32;
-          NED_coordinates_flt[i] = NED_coordinates[i]/100;
-          if(print_data){ Serial.print(NED_coordinates_flt[i]); Serial.print(" ");}
+          NED_coordinates_flt[i] = (float)NED_coordinates[i]/100.0;
+          //if(print_data){ Serial.print(NED_coordinates_flt[i]); Serial.write(9);}
         }
         for (i = 0; i < 3; i++)
         {
@@ -86,17 +86,29 @@ int i,j,x;
             ptr_buffer_int16[j] = raw_data[2*i+j+24];
           }
           NED_speed[i] = buffer_int16;
-          if(print_data){ Serial.print(NED_speed[i]); Serial.print(" ");}
+          //if(print_data){ Serial.print(NED_speed[i]); Serial.write(9);}
         }
 
         sanity_flag = raw_data[30];
-        if(print_data){ Serial.print(sanity_flag); Serial.print(" ");}
+
+        if((sanity_flag&0x80)==0x80)
+        {
+          for (i = 0; i < 3; i++)
+          {
+            if(print_data){ Serial.print(NED_coordinates_flt[i]); Serial.write(9);}
+          }
+          for (i = 0; i < 3; i++)
+          {
+            if(print_data){ Serial.print(NED_speed[i]); Serial.write(9);}
+          }
+          if(print_data){ Serial.print((sanity_flag&0x60)>>5); Serial.write(9);}
+          if(print_data){ Serial.print((sanity_flag&0x10)>>4); Serial.write(9);}
+        }
         
         if(print_data){ Serial.println(" ");}
       }
     }
   }
-  
 }
 
 

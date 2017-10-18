@@ -20,7 +20,7 @@
 #define U_MAX 0.5 // max speed command of the motor
 
 // constant used to enable/disable communication, debug, timing checks
-const int8_t transmit_raw = 0;
+const int8_t transmit_raw = 1;
 const int8_t print_data = 0;
 const int8_t print_timing = 0;
 
@@ -106,9 +106,10 @@ int32_t NED_coordinates[3], NED_coordinates_offset[3];
 int16_t NED_coordinates_accuracy[3];
 int16_t NED_speed[3];
 int16_t NED_coordinates_accuracy_max;
-int16_t NED_coordinates_accuracy_max_thr1 = 2000;
-int16_t NED_coordinates_accuracy_max_thr2 = 5000;
+int16_t NED_coordinates_accuracy_max_thr1 = 150;
+int16_t NED_coordinates_accuracy_max_thr2 = 500;
 uint8_t gps_init = 0;
+uint8_t gps_accuracy = 0;
 
 uint8_t sanity_flag;
 
@@ -482,12 +483,15 @@ int i,j,x,n, nSerial;
         
 ///////////////////////////////////// 
 
+        gps_accuracy = (uint8_t)(NED_coordinates_accuracy_max!=0) 
+                     + (uint8_t)(NED_coordinates_accuracy_max < NED_coordinates_accuracy_max_thr1 && NED_coordinates_accuracy_max!=0)
+                     + (uint8_t)(NED_coordinates_accuracy_max < NED_coordinates_accuracy_max_thr2 && NED_coordinates_accuracy_max!=0)
+
         sanity_flag = (imu_init == 1) 
                     + (((accuracy_flags & 0x26) == 0x26) << 1 )
                     + (((accuracy_flags & 0x66) == 0x66) << 2 )
                     + ((gps_init == 1) << 4)
-                    + ((NED_coordinates_accuracy_max < NED_coordinates_accuracy_max_thr1 && NED_coordinates_accuracy_max!=0) << 5)
-                    + ((NED_coordinates_accuracy_max < NED_coordinates_accuracy_max_thr2 && NED_coordinates_accuracy_max!=0) << 6)
+                    + (gps_accuracy << 5)
                     + (((accuracy_flags & 0x80) == 0x80) << 7); 
 /*
         Serial.print((imu_init == 1) ); Serial.print(" ");

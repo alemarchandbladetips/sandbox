@@ -93,7 +93,7 @@ int i,j,x;
 
         if((sanity_flag&0x80)==0x80)
         {
-          for (i = 0; i < 3; i++)
+          for (i = 0; i < 2; i++)
           {
             if(print_data){ Serial.print(NED_coordinates_flt[i]); Serial.write(9);}
           }
@@ -101,11 +101,13 @@ int i,j,x;
           {
             if(print_data){ Serial.print(NED_speed[i]); Serial.write(9);}
           }
-          if(print_data){ Serial.print((sanity_flag&0x60)>>5); Serial.write(9);}
-          if(print_data){ Serial.print((sanity_flag&0x10)>>4); Serial.write(9);}
+          if(print_data){ Serial.print(sanity_flag); Serial.write(9);}
+          if(print_data){ Serial.print((sanity_flag & 0x60)>>5); Serial.write(9);}
+          if(print_data){ Serial.print((sanity_flag & 0x10)>>4); Serial.write(9);}
+          if(print_data){ Serial.println(" ");}
         }
         
-        if(print_data){ Serial.println(" ");}
+        
       }
     }
   }

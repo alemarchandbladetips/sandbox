@@ -485,7 +485,7 @@ int i,j,x,n, nSerial;
 
         gps_accuracy = (uint8_t)(NED_coordinates_accuracy_max!=0) 
                      + (uint8_t)(NED_coordinates_accuracy_max < NED_coordinates_accuracy_max_thr1 && NED_coordinates_accuracy_max!=0)
-                     + (uint8_t)(NED_coordinates_accuracy_max < NED_coordinates_accuracy_max_thr2 && NED_coordinates_accuracy_max!=0)
+                     + (uint8_t)(NED_coordinates_accuracy_max < NED_coordinates_accuracy_max_thr2 && NED_coordinates_accuracy_max!=0);
 
         sanity_flag = (imu_init == 1) 
                     + (((accuracy_flags & 0x26) == 0x26) << 1 )

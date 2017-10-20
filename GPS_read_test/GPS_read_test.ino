@@ -156,11 +156,17 @@ void loop() {
   {
     position_recieved = 0;
 //////
-    gps_flag = gps_msg_pos[41];
+    gps_flag = gps_msg_pos[38];
     diffSoln = (gps_flag&0x02)>>1;
     relPosValid = (gps_flag&0x04)>>2;
     carrSoln = (gps_flag&0x18)>>3;
-
+/*
+    if(print_data){ Serial.print(gps_flag); Serial.print(" ");}
+    if(print_data){ Serial.print(diffSoln); Serial.print(" ");}
+    if(print_data){ Serial.print(relPosValid); Serial.print(" ");}
+    if(print_data){ Serial.print(carrSoln); Serial.print(" ");}
+    if(print_data){ Serial.print(gpsSanity); Serial.print(" ");}
+*/
     gpsSanity = (diffSoln==1 && relPosValid==1 && carrSoln>0);
     
     for(i=0;i<3;i++)
@@ -183,8 +189,15 @@ void loop() {
         //Serial.print(NED_coordinates_accuracy[i]);Serial.print(" ");
       }
 
-      if((carrSoln==1 && carrSoln_prev==2) || (carrSoln==2 && carrSoln_prev==1))
+      if(print_data){ Serial.print(carrSoln); Serial.print(" ");}
+      if(print_data){ Serial.print(carrSoln_prev); Serial.print(" ");}
+      if(print_data){ Serial.print(NED_coordinates_prev[0]); Serial.print(" ");}
+      if(print_data){ Serial.print(NED_coordinates[0]); Serial.print(" ");}
+      
+
+      if(((carrSoln==1) && (carrSoln_prev==2)) || ((carrSoln==2) && (carrSoln_prev==1)))
       {
+        if(print_data){ Serial.print("switch"); Serial.print(" ");}
         for(i=0;i<3;i++)
         {
           NED_coordinates_offset[i] = NED_coordinates_prev[i]-NED_coordinates[i];
@@ -197,8 +210,8 @@ void loop() {
         NED_coordinates_prev[i] = NED_coordinates[i];
       }
       carrSoln_prev = carrSoln;
-
-      
+      if(print_data){ Serial.print(NED_coordinates[0]); Serial.print(" ");}
+      if(print_data){ Serial.print(NED_coordinates_offset[0]); Serial.print(" ");}
 //////
     for(i=0;i<3;i++)
     {
@@ -225,7 +238,7 @@ void loop() {
     for(i=0;i<3;i++)
     {
       buffer_int32 = (int32_t)constrain((NED_coordinates[i]*100.0),-2147483648,2147483647);
-      if(print_data){ Serial.print(buffer_int32); Serial.print(" ");}
+      //if(print_data){ Serial.print(buffer_int32); Serial.print(" ");}
       for(j=0;j<4;j++)
       {
         if(transmit_raw){ mySerial.write(ptr_buffer_int32[j]); }
@@ -236,18 +249,18 @@ void loop() {
     for(i=0;i<3;i++)
     {
       buffer_int16 = (int16_t)constrain((NED_coordinates_accuracy[i]*100.0),-32768,32767)*(int16_t)gpsSanity;
-      if(print_data){ Serial.print(buffer_int16); Serial.print(" ");}
+      //if(print_data){ Serial.print(buffer_int16); Serial.print(" ");}
       for(j=0;j<2;j++)
       {
         if(transmit_raw){ mySerial.write(ptr_buffer_int16[j]); } // we transmit each bytes of the int16 buffer using this pointer
       }
     }
 
-    // NED_coordinates_accuracy
+    // NED_speed
     for(i=0;i<3;i++)
     {
       buffer_int16 = (int16_t)constrain((NED_speed[i]*1.0),-32768,32767);
-      if(print_data){ Serial.print(buffer_int16); Serial.print(" ");}
+      //if(print_data){ Serial.print(buffer_int16); Serial.print(" ");}
       for(j=0;j<2;j++)
       {
         if(transmit_raw){ mySerial.write(ptr_buffer_int16[j]); } // we transmit each bytes of the int16 buffer using this pointer

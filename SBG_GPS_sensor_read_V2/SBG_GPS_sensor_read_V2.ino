@@ -157,6 +157,7 @@ void loop() {
         gps_correction_flag = 1;
         time3 = micros();
         //Serial.print(dbg);Serial.println(" ");
+        //Serial.print(time3-time4);Serial.println(" ");
         time4 = time3;
         dbg = 0;
         //if(print_data){ Serial.println(" ");}

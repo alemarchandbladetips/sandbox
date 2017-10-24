@@ -12,6 +12,10 @@
 Ca marche OK pour les 3 ! 
 */
 int temps_led= 300; // durée du flash
+uint32_t t0, enlapsed_time;
+uint8_t light_on = 0;
+
+uint8_t print_data = 0;
 
 int16_t angle_252;
 int16_t angle_offset = 0; // Blade 3
@@ -80,12 +84,17 @@ void setup() {
 void loop() {
 
   uint8_t dummy;
+  
+  enlapsed_time = millis()-t0;
+
+  if ((enlapsed_time > temps_led) && (light_on == 1))
+  {
+    light_off();
+    light_on = 0;
+  }
 
 // DECLENCHEMENT BOUCLE
-  if (Serial.available() == 0) 
-  {
-    delayMicroseconds(20);
-  } else 
+  if (Serial.available() != 0)
   { // début de boucle dès la réception via serie de l'angle et des commandes   
 
     // assigner les valeurs
@@ -101,11 +110,15 @@ void loop() {
       intensity_100 = constrain(intensity_100,0,100);
       intensity_256 = (float)intensity_100*2.55;
 
-      Serial.print(angle_252);Serial.print(" ");
-      Serial.print((uint8_t)intensity_100);Serial.print(" ");
-      Serial.print(100*ok1);Serial.print(" ");
-      Serial.print(100*ok2);Serial.print(" ");
-      Serial.print(100*ok3);Serial.println(" ");
+      if(print_data)
+      {
+        Serial.print(angle_252);Serial.print(" ");
+        Serial.print((uint8_t)intensity_100);Serial.print(" ");
+        Serial.print(100*ok1);Serial.print(" ");
+        Serial.print(100*ok2);Serial.print(" ");
+        Serial.print(100*ok3);Serial.print(" ");
+        Serial.print(100*light_on);Serial.println(" ");
+      }
 
       angle_252 += angle_offset;
       if (angle_252 > 252)
@@ -121,13 +134,8 @@ void loop() {
           ok2 = 0;
           ok3 = 0;
           light_blue((uint8_t)intensity_256);
-          //Serial.println("Bleu");
-          delay(temps_led);
-          while(Serial.available())
-          {
-            dummy = Serial.read();
-          }
-          light_off();
+          t0 = millis();
+          light_on = 1;
         }
       }
 
@@ -139,13 +147,8 @@ void loop() {
           ok2 = 1;
           ok3 = 0;
           light_white((uint8_t)intensity_256);
-          //Serial.println("Blanc");
-          delay(temps_led);
-          while(Serial.available())
-          {
-            dummy = Serial.read();
-          }
-          light_off();
+          t0 = millis();
+          light_on = 1;
         }
       }
 
@@ -157,13 +160,8 @@ void loop() {
           ok2 = 0;
           ok3 = 1;
           light_red((uint8_t)intensity_256);
-          //Serial.println("Rouge");
-          delay(temps_led);
-          while(Serial.available())
-          {
-            dummy = Serial.read();
-          }
-          light_off();
+          t0 = millis();
+          light_on = 1;
         }
       }
     }

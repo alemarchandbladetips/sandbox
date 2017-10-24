@@ -18,7 +18,7 @@ void loop() {
   Serial.write(intensity);
   delay(10);
   
-  angle_252 += 3;
+  angle_252 += 1;
   
   if (angle_252 > 252)
   {

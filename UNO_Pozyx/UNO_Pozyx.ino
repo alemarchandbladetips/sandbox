@@ -12,10 +12,10 @@ boolean use_processing = false;                         // set this to true to o
 //boolean use_processing = true; 
 
 uint8_t num_anchors = 7;                                    // the number of anchors
-uint16_t anchors[7] = {0x603e, 0x6036, 0x604f, 0x6016, 0x6058, 0x602f, 0x6050};     // the network id of the anchors: change these to the network ids of your anchors.
-int32_t anchors_x[7] = {0, 3720, 10, 3670, -626 , 5001, 5032};               // anchor x-coorindates in mm
-int32_t anchors_y[7] = {0, 0, 7310, 7310, 3537 , 2165, 5367};                  // anchor y-coordinates in mm
-int32_t heights[7] = {1495, 1090, 1315, 1995, 1653 , 1800, 2528};   
+uint16_t anchors[7] = {0x6058,  0x602f, 0x603e,   0x6036,   0x604f,   0x6016, 0x6050};     // the network id of the anchors: change these to the network ids of your anchors.
+int32_t anchors_x[7]= {-626 ,   5001,   0,        3720,     860,      3670,   5032};               // anchor x-coorindates in mm
+int32_t anchors_y[7]= {3537 ,   2165,   0,        0,        7310,     7310,   5367};                  // anchor y-coordinates in mm
+int32_t heights[7] = { 2238 ,   2815,   3180,     2860,     2185,     1995,   2528};   
 uint8_t algorithm = POZYX_POS_ALG_TRACKING;
 uint8_t dimension = POZYX_3D;                           // positioning dimension
 //uint8_t dimension = POZYX_2D;                           // positioning dimension
@@ -25,12 +25,18 @@ int32_t height = 1000;                                  // height of device, req
 /******************************/
 ////PARAMETRES DU FILTRE
 const int H=15;
-int PosXs=0, PosYs=0;
+int16_t PosXs=0, PosYs=0, PosXs_prev=0, PosYs_prev=0;
 int X[H], Y[H];
 float promX, promY;
 float VelX, VelY;
+float VelXs_, VelYs_;
+float VelXs_1, VelYs_1;
 int VelXs, VelYs;
 //////////////////////////////////////////////
+// Communication
+int16_t buffer_int16;
+unsigned char *ptr_buffer_int16 = (unsigned char *)&buffer_int16;
+
 void setup(){
   
  
@@ -47,7 +53,7 @@ void setup(){
   if(!remote){
     remote_id = NULL;
   }
-
+/*
   Serial.println(F("----------POZYX POSITIONING V1.0----------"));
   Serial.println(F("NOTES:"));
   Serial.println(F("- No parameters required."));
@@ -58,7 +64,7 @@ void setup(){
   Serial.println(F("----------POZYX POSITIONING V1.0----------"));
   Serial.println();
   Serial.println(F("Performing manual anchor configuration:"));
-
+*/
   // clear all previous devices in the device list
   Pozyx.clearDevices(remote_id);
   // sets the anchor manually
@@ -67,14 +73,14 @@ void setup(){
   printCalibrationResult();
   delay(1000);
 
-  Serial.println(F("Starting positioning: "));
+  //Serial.println(F("Starting positioning: "));
 /******************************************/
 
 }
 
 void loop(){
 
-
+  int i,j;
     coordinates_t position;
     int status;
   
@@ -89,28 +95,52 @@ void loop(){
    Promedio(Y, &promY, 15, H-1);
    getVelocity(X, &VelX, 10, 0.025);
    getVelocity(Y, &VelY, 10, 0.025);
-   if (VelX>1000) {VelX=1000;}; if (VelX<-1000) {VelX=-1000;}
-   if (VelY>1000) {VelY=1000;}; if (VelY<-1000) {VelY=-1000;}
+   if (VelX>2000) {VelX=2000;}; if (VelX<-2000) {VelX=-2000;}
+   if (VelY>2000) {VelY=2000;}; if (VelY<-2000) {VelY=-2000;}
 // mise en forme avant denvoyer via série
-    PosXs=(promX+1000)/24;
-    PosYs=promY/30;
-    VelXs=VelX/10+100;
-    VelYs=VelY/10+100;
-    
+    PosXs=(int16_t)(100.0*promX/24.0);
+    PosYs=(int16_t)(100.0*promY/30.0);
+    VelXs=(int16_t)(10.0*VelX);
+    VelYs=(int16_t)(10.0*VelY);
+    /*
 //     dt=millis()-last_millis;
 //    last_millis+=dt;
 //   Serial.print("dt: ");Serial.print(dt); Serial.print("  ");
 //    Serial.print("PosX: ");Serial.print(position.x); Serial.print("  ");
 //    Serial.print("PosY: ");Serial.println(position.y);  
+  Serial.print(position.x/24.0);Serial.print(" ");
+  Serial.print(PosXs/100.0);Serial.print(" ");
+  //Serial.print(PosYs/100.0);Serial.print(" ");
+  //Serial.print(1.5*400.0*VelXs_);Serial.print(" ");
+  //Serial.print(1.5*400.0*VelYs_);Serial.print(" ");
+  //Serial.print(VelXs);Serial.print(" ");
+  //Serial.print(VelYs);Serial.print(" ");
+
+   Serial.println(" ");
+  */
   
    Serial.write(137);
-   Serial.write(PosXs);
-   Serial.write(PosYs);
-   Serial.write(VelXs);
-   Serial.write(VelYs);
+    buffer_int16 = PosXs;
+    for(j=0;j<2;j++)
+    {
+      Serial.write(ptr_buffer_int16[j]);
+    }
+    buffer_int16 = PosYs;
+    for(j=0;j<2;j++)
+    {
+      Serial.write(ptr_buffer_int16[j]);
+    }
+    buffer_int16 = VelXs;
+    for(j=0;j<2;j++)
+    {
+      Serial.write(ptr_buffer_int16[j]);
+    }
+    buffer_int16 = VelYs;
+    for(j=0;j<2;j++)
+    {
+      Serial.write(ptr_buffer_int16[j]);
+    }
    Serial.write(173);
-  
-
 }
 
 /*************************************************/
@@ -199,16 +229,16 @@ void printCalibrationResult(){
   coordinates_t anchor_coor;
   for(int i = 0; i < list_size; i++)
   {
-    Serial.print("ANCHOR,");
+    /*Serial.print("ANCHOR,");
     Serial.print("0x");
     Serial.print(device_ids[i], HEX);
-    Serial.print(",");
+    Serial.print(",");*/
     Pozyx.getDeviceCoordinates(device_ids[i], &anchor_coor, remote_id);
-    Serial.print(anchor_coor.x);
+    /*Serial.print(anchor_coor.x);
     Serial.print(",");
     Serial.print(anchor_coor.y);
     Serial.print(",");
-    Serial.println(anchor_coor.z);
+    Serial.println(anchor_coor.z);*/
   }
 }
 
@@ -222,5 +252,10 @@ void setAnchorsManual(){
     anchor.pos.y = anchors_y[i];
     anchor.pos.z = heights[i];
     Pozyx.addDevice(anchor, remote_id);
+    if (num_anchors > 4)
+    {
+      Pozyx.setSelectionOfAnchors(POZYX_ANCHOR_SEL_AUTO, num_anchors);
+    }
  }
+ 
 }

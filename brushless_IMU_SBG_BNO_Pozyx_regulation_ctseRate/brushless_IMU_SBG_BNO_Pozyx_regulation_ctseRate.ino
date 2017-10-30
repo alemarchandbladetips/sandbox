@@ -9,7 +9,7 @@
 #include <Adafruit_BNO055.h>
 #include "math.h"
 
-#define IUM_PACKET_SIZE 20 // number of bytes to be recieved from IMU not counting starting char + gyr 3*2 + quat 4*2 + accuracy 1 + stop char 1
+#define IUM_PACKET_SIZE 25 // number of bytes to be recieved from IMU not counting starting char + gyr 3*2 + quat 4*2 + accuracy 1 + stop char 1
 #define PACKET_START 0xAA // starting char of package
 #define PACKET_STOP 0x55 // starting char of package
 
@@ -73,7 +73,7 @@ uint8_t interupt_happened; // interuption flag
 
 // variables for the serial read an data recomposition
 float ypr_data[3];
-uint8_t pozyx_data[4] = {0,0,0,0};
+uint8_t pozyx_data[8] = {0,0,0,0,0,0,0,0};
 uint8_t pozyx_data_buffer[6] = {0,0,0,0,0,0};
 uint8_t raw_data[48];
 float buffer_float;
@@ -99,6 +99,7 @@ const float BNO_corrective_gain = 0.95087; // MESURÉ SUR le petit proto
 uint8_t sanity_flag;
 
 long t0,t1,t2,t3,t4,t5,t6,t_;
+uint8_t time_;
 
 //const int pwmSin[] = {127, 138, 149, 160, 170, 181, 191, 200, 209, 217, 224, 231, 237, 242, 246, 250, 252, 254, 254, 254, 252, 250, 246, 242, 237, 231, 224, 217, 209, 200, 191, 181, 170, 160, 149, 138, 127, 116, 105, 94, 84, 73, 64, 54, 45, 37, 30, 23, 17, 12, 8, 4, 2, 0, 0, 0, 2, 4, 8, 12, 17, 23, 30, 37, 45, 54, 64, 73, 84, 94, 105, 116 };
 const int pwmSin[] = {128, 132, 136, 140, 143, 147, 151, 155, 159, 162, 166, 170, 174, 178, 181, 185, 189, 192, 196, 200, 203, 207, 211, 214, 218, 221, 225, 228, 232, 235, 238, 239, 240, 241, 242, 243, 244, 245, 246, 247, 248, 248, 249, 250, 250, 251, 252, 252, 253, 253, 253, 254, 254, 254, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 254, 254, 254, 253, 253, 253, 252, 252, 251, 250, 250, 249, 248, 248, 247, 246, 245, 244, 243, 242, 241, 240, 239, 238, 239, 240, 241, 242, 243, 244, 245, 246, 247, 248, 248, 249, 250, 250, 251, 252, 252, 253, 253, 253, 254, 254, 254, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 254, 254, 254, 253, 253, 253, 252, 252, 251, 250, 250, 249, 248, 248, 247, 246, 245, 244, 243, 242, 241, 240, 239, 238, 235, 232, 228, 225, 221, 218, 214, 211, 207, 203, 200, 196, 192, 189, 185, 181, 178, 174, 170, 166, 162, 159, 155, 151, 147, 143, 140, 136, 132, 128, 124, 120, 116, 113, 109, 105, 101, 97, 94, 90, 86, 82, 78, 75, 71, 67, 64, 60, 56, 53, 49, 45, 42, 38, 35, 31, 28, 24, 21, 18, 17, 16, 15, 14, 13, 12, 11, 10, 9, 8, 8, 7, 6, 6, 5, 4, 4, 3, 3, 3, 2, 2, 2, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 2, 2, 2, 3, 3, 3, 4, 4, 5, 6, 6, 7, 8, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 17, 16, 15, 14, 13, 12, 11, 10, 9, 8, 8, 7, 6, 6, 5, 4, 4, 3, 3, 3, 2, 2, 2, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 2, 2, 2, 3, 3, 3, 4, 4, 5, 6, 6, 7, 8, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 21, 24, 28, 31, 35, 38, 42, 45, 49, 53, 56, 60, 64, 67, 71, 75, 78, 82, 86, 90, 94, 97, 101, 105, 109, 113, 116, 120, 124};
@@ -300,6 +301,7 @@ int i,j,x,n, nSerial;
     //Serial.println(x);
     if(x == PACKET_START) // check that first data correspond to start char
     {
+      time_counter = 0;
       Serial.readBytes(raw_data,IUM_PACKET_SIZE); // Reading the IMU packet
       setMotorAngle(current_angle_rd); 
       
@@ -354,10 +356,12 @@ int i,j,x,n, nSerial;
         accuracy_flags = raw_data[14];
 
         /// Pozyx DATA
-        for (i = 0; i < 4; i++)
+        for (i = 0; i < 8; i++)
         {
           pozyx_data[i] = raw_data[i + 15];
         }
+
+        time_ = raw_data[23];
 
         // transformation of quaternion in rpy angles
         quat2rpy_ellipse_east(quaternion,rpy);
@@ -471,12 +475,12 @@ int i,j,x,n, nSerial;
         }
 
         // transmition of GPS position data
-        for (i = 0; i < 4; i++)
+        for (i = 0; i < 8; i++)
         {
           if (transmit_raw) { Serial.write(pozyx_data[i]); }
         }
 
-        if(transmit_raw){ Serial.write(sanity_flag); }
+        if(transmit_raw){ Serial.write(time_+time_counter); }
         
         if(transmit_raw){ Serial.write(PACKET_STOP); } // ending byte
 

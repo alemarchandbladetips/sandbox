@@ -1,5 +1,5 @@
 
-#define GIMBAL_PACKET_SIZE 19 // number of bytes to be recieved from 
+#define GIMBAL_PACKET_SIZE 23 // number of bytes to be recieved from 
 #define PACKET_START 0xAA // starting char of package
 #define PACKET_STOP 0x55 // starting char of package
 
@@ -44,7 +44,7 @@ int i,j,x;
     //Serial.print(x); Serial.print(" ");
     if(x == PACKET_START) // check that first data correspond to start char
     {
-      //Serial.print((int32_t)(micros()-t0));Serial.write(9);
+      Serial.print((int32_t)(micros()-t0));Serial.write(9);
       t0 = micros();
       Serial.readBytes(raw_data,GIMBAL_PACKET_SIZE-1); // Reading the IMU packet
       //Serial.print(raw_data[GIMBAL_PACKET_SIZE-1]);
@@ -59,21 +59,21 @@ int i,j,x;
           if(i<3)
           { // roll, pitch, tips0 angle
             rpy[i] = (float)buffer_int16*180.0/32768.0;
-            if(print_data){ Serial.print(rpy[i]); Serial.print(" "); }
+            //if(print_data){ Serial.print(rpy[i]); Serial.print(" "); }
           } else
           { // derivatives of roll, pitch, tips0 angle
             rpy_p[i-3] = (float)buffer_int16*2000.0/32768.0;
-            if(print_data){ Serial.print(rpy_p[i-3]); Serial.print(" "); }
+            //if(print_data){ Serial.print(rpy_p[i-3]); Serial.print(" "); }
           }
         }
          /// GPS DATA
-        for (i = 0; i < 4; i++)
+        for (i = 0; i < 8; i++)
         {
           pozyx_data[i] = raw_data[i+12];
-          if(print_data){ Serial.print(pozyx_data[i]); Serial.print(" "); }
+          //if(print_data){ Serial.print(pozyx_data[i]); Serial.print(" "); }
         }
         
-        sanity_flag = raw_data[16];
+        sanity_flag = raw_data[20];
         if(print_data){ Serial.print(sanity_flag); Serial.print(" "); }
         
         if(print_data){ Serial.println(" "); }

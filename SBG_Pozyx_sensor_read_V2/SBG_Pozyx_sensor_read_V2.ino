@@ -1,6 +1,6 @@
 #include <NeoSWSerial.h>
 
-#define POZYX_PACKET_SIZE 5 // number of bytes to be recieved from 
+#define POZYX_PACKET_SIZE 9 // number of bytes to be recieved from 
 #define POZYX_PACKET_START 137 // starting char of package
 #define POZYX_PACKET_STOP 173 // starting char of package
 
@@ -35,7 +35,7 @@ uint8_t pozyx_correction_flag = 0;
 //int32_t NED_coordinates[3];
 //int16_t NED_coordinates_accuracy[3];
 //int16_t NED_speed[3];
-int8_t pozyx_data[4];
+int8_t pozyx_data[8];
 
 /////////// buffers and ptr for data decoding ///////
 float buffer_float, quaternion[4], omega[3], acc[3], proper_acc[3];
@@ -64,7 +64,7 @@ int red_led_blink_counter = 0;
 int red_led_blink_status = 0;
 
 /////////// timing /////////////
-uint32_t time1, time2, time3, time4, dt_tmp;
+uint32_t time1, time2, time3, time4, dt_tmp, time5, time6;
 
 /////////// Kalman filter //////////
 float est_speed_cmps[3] = {0,0,0};            // estimation state speed
@@ -128,7 +128,7 @@ void loop() {
       if(raw_data[POZYX_PACKET_SIZE-1] == POZYX_PACKET_STOP) // check taht the last data correspond to the packet end char
       {
         pozyx_correction_flag = 1;
-        for(i=0;i<4;i++) // decode YPR data
+        for(i=0;i<8;i++) // decode YPR data
         {
           pozyx_data[i] = raw_data[i];
           //if(print_data){ Serial.print(raw_data[i]); Serial.print(" "); }
@@ -145,7 +145,7 @@ void loop() {
 
   if (Serial.available() > PACKET_SIZE_IMU + 8 - 1)
   { // data available
-
+    time5 = millis();
     start_char = Serial.read();
     //Serial.print(start_char); Serial.print(" ");
     if (start_char == PACKET_START_IMU) // first character is OK, we can start reading the rest of package
@@ -369,10 +369,13 @@ void loop() {
           if (transmit_raw) { Serial.write(device_status); }
 
           // transmition of Pozyx position data
-          for (i = 0; i < 4; i++)
+          for (i = 0; i < 8; i++)
           {
               if (transmit_raw) { Serial.write(pozyx_data[i]); }
           }
+
+          if (transmit_raw) { Serial.write((uint8_t)(millis()-time5)); }
+          //Serial.println((uint8_t)(millis()-time5)); 
 
           // footer of the package
           if (transmit_raw) { Serial.write(0x55); }

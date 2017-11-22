@@ -91,10 +91,10 @@ void loop(){
          }
 
    Historique(position, X, Y);
-   Promedio(X, &promX, 15, H-1);
-   Promedio(Y, &promY, 15, H-1);
-   getVelocity(X, &VelX, 10, 0.025);
-   getVelocity(Y, &VelY, 10, 0.025);
+   Promedio(X, &promX, 1, H-1);
+   Promedio(Y, &promY, 1, H-1);
+   getVelocity(X, &VelX, 1, 0.025);
+   getVelocity(Y, &VelY, 1, 0.025);
    if (VelX>2000) {VelX=2000;}; if (VelX<-2000) {VelX=-2000;}
    if (VelY>2000) {VelY=2000;}; if (VelY<-2000) {VelY=-2000;}
 // mise en forme avant denvoyer via série

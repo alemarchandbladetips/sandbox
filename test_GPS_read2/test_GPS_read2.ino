@@ -5,9 +5,9 @@
 #define PACKET_SIZE 26 // size to be recieved
 
 // constant used to enable/disable communication, debug, timing checks
-const int8_t transmit_raw = 1;
-const int8_t print_data = 0;
-const int8_t print_timing = 1;
+const int8_t transmit_raw = 0;
+const int8_t print_data = 1;
+const int8_t print_timing = 0;
 
 uint8_t gps_buffer[26];
 int16_t buffer_int16;
@@ -27,6 +27,7 @@ void setup() {
   // put your setup code here, to run once:
   mySerial.begin(38400);
   Serial.begin(115200);
+  Serial.print("Start");
 
 }
 

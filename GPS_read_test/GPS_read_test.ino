@@ -176,7 +176,7 @@ void loop() {
           ptr_int32_buffer[j] = gps_msg_pos[4*i+j+10];
         }
         NED_coordinates[i] = ((float)(int32_buffer)+((float)gps_msg_pos[i+22]*0.01));
-        //Serial.print(NED_coordinates[i]);Serial.print(" ");
+        Serial.print(NED_coordinates[i]);Serial.print(" ");
       }
       //Serial.println(Serial.available());
       for(i=0;i<3;i++)
@@ -186,13 +186,13 @@ void loop() {
           ptr_uint32_buffer[j] = gps_msg_pos[4*i+j+26];
         }
         NED_coordinates_accuracy[i] = (float)(uint32_buffer)*0.01;
-        //Serial.print(NED_coordinates_accuracy[i]);Serial.print(" ");
+        Serial.print(NED_coordinates_accuracy[i]);Serial.print(" ");
       }
 
-      if(print_data){ Serial.print(carrSoln); Serial.print(" ");}
-      if(print_data){ Serial.print(carrSoln_prev); Serial.print(" ");}
-      if(print_data){ Serial.print(NED_coordinates_prev[0]); Serial.print(" ");}
-      if(print_data){ Serial.print(NED_coordinates[0]); Serial.print(" ");}
+      //if(print_data){ Serial.print(carrSoln); Serial.print(" ");}
+      //if(print_data){ Serial.print(carrSoln_prev); Serial.print(" ");}
+      //if(print_data){ Serial.print(NED_coordinates_prev[0]); Serial.print(" ");}
+      //if(print_data){ Serial.print(NED_coordinates[0]); Serial.print(" ");}
       
 
       if(((carrSoln==1) && (carrSoln_prev==2)) || ((carrSoln==2) && (carrSoln_prev==1)))
@@ -220,7 +220,7 @@ void loop() {
         ptr_int32_buffer[j] = gps_msg_speed[4*i+j+6];
       }
       NED_speed[i] = ((float)(int32_buffer));
-      //Serial.print(NED_speed[i]);Serial.print(" ");
+      Serial.print(NED_speed[i]);Serial.print(" ");
       }
       
       //Serial.println(Serial.available());

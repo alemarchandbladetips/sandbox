@@ -58,6 +58,7 @@ int greenLedPin = 12;
 int redLedPin = 5;
 int greenLedPin = 6;
 int gndLedPin = 7;
+int signalLedPin = 13;
 
 int red_led_blink = 0;
 int red_led_blink_counter = 0;
@@ -96,7 +97,9 @@ void setup() {
     pinMode(gndLedPin,OUTPUT);
     digitalWrite(gndLedPin, LOW);
   }
-  
+
+  pinMode(signalLedPin,OUTPUT);
+  digitalWrite(signalLedPin, LOW);
   pinMode(redLedPin, OUTPUT);
   digitalWrite(redLedPin, LOW);
   pinMode(greenLedPin, OUTPUT);
@@ -133,7 +136,7 @@ void loop() {
           pozyx_data[i] = raw_data[i];
           //if(print_data){ Serial.print(raw_data[i]); Serial.print(" "); }
         }
-        Serial.println(dbg);
+        //Serial.println(dbg);
         dbg = 0;
         //Serial.println(" ");
       }
@@ -154,6 +157,7 @@ void loop() {
       dt_tmp = (time2 - time1);
       dt = (float)dt_tmp/1000000.0;
       time1 = time2;
+      //Serial.println(dt_tmp);
       
       //if(print_data){ Serial.println(" "); Serial.print(dt*1000000-10000); Serial.println(" "); }
       
@@ -176,6 +180,7 @@ void loop() {
         if (footer[2] == PACKET_STOP_IMU && checkSum == checkSumCalc) // && raw_data[52] == 0xFF && (raw_data[53] & 0x01) == 0x01)
         { // The end char is OK and the computed checksum correspond to the one in the footer.
           //analogWrite(redLedPin, 0);
+          digitalWrite(signalLedPin, HIGH);
           data_availability = 1;
           dbg++;
 
@@ -379,6 +384,8 @@ void loop() {
 
           // footer of the package
           if (transmit_raw) { Serial.write(0x55); }
+
+          digitalWrite(signalLedPin, LOW);
 
           //if (print_data) { Serial.println(" "); }
 /////////////////////////////////////////////////////////

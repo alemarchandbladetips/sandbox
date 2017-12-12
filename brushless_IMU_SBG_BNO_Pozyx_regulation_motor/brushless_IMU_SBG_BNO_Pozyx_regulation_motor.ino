@@ -1,15 +1,6 @@
-// Control of a brushless motor ensuring the yaw of IMU BNO055 sticks to 0, using interuption at constant rate
-
-// It transmits data via Tx in the following form:
-// 0xAA, Yaw (Float, 4bytes), Pitch (Float, 4bytes), Roll (Float, 4bytes), 
-// Omegax (Float, 4bytes), Omegay (Float, 4bytes), Omegaz (Float, 4bytes), 0x55
-// = 26 bytes
-
-#include <Adafruit_Sensor.h>
-#include <Adafruit_BNO055.h>
 #include "math.h"
 
-#define IUM_PACKET_SIZE 25 // number of bytes to be recieved from IMU not counting starting char + gyr 3*2 + quat 4*2 + accuracy 1 + stop char 1
+#define GIMBAL_PACKET_SIZE 23 // number of bytes to be recieved from 
 #define PACKET_START 0xAA // starting char of package
 #define PACKET_STOP 0x55 // starting char of package
 
@@ -32,92 +23,38 @@ const uint8_t nb_pole = 22;
 float slice_angle_rd, angle_scale_factor;
 int16_t normalized_angle;
 float sin_amplitude = 0.3;
+const float reg_freq = 1000; // regulation frequency
 
 // Commande variable
 volatile float angle_step_rd, current_angle_rd_prev, current_angle_rd = 0;
 float motor_speed_rps = 0; // desired speed of the motor, rps
-float u=0;            // Command, tr/s
-float u_integral = 0; // integral part of the command, tr/s
-float u_proportionel = 0; // proportional part of the command, tr/s
-float speed_step;
-float angle_error_deg;
 uint8_t sinAngleA, sinAngleB, sinAngleC; // the 3 sinusoide values for the PWMs
-const float yaw_ref = 90;//180;
-const float Ki = 0.03;//0.1; // integral gain
-const float Kp = 0.02; // proportional gain
-const float IMU_freq = 100; // IMU frequency
-const float reg_freq = 1000; // regulation frequency
-float nominal_speed_rps = 0;
 
 // Pin definition for connection to ESC
-const int EN1 = 12;   // pin enable bls
-const int IN1 = 9;    //pins des pwm
-const int IN2 = 10;   //pins des pwm
-const int IN3 = 6;   //pins des pwm
-
-// yellow led
-const int ledy_pin = 13;
-int ledy_status = 0;
-int ledy_counter = 0;
-int ledy_half_period = 50;
-
-// red led
-const int ledr_pin = 11;
-int ledr_status = 0;
-int ledr_counter = 0;
-int ledr_half_period = 50;
+const int EN1 = 4;   // pin enable bls
+const int IN1 = 10;    //pins des pwm
+const int IN2 = 6;   //pins des pwm
+const int IN3 = 9;   //pins des pwm
 
 // interuptions gestion
 uint32_t time_counter, time_counter3, time_counter2=0; // counting the number of interuptions
 uint8_t interupt_happened; // interuption flag
 
-// variables for the serial read an data recomposition
-float ypr_data[3];
-uint8_t pozyx_data[8] = {0,0,0,0,0,0,0,0};
-uint8_t pozyx_data_buffer[6] = {0,0,0,0,0,0};
-uint8_t raw_data[48];
-float buffer_float;
-unsigned char *ptr_buffer = (unsigned char *)&buffer_float;
-uint32_t buffer_uint32;
-unsigned char *ptr_buffer_uint32 = (unsigned char *)&buffer_uint32;
+uint8_t raw_data[100];
 int16_t buffer_int16;
 unsigned char *ptr_buffer_int16 = (unsigned char *)&buffer_int16;
-int32_t buffer_int32;
-unsigned char *ptr_buffer_int32 = (unsigned char *)&buffer_int32;
-
-// for BNO
-Adafruit_BNO055 bno = Adafruit_BNO055();
-uint8_t sys, gyr, accel, mag = 0;
-float omega[3], quaternion[4], rpy[3], proper_acc[3];
-float motor_angle_offset = 0;
-uint32_t accuracy_flags;
-uint8_t imu_init = 0;
-float alpha_omega = 0.33;
-//const float BNO_corrective_gain = 0.95491; // MESURÉ SUR LA PYRAMIDE
-const float BNO_corrective_gain = 0.95087; // MESURÉ SUR le petit proto
-
-uint8_t sanity_flag;
 
 long t0,t1,t2,t3,t4,t5,t6,t_;
 uint8_t time_;
 
-//const int pwmSin[] = {127, 138, 149, 160, 170, 181, 191, 200, 209, 217, 224, 231, 237, 242, 246, 250, 252, 254, 254, 254, 252, 250, 246, 242, 237, 231, 224, 217, 209, 200, 191, 181, 170, 160, 149, 138, 127, 116, 105, 94, 84, 73, 64, 54, 45, 37, 30, 23, 17, 12, 8, 4, 2, 0, 0, 0, 2, 4, 8, 12, 17, 23, 30, 37, 45, 54, 64, 73, 84, 94, 105, 116 };
-const int pwmSin[] = {128, 132, 136, 140, 143, 147, 151, 155, 159, 162, 166, 170, 174, 178, 181, 185, 189, 192, 196, 200, 203, 207, 211, 214, 218, 221, 225, 228, 232, 235, 238, 239, 240, 241, 242, 243, 244, 245, 246, 247, 248, 248, 249, 250, 250, 251, 252, 252, 253, 253, 253, 254, 254, 254, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 254, 254, 254, 253, 253, 253, 252, 252, 251, 250, 250, 249, 248, 248, 247, 246, 245, 244, 243, 242, 241, 240, 239, 238, 239, 240, 241, 242, 243, 244, 245, 246, 247, 248, 248, 249, 250, 250, 251, 252, 252, 253, 253, 253, 254, 254, 254, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 254, 254, 254, 253, 253, 253, 252, 252, 251, 250, 250, 249, 248, 248, 247, 246, 245, 244, 243, 242, 241, 240, 239, 238, 235, 232, 228, 225, 221, 218, 214, 211, 207, 203, 200, 196, 192, 189, 185, 181, 178, 174, 170, 166, 162, 159, 155, 151, 147, 143, 140, 136, 132, 128, 124, 120, 116, 113, 109, 105, 101, 97, 94, 90, 86, 82, 78, 75, 71, 67, 64, 60, 56, 53, 49, 45, 42, 38, 35, 31, 28, 24, 21, 18, 17, 16, 15, 14, 13, 12, 11, 10, 9, 8, 8, 7, 6, 6, 5, 4, 4, 3, 3, 3, 2, 2, 2, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 2, 2, 2, 3, 3, 3, 4, 4, 5, 6, 6, 7, 8, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 17, 16, 15, 14, 13, 12, 11, 10, 9, 8, 8, 7, 6, 6, 5, 4, 4, 3, 3, 3, 2, 2, 2, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 2, 2, 2, 3, 3, 3, 4, 4, 5, 6, 6, 7, 8, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 21, 24, 28, 31, 35, 38, 42, 45, 49, 53, 56, 60, 64, 67, 71, 75, 78, 82, 86, 90, 94, 97, 101, 105, 109, 113, 116, 120, 124};
-int sineArraySize;
-
-//debug
-int dbg_n = 0;
-float u_dbg[3];
+const uint8_t pwmSin[] = {128, 132, 136, 140, 143, 147, 151, 155, 159, 162, 166, 170, 174, 178, 181, 185, 189, 192, 196, 200, 203, 207, 211, 214, 218, 221, 225, 228, 232, 235, 238, 239, 240, 241, 242, 243, 244, 245, 246, 247, 248, 248, 249, 250, 250, 251, 252, 252, 253, 253, 253, 254, 254, 254, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 254, 254, 254, 253, 253, 253, 252, 252, 251, 250, 250, 249, 248, 248, 247, 246, 245, 244, 243, 242, 241, 240, 239, 238, 239, 240, 241, 242, 243, 244, 245, 246, 247, 248, 248, 249, 250, 250, 251, 252, 252, 253, 253, 253, 254, 254, 254, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 254, 254, 254, 253, 253, 253, 252, 252, 251, 250, 250, 249, 248, 248, 247, 246, 245, 244, 243, 242, 241, 240, 239, 238, 235, 232, 228, 225, 221, 218, 214, 211, 207, 203, 200, 196, 192, 189, 185, 181, 178, 174, 170, 166, 162, 159, 155, 151, 147, 143, 140, 136, 132, 128, 124, 120, 116, 113, 109, 105, 101, 97, 94, 90, 86, 82, 78, 75, 71, 67, 64, 60, 56, 53, 49, 45, 42, 38, 35, 31, 28, 24, 21, 18, 17, 16, 15, 14, 13, 12, 11, 10, 9, 8, 8, 7, 6, 6, 5, 4, 4, 3, 3, 3, 2, 2, 2, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 2, 2, 2, 3, 3, 3, 4, 4, 5, 6, 6, 7, 8, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 17, 16, 15, 14, 13, 12, 11, 10, 9, 8, 8, 7, 6, 6, 5, 4, 4, 3, 3, 3, 2, 2, 2, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 2, 2, 2, 3, 3, 3, 4, 4, 5, 6, 6, 7, 8, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 21, 24, 28, 31, 35, 38, 42, 45, 49, 53, 56, 60, 64, 67, 71, 75, 78, 82, 86, 90, 94, 97, 101, 105, 109, 113, 116, 120, 124};
+//const uint8_t pwmSin[] = {127, 127, 127, 128, 128, 128, 130, 130, 130, 132, 132, 132, 133, 133, 133, 135, 135, 135, 137, 137, 137, 139, 139, 139, 140, 140, 140, 142, 142, 142, 144, 144, 144, 146, 146, 146, 147, 147, 147, 149, 149, 149, 151, 151, 151, 152, 152, 152, 154, 154, 154, 156, 156, 156, 157, 157, 157, 159, 159, 159, 161, 161, 161, 162, 162, 162, 164, 164, 164, 166, 166, 166, 167, 167, 167, 169, 169, 169, 170, 170, 170, 172, 172, 172, 173, 173, 173, 175, 175, 175, 177, 177, 177, 178, 178, 178, 179, 179, 179, 181, 181, 181, 182, 182, 182, 184, 184, 184, 185, 185, 185, 187, 187, 187, 188, 188, 188, 189, 189, 189, 191, 191, 191, 192, 192, 192, 193, 193, 193, 195, 195, 195, 196, 196, 196, 197, 197, 197, 198, 198, 198, 200, 200, 200, 201, 201, 201, 202, 202, 202, 203, 203, 203, 204, 204, 204, 205, 205, 205, 206, 206, 206, 207, 207, 207, 208, 208, 208, 209, 209, 209, 210, 210, 210, 211, 211, 211, 212, 212, 212, 213, 213, 213, 214, 214, 214, 215, 215, 215, 216, 216, 216, 216, 216, 216, 217, 217, 217, 218, 218, 218, 219, 219, 219, 219, 219, 219, 220, 220, 220, 220, 220, 220, 221, 221, 221, 222, 222, 222, 222, 222, 222, 223, 223, 223, 223, 223, 223, 224, 224, 224, 224, 224, 224, 224, 224, 224, 225, 225, 225, 225, 225, 225, 225, 225, 225, 226, 226, 226, 226, 226, 226, 226, 226, 226, 226, 226, 226, 226, 226, 226, 226, 226, 226, 226, 226, 226, 226, 226, 226, 227, 227, 227, 226, 226, 226, 226, 226, 226, 226, 226, 226, 226, 226, 226, 226, 226, 226, 226, 226, 226, 226, 226, 226, 226, 226, 226, 225, 225, 225, 225, 225, 225, 225, 225, 225, 224, 224, 224, 224, 224, 224, 224, 224, 224, 223, 223, 223, 223, 223, 223, 222, 222, 222, 222, 222, 222, 221, 221, 221, 220, 220, 220, 220, 220, 220, 219, 219, 219, 219, 219, 219, 218, 218, 218, 217, 217, 217, 216, 216, 216, 216, 216, 216, 215, 215, 215, 214, 214, 214, 213, 213, 213, 212, 212, 212, 211, 211, 211, 210, 210, 210, 209, 209, 209, 208, 208, 208, 207, 207, 207, 206, 206, 206, 205, 205, 205, 204, 204, 204, 203, 203, 203, 202, 202, 202, 201, 201, 201, 200, 200, 200, 198, 198, 198, 197, 197, 197, 196, 196, 196, 195, 195, 195, 193, 193, 193, 192, 192, 192, 191, 191, 191, 189, 189, 189, 188, 188, 188, 187, 187, 187, 185, 185, 185, 184, 184, 184, 182, 182, 182, 181, 181, 181, 179, 179, 179, 178, 178, 178, 176, 176, 176, 175, 175, 175, 173, 173, 173, 172, 172, 172, 170, 170, 170, 169, 169, 169, 167, 167, 167, 166, 166, 166, 164, 164, 164, 162, 162, 162, 161, 161, 161, 159, 159, 159, 157, 157, 157, 156, 156, 156, 154, 154, 154, 152, 152, 152, 151, 151, 151, 149, 149, 149, 147, 147, 147, 146, 146, 146, 144, 144, 144, 142, 142, 142, 140, 140, 140, 139, 139, 139, 137, 137, 137, 135, 135, 135, 133, 133, 133, 132, 132, 132, 130, 130, 130, 128, 128, 128, 126, 126, 126, 125, 125, 125, 123, 123, 123, 121, 121, 121, 120, 120, 120, 118, 118, 118, 116, 116, 116, 114, 114, 114, 113, 113, 113, 111, 111, 111, 109, 109, 109, 107, 107, 107, 106, 106, 106, 104, 104, 104, 102, 102, 102, 101, 101, 101, 99, 99, 99, 97, 97, 97, 96, 96, 96, 94, 94, 94, 92, 92, 92, 91, 91, 91, 89, 89, 89, 87, 87, 87, 86, 86, 86, 84, 84, 84, 83, 83, 83, 81, 81, 81, 80, 80, 80, 78, 78, 78, 76, 76, 76, 75, 75, 75, 74, 74, 74, 72, 72, 72, 71, 71, 71, 69, 69, 69, 68, 68, 68, 66, 66, 66, 65, 65, 65, 64, 64, 64, 62, 62, 62, 61, 61, 61, 60, 60, 60, 58, 58, 58, 57, 57, 57, 56, 56, 56, 55, 55, 55, 53, 53, 53, 52, 52, 52, 51, 51, 51, 50, 50, 50, 49, 49, 49, 48, 48, 48, 47, 47, 47, 46, 46, 46, 45, 45, 45, 44, 44, 44, 43, 43, 43, 42, 42, 42, 41, 41, 41, 40, 40, 40, 39, 39, 39, 38, 38, 38, 37, 37, 37, 37, 37, 37, 36, 36, 36, 35, 35, 35, 34, 34, 34, 34, 34, 34, 33, 33, 33, 33, 33, 33, 32, 32, 32, 31, 31, 31, 31, 31, 31, 30, 30, 30, 30, 30, 30, 29, 29, 29, 29, 29, 29, 29, 29, 29, 28, 28, 28, 28, 28, 28, 28, 28, 28, 27, 27, 27, 27, 27, 27, 27, 27, 27, 27, 27, 27, 27, 27, 27, 27, 27, 27, 27, 27, 27, 27, 27, 27, 27, 27, 27, 27, 27, 27, 27, 27, 27, 27, 27, 27, 27, 27, 27, 27, 27, 27, 27, 27, 27, 27, 27, 27, 27, 27, 27, 28, 28, 28, 28, 28, 28, 28, 28, 28, 29, 29, 29, 29, 29, 29, 29, 29, 29, 30, 30, 30, 30, 30, 30, 31, 31, 31, 31, 31, 31, 32, 32, 32, 33, 33, 33, 33, 33, 33, 34, 34, 34, 34, 34, 34, 35, 35, 35, 36, 36, 36, 37, 37, 37, 37, 37, 37, 38, 38, 38, 39, 39, 39, 40, 40, 40, 41, 41, 41, 42, 42, 42, 43, 43, 43, 44, 44, 44, 45, 45, 45, 46, 46, 46, 47, 47, 47, 48, 48, 48, 49, 49, 49, 50, 50, 50, 51, 51, 51, 52, 52, 52, 53, 53, 53, 55, 55, 55, 56, 56, 56, 57, 57, 57, 58, 58, 58, 60, 60, 60, 61, 61, 61, 62, 62, 62, 64, 64, 64, 65, 65, 65, 66, 66, 66, 68, 68, 68, 69, 69, 69, 71, 71, 71, 72, 72, 72, 74, 74, 74, 75, 75, 75, 77, 77, 77, 78, 78, 78, 80, 80, 80, 81, 81, 81, 83, 83, 83, 84, 84, 84, 86, 86, 86, 87, 87, 87, 89, 89, 89, 91, 91, 91, 92, 92, 92, 94, 94, 94, 96, 96, 96, 97, 97, 97, 99, 99, 99, 101, 101, 101, 102, 102, 102, 104, 104, 104, 106, 106, 106, 107, 107, 107, 109, 109, 109, 111, 111, 111, 113, 113, 113, 114, 114, 114, 116, 116, 116, 118, 118, 118, 120, 120, 120, 121, 121, 121, 123, 123, 123, 125, 125, 125};
+int16_t sineArraySize;
  
 void setup() {
+  Serial1.begin(115200);
   Serial.begin(115200);
 
-  if(!bno.begin(Adafruit_BNO055::OPERATION_MODE_NDOF))
-  {
-    // There was a problem detecting the BNO055 ... check your connections 
-    Serial.print("Ooops, no BNO055 detected ... Check your wiring or I2C ADDR!");
-    //while(1);
-  }
 // augmentation fréquence PWM
 
   setPwmFrequency(IN1); 
@@ -128,23 +65,13 @@ void setup() {
   pinMode(IN1, OUTPUT); 
   pinMode(IN2, OUTPUT); 
   pinMode(IN3, OUTPUT);
+  pinMode(10, OUTPUT);
 
-  // yellow led
-  pinMode(ledy_pin, OUTPUT); 
-  digitalWrite(ledy_pin, HIGH);
-  ledy_status = 1;
-
-  // red led
-  pinMode(ledr_pin, OUTPUT); 
-  digitalWrite(ledr_pin, LOW);
-  ledr_status = 1;
-  
 // pin Enable
   pinMode(EN1, OUTPUT); 
   digitalWrite(EN1, HIGH);
-  
 
-  sineArraySize = sizeof(pwmSin)/sizeof(int); 
+  sineArraySize = sizeof(pwmSin)/sizeof(uint8_t); 
   Serial.println(" ");
   Serial.println(sineArraySize);
 
@@ -153,25 +80,20 @@ void setup() {
   angle_scale_factor = sineArraySize/slice_angle_rd;
   Serial.println(slice_angle_rd*360/two_pi);
   current_angle_rd_prev = 5000;
-  speed_step = 0.1;
-  u = 0;
 
-  
   cli(); // Désactive l'interruption globale
-  bitClear (TCCR2A, WGM20); // WGM20 = 0
-  bitClear (TCCR2A, WGM21); // WGM21 = 0 
-  TCCR2B = 0b00000101; // Clock / 128 soit 8 micro-s et WGM22 = 0
-  TIMSK2 = 0b00000001; // Interruption locale autorisée par TOIE2
+  bitClear (TCCR3A, WGM30); // WGM20 = 0
+  bitClear (TCCR3A, WGM31); // WGM21 = 0 
+  //TCCR3B = 0b00000001; // Clock / 128 soit 8 micro-s et WGM22 = 0
+  TIMSK3 = 0b00000001; // Interruption locale autorisée par TOIE3
   sei(); // Active l'interruption globale
 
-  while(gyr!=3)
-  {
-    bno.getCalibration(&sys, &gyr, &accel, &mag);
-  }
-  t0 = micros();
+  motor_speed_rps = 0;//two_pi;
+  sin_amplitude = constrain(0.4+0.1*abs(motor_speed_rps/two_pi),0,0.9); 
+  angle_step_rd = motor_speed_rps/reg_freq;
 
-  digitalWrite(ledy_pin, LOW);
-  ledy_status = 0;
+  interupt_happened = 0;
+  t0 = micros();
 }
 //////////////////////////////////////////////////////////////////////////////
 
@@ -185,9 +107,9 @@ void setMotorAngle(float angle_rd)
     normalized_angle = (int16_t)(fmod(angle_rd,slice_angle_rd)*angle_scale_factor);
   
     // Computes sin from the normalized angles
-    sinAngleA = (uint8_t)(pwmSin[normalized_angle]*sin_amplitude);
-    sinAngleB = (uint8_t)(pwmSin[(int16_t)fmod(normalized_angle+sineArraySize/3,sineArraySize)]*sin_amplitude);
-    sinAngleC = (uint8_t)(pwmSin[(int16_t)fmod(normalized_angle+2*sineArraySize/3,sineArraySize)]*sin_amplitude);
+    sinAngleA = (uint8_t)(pwmSin[normalized_angle]*sin_amplitude+20);
+    sinAngleB = (uint8_t)(pwmSin[(int16_t)fmod(normalized_angle+sineArraySize/3,sineArraySize)]*sin_amplitude+20);
+    sinAngleC = (uint8_t)(pwmSin[(int16_t)fmod(normalized_angle+2*sineArraySize/3,sineArraySize)]*sin_amplitude+20);
   
     // Applies sin on PWM outputs
     analogWrite(IN1, sinAngleA);
@@ -201,48 +123,13 @@ void setMotorAngle(float angle_rd)
 // Routine d'interruption
 // Just increment the desired angle
 
-ISR(TIMER2_OVF_vect) 
+ISR(TIMER3_OVF_vect) 
 {
-  TCNT2 = 256 - 125; // 125*8us = 1ms
+  TCNT3 = 65536 - 250; // 250*4us = 1ms
   // increment the desired angle from the increment computed from the command
   current_angle_rd = fmod((current_angle_rd + angle_step_rd)+two_pi,two_pi); 
-  time_counter2++;
   time_counter++;
-  time_counter3++;
-}
-//////////////////////////////////////////////////////////////////////
-
-// transformation from quaternion to Roll Pitch Yaw angles
-// input: q[4]: quaternion in flt
-// output: rpy[3]: Euler angles in flt (rd)
-// Measured execution time for a random quaternion : 500us to 750us
-
-void quat2rpy_ellipse_east(float q[4], float rpy[3]) // 
-{
-  rpy[0] = atan2(2*q[1]*q[3] + 2*q[2]*q[0], 1 - 2*q[1]*q[1] - 2*q[2]*q[2]);
-  rpy[1] = asin(2*q[2]*q[3] - 2*q[1]*q[0]);
-  rpy[2] = atan2(2*q[1]*q[2] + 2*q[3]*q[0], 1 - 2*q[1]*q[1] - 2*q[3]*q[3]);
-}
-
-void quat2rpy_ellipse(float q[4], float rpy[3]) // 
-{
-  rpy[0] = -atan2(2*q[2]*q[3] - 2*q[1]*q[0], 1 - 2*q[1]*q[1] - 2*q[2]*q[2]);
-  rpy[1] = asin(2*q[1]*q[3] + 2*q[2]*q[0]);
-  rpy[2] = -atan2(2*q[1]*q[2] - 2*q[3]*q[0], 1 - 2*q[2]*q[2] - 2*q[3]*q[3]);
-}
-
-//////////////////////////////////////////////////////////////////////
-
-// Projection of a vector using a quaternion
-// input: q[4]: quaternion in flt
-// input: v_in[3]: vector to be projected in the new base in flt
-// output: v_out[3]: v_in rotated thanks to quaternion input
-
-void vector_quat_proj(float q[4], float v_in[3], float v_out[3])
-{
-  v_out[0] = (1 - 2*q[2]*q[2] - 2*q[3]*q[3]) * v_in[0] + (2*q[1]*q[2] - 2*q[3]*q[0]) * v_in[1]     + (2*q[1]*q[3] + 2*q[2]*q[0]) * v_in[2];
-  v_out[1] = (2*q[1]*q[2] + 2*q[3]*q[0]) * v_in[0]     + (1 - 2*q[1]*q[1] - 2*q[3]*q[3]) * v_in[1] + (2*q[2]*q[3] - 2*q[1]*q[0]) * v_in[2];
-  v_out[2] = (2*q[1]*q[3] - 2*q[2]*q[0]) * v_in[0]     + (2*q[2]*q[3] + 2*q[1]*q[0]) * v_in[1]     + (1 - 2*q[1]*q[1] - 2*q[2]*q[2]) * v_in[2];
+  interupt_happened = 1;
 }
 
 //////////////////////////////////////////////////////////////////////
@@ -260,287 +147,69 @@ float mod180(float angle)
 
 
 void loop() {
-int i,j,x,n, nSerial;
+int i,j,x,n;
 
-// Applying the command if new
-  
-  setMotorAngle(current_angle_rd);               //  une fois par ms // Question : combien de temps elle prend ? 500us
-/*
-  if(time_counter>=20) // We don't recieve info from the IMU for more than 20ms, we will control the motor in open loop.
-  { // This is a security, should not happen in nominal operation mode.
-
-    time_counter = 0;
-    digitalWrite(ledy_pin, LOW);
-    digitalWrite(ledr_pin, HIGH);
-    ledr_counter = 0;
-    
-    // gyro data, only gyro data on z axis will be used
-    imu::Vector<3> gyro=bno.getVector(Adafruit_BNO055::VECTOR_GYROSCOPE);
-    nominal_speed_rps = BNO_corrective_gain*gyro.z();
-
-    u = nominal_speed_rps/two_pi; // adding current rotation speed to PI correction
-        
-    sin_amplitude = constrain(0.3+0.1*abs(u),0,1); // Modulation of amplitude vs rotation speed to work at quasi constant current
-
-    // Transformation from rotation speed to angle increment (incrementation is done in the interuption
-    motor_speed_rps = two_pi*u;//tps*two_pi;
-    angle_step_rd = motor_speed_rps/reg_freq;
-
+  if(interupt_happened)
+  {
+    t1 = micros();
+    /*Serial.print((t1-t0));Serial.write(9);
+    Serial.print(current_angle_rd);Serial.write(9);*/
+    Serial.print(normalized_angle);Serial.write(9);
+    Serial.print(sineArraySize);Serial.write(9);
+    Serial.print((int16_t)fmod(normalized_angle+sineArraySize/3,sineArraySize));Serial.write(9);
+    Serial.print((int16_t)fmod(normalized_angle+2*sineArraySize/3,sineArraySize));Serial.write(9);
+    Serial.println(" ");
+    t0 = t1;
+    interupt_happened = 0;
     setMotorAngle(current_angle_rd); 
   }
-*/
-  nSerial = Serial.available();
-  if ( nSerial > IUM_PACKET_SIZE) // Number of data corresponding to the IMU packet size is waiting in the biffer of serial
-  { 
-    //Serial.println(time_counter2);
-/////////////////////// Lecture des données du port série venant de l'arduino "du BNO du haut"
-    if(print_timing) { t0 = micros(); }
+  /*
+  analogWrite(IN1, 64);
+    analogWrite(IN2, 128);
+    analogWrite(IN3, 192);*/
 
-    t_ = t0;
+// Applying the command if new
+  //setMotorAngle(current_angle_rd);               //  une fois par ms // Question : combien de temps elle prend ? 500us
+  /*
+  if (Serial1.available() > GIMBAL_PACKET_SIZE-1) // Number of data corresponding to the IMU packet size is waiting in the biffer of serial
+  { 
     x = Serial.read(); // read first data
-    //Serial.println(x);
+    //Serial.print(x); Serial.print(" ");
     if(x == PACKET_START) // check that first data correspond to start char
     {
-      time_counter = 0;
-      Serial.readBytes(raw_data,IUM_PACKET_SIZE); // Reading the IMU packet
-      setMotorAngle(current_angle_rd); 
-      
-/////////////////////// Décodage des données et transformation du quaternion en RPY
-      
-      if(print_timing) { t1 = micros();}
-
-      if(raw_data[IUM_PACKET_SIZE-1] == PACKET_STOP) // check taht the last data correspond to the packet end char
+      Serial1.readBytes(raw_data,GIMBAL_PACKET_SIZE-1); // Reading the IMU packet
+      if(raw_data[GIMBAL_PACKET_SIZE-2] == PACKET_STOP) // check taht the last data correspond to the packet end char
       {
-        time_counter = 0;
-        // led blink to verify data reception
-        ledy_counter ++;
-        ledr_counter ++;
-        if(ledy_status == 1 && ledy_counter>=ledy_half_period)
+        for(j=0;j<2;j++) // filling the 4 bytes of the float with the data of serial port
         {
-          digitalWrite(ledy_pin, LOW);
-          ledy_status = 0;
-          ledy_counter = 0;
-        } else if(ledy_counter>=ledy_half_period)
-        {
-          digitalWrite(ledy_pin, HIGH);
-          ledy_status = 1;
-          ledy_counter = 0;
+          ptr_buffer_int16[j] = raw_data[10+j];
         }
-
-        // default led
-        if(ledr_counter > 100*30)
-        {
-          ledr_counter = 100*30;
-          digitalWrite(ledr_pin, LOW);
-        }
-
-        //// IMU datas
-        for(i=0;i<3;i++) // decode sensor data, gyr
-        {
-          for(j=0;j<2;j++) // filling the 4 bytes of the buffer using a pointer
-          {
-            ptr_buffer_int16[j] = raw_data[2*i+j];
-          }
-          omega[i] = buffer_int16*1000.0/32768.0;
-        }
-        
-        for(i=0;i<4;i++) // decode QUAT data
-        {
-          for(j=0;j<2;j++)  // filling the 4 bytes of the buffer using a pointer
-          {
-            ptr_buffer_int16[j] = raw_data[2*i+j+6];
-          }
-          quaternion[i] = buffer_int16/32768.0; 
-        }
-        
-        accuracy_flags = raw_data[14];
-
-        /// Pozyx DATA
-        for (i = 0; i < 8; i++)
-        {
-          pozyx_data[i] = raw_data[i + 15];
-        }
-
-        time_ = raw_data[23];
-
-        // transformation of quaternion in rpy angles
-        quat2rpy_ellipse_east(quaternion,rpy);
-
-        // mounting of Ellipse Z pointing up
-        rpy[0] += pi;
-
-        setMotorAngle(current_angle_rd); 
-        
-        
-///////////////////////////////////// Calcul de la commande
-
-        if(print_timing) { t2 = micros(); }
-  
-  // Computing command
-        u = 0;
-        angle_error_deg = mod180(rpy[2]* rad_to_deg-yaw_ref);
-
-        
-        if((accuracy_flags & 0x26) == 0x26)
-        { // if the gyro has saturated, we go in open loop mode, just compensating speed measured by base gyro. (correspond to the "else")
-
-          // integral part of the command
-          u_integral += Ki*mod180(angle_error_deg)/IMU_freq;
-          u_integral = constrain(u_integral,-U_MAX,U_MAX);
-
-          // proportional part of the command
-          u_proportionel = Kp * angle_error_deg;
-          u_proportionel = constrain(u_proportionel,-U_MAX,U_MAX);
-          
-          u = u_proportionel + u_integral; // computing the PI correction
-  
-          if(abs(angle_error_deg<3) && imu_init==0 && ((accuracy_flags & 0x66) == 0x66))
-          { //heading has converge, if it is the first time, we will set the 0 of blade0
-            ledy_half_period = 25; // 2hz led blink
-            if(time_counter2 >5000)
-            { // waiting for 5s immobility to take reference
-              imu_init = 1; // so we will not set a ref again
-              motor_angle_offset = fmod(current_angle_rd+pi,two_pi)-pi;
-              ledy_half_period = 5; // led blinks 10Hz
-              
-            }
-          } else
-          {
-            time_counter2 = 0;
-          }
-        } else
-        {
-          u_integral = 0;
-        }
-
-        u = constrain(u,-U_MAX,U_MAX) + nominal_speed_rps/two_pi; // adding current rotation speed to PI correction
-        
-        sin_amplitude = constrain(0.4+0.1*abs(u),0,1); // Modulation of amplitude vs rotation speed to work at quasi constant current
-
-        // Transformation from rotation speed to angle increment (incrementation is done in the interuption
-        motor_speed_rps = two_pi*u;//tps*two_pi;
-        angle_step_rd = motor_speed_rps/reg_freq;
-
-        setMotorAngle(current_angle_rd);
-        
-///////////////////////////////////// 
-
-        sanity_flag = (imu_init == 1) 
-                    + (((accuracy_flags & 0x26) == 0x26) << 1 )
-                    + (((accuracy_flags & 0x66) == 0x66) << 2 )
-                    + (((accuracy_flags & 0x80) == 0x80) << 7); 
-
-        // Data transmition, to the control part of the drone
-
-        if(print_timing) { t3 = micros(); }
- 
-        if(transmit_raw){ Serial.write(PACKET_START); } // starting byte
-        
-        // Roll and pitch
-        for(i=0;i<2;i++)
-        {
-          buffer_int16 = (int16_t)(mod180(rpy[i]* rad_to_deg)*32768/180);
-          //if(print_data){ Serial.print(buffer_int16); Serial.print(" "); }
-          for(j=0;j<2;j++)
-          {
-            if(transmit_raw){ Serial.write(ptr_buffer_int16[j]); }
-          }
-        }
-
-        // blade0 angle
-        buffer_int16 = (int16_t)(mod180((current_angle_rd-motor_angle_offset+rpy[2])*rad_to_deg-yaw_ref)*32768/180); // we put the data in the int16 buffer
-        //if(print_data){ Serial.print(buffer_int16); Serial.print(" "); }
-        for(j=0;j<2;j++)
-        {
-          if(transmit_raw){ Serial.write(ptr_buffer_int16[j]); } // we transmit each bytes of the int16 buffer using this pointer
-        }
-
-        // rotation speeds (roll and pitch derivatives)
-        for(i=0;i<2;i++)
-        {
-          buffer_int16 = (int16_t)(omega[i]*32768/2000);
-          //if(print_data){ Serial.print(buffer_int16); Serial.print(" "); }
-          for(j=0;j<2;j++)
-          {
-            if(transmit_raw){ Serial.write(ptr_buffer_int16[j]); }
-          }
-        }
-
-        // blade rotation speed
-        buffer_int16 = (int16_t)(motor_speed_rps*rad_to_deg*32768/2000);
-        //if(print_data){ Serial.print(buffer_int16); Serial.print(" "); }
-        for(j=0;j<2;j++)
-        {
-          if(transmit_raw){ Serial.write(ptr_buffer_int16[j]); }
-        }
-
-        // transmition of GPS position data
-        for (i = 0; i < 8; i++)
-        {
-          if (transmit_raw) { Serial.write(pozyx_data[i]); }
-        }
-
-        if(transmit_raw){ Serial.write(time_+time_counter); }
-        
-        if(transmit_raw){ Serial.write(PACKET_STOP); } // ending byte
-
-        setMotorAngle(current_angle_rd);
-
-        if(print_data){ Serial.println(" "); }
-
-  ///////////////////////////////////// Lecture du BNO du bas
-
-        if(print_timing) { t4 = micros(); }
-
-        // gyro data, only gyro data on z axis will be used
-        imu::Vector<3> gyro=bno.getVector(Adafruit_BNO055::VECTOR_GYROSCOPE);
-        nominal_speed_rps = BNO_corrective_gain*gyro.z();
-
-        setMotorAngle(current_angle_rd); 
-
-       // time_counter2 = 0;
-
- ///////////////////////////////////// Printing timings (optional)
-
-        if(print_timing) { t6 = micros(); }
-        if(print_timing) { 
-          /*Serial.print(t1-t0);Serial.print(" ");
-          Serial.print(t2-t1);Serial.print(" ");
-          Serial.print(t3-t2);Serial.print(" ");
-          Serial.print(t4-t3);Serial.print(" ");
-          Serial.print(t6-t4);Serial.print(" ");
-          //Serial.print(t6-t5);Serial.print(" ");
-          Serial.print(t6-t0);Serial.print(" ");*/
-          
-          //Serial.println(" "); 
-          }
-      } else
-      { // last char is not the starting char, light the default led up
-        digitalWrite(ledr_pin, HIGH);
-        ledr_counter = 0;
-        //Serial.print("Corr1"); Serial.print(" "); Serial.println(nSerial); 
+        motor_speed_rps = (float)buffer_int16*2000.0/32768.0/rad_to_deg;
       }
-    } else
-    { // First char is not the starting char, light the default led up
-      digitalWrite(ledr_pin, HIGH);
-      ledr_counter = 0;
-      //Serial.print("Corr2"); Serial.print(" "); Serial.println(nSerial); 
+      sin_amplitude = constrain(0.4+0.1*abs(motor_speed_rps/two_pi),0,0.9); 
+      angle_step_rd = motor_speed_rps/reg_freq;
+      
     }
-  }
+  }*/
 }
 
 // sert à changer la fréquence du pwm 
-
 void setPwmFrequency(int pin) {
-  if(pin == 5 || pin == 6 || pin == 9 || pin == 10) {
-    if(pin == 5 || pin == 6) {
+  if(pin == 3) {
       TCCR0B = TCCR0B & 0b11111000 | 0x01;
-    } else {
-      TCCR1B = TCCR1B & 0b11111000 | 0x01;
     }
-  }
-  else if(pin == 3 || pin == 11) {
-    TCCR2B = TCCR2B & 0b11111000 | 0x01;
-  }
+  if(pin == 5) {
+    TCCR3B = TCCR3B & 0b11111000 | 0x01;
+    }
+  if(pin == 6) {
+    TCCR4B = TCCR4B & 0b11111000 | 0x01;
+   }
+    if(pin == 9) {
+    TCCR1B = TCCR1B & 0b11111000 | 0x01;
+   }
+   if(pin == 10) {
+    TCCR1A = TCCR1A & 0b11111000 | 0x01;
+   }
 }
+
 

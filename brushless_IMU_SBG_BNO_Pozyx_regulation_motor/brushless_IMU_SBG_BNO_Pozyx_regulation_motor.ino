@@ -6,43 +6,63 @@
 
 #define U_MAX 0.5 // max speed command of the motor
 
-// constant used to enable/disable communication, debug, timing checks
+////////////////// constant used to enable/disable communication, debug, timing checks ////////////////
 const int8_t transmit_raw = 1;
 const int8_t print_data = 0;
 const int8_t print_timing = 0;
 
-// definition of some constants to ease computations
+////////////////// definition of some constants to ease computations ////////////////
 const float pi = 3.14159265359;
 const float two_pi = 6.28318530718;
 const float four_pi_on_three = 4.18879020479;
 const float two_pi_on_three = 2.09439510239;
 const float rad_to_deg = 57.2957795; // 180/pi
 
-// motor related constants and variable
+////////////////// motor related constants and variable ////////////////
 const uint8_t nb_pole = 22;
 float slice_angle_rd, angle_scale_factor;
 int16_t normalized_angle;
 float sin_amplitude = 0.3;
-const float reg_freq = 1000; // regulation frequency
+const float reg_freq = 2000; // regulation frequency
 
-// Commande variable
-volatile float angle_step_rd, current_angle_rd_prev, current_angle_rd = 0;
+////////////////// Commande variable ////////////////
+volatile float angle_step_rd, current_angle_rd_prev, current_angle_rd, motor_angle_offset = 0;
 float motor_speed_rps = 0; // desired speed of the motor, rps
 uint8_t sinAngleA, sinAngleB, sinAngleC; // the 3 sinusoide values for the PWMs
+float u=0;            // Command, tr/s
+float u_integral = 0; // integral part of the command, tr/s
+float u_proportionel = 0; // proportional part of the command, tr/s
+float speed_step;
+float angle_error_deg;
+float yaw;
+const float yaw_ref = 90;//180;
+const float Ki = 0.015;//0.1; // integral gain
+const float Kp = 0.01; // proportional gain
+const float IMU_freq = 100; // IMU frequency
+uint8_t accuracy_flags,imu_init = 0;
 
-// Pin definition for connection to ESC
+////////////////// Pin definition for connection to ESC ////////////////
 const int EN1 = 4;   // pin enable bls
 const int IN1 = 10;    //pins des pwm
 const int IN2 = 6;   //pins des pwm
 const int IN3 = 9;   //pins des pwm
 
-// interuptions gestion
+////////////////// interuptions gestion ////////////////
 uint32_t time_counter, time_counter3, time_counter2=0; // counting the number of interuptions
 uint8_t interupt_happened; // interuption flag
 
-uint8_t raw_data[100];
+/////////// buffers and ptr for data decoding ///////
+float buffer_float;
+unsigned char *ptr_buffer = (unsigned char *)&buffer_float;
+uint32_t buffer_uint32;
+unsigned char *ptr_buffer_uint32 = (unsigned char *)&buffer_uint32;
+int32_t buffer_int32;
+unsigned char *ptr_buffer_int32 = (unsigned char *)&buffer_int32;
 int16_t buffer_int16;
 unsigned char *ptr_buffer_int16 = (unsigned char *)&buffer_int16;
+uint8_t raw_data[100];
+
+
 
 long t0,t1,t2,t3,t4,t5,t6,t_;
 uint8_t time_;
@@ -125,7 +145,7 @@ void setMotorAngle(float angle_rd)
 
 ISR(TIMER3_OVF_vect) 
 {
-  TCNT3 = 65536 - 250; // 250*4us = 1ms
+  TCNT3 = 65536 - 125; // 250*4us = 1ms
   // increment the desired angle from the increment computed from the command
   current_angle_rd = fmod((current_angle_rd + angle_step_rd)+two_pi,two_pi); 
   time_counter++;
@@ -149,35 +169,20 @@ float mod180(float angle)
 void loop() {
 int i,j,x,n;
 
-  if(interupt_happened)
-  {
-    t1 = micros();
-    /*Serial.print((t1-t0));Serial.write(9);
-    Serial.print(current_angle_rd);Serial.write(9);*/
-    Serial.print(normalized_angle);Serial.write(9);
-    Serial.print(sineArraySize);Serial.write(9);
-    Serial.print((int16_t)fmod(normalized_angle+sineArraySize/3,sineArraySize));Serial.write(9);
-    Serial.print((int16_t)fmod(normalized_angle+2*sineArraySize/3,sineArraySize));Serial.write(9);
-    Serial.println(" ");
-    t0 = t1;
-    interupt_happened = 0;
-    setMotorAngle(current_angle_rd); 
-  }
-  /*
-  analogWrite(IN1, 64);
-    analogWrite(IN2, 128);
-    analogWrite(IN3, 192);*/
+  setMotorAngle(current_angle_rd); 
 
 // Applying the command if new
   //setMotorAngle(current_angle_rd);               //  une fois par ms // Question : combien de temps elle prend ? 500us
-  /*
   if (Serial1.available() > GIMBAL_PACKET_SIZE-1) // Number of data corresponding to the IMU packet size is waiting in the biffer of serial
   { 
-    x = Serial.read(); // read first data
+    x = Serial1.read(); // read first data
     //Serial.print(x); Serial.print(" ");
     if(x == PACKET_START) // check that first data correspond to start char
     {
       Serial1.readBytes(raw_data,GIMBAL_PACKET_SIZE-1); // Reading the IMU packet
+      
+      setMotorAngle(current_angle_rd); 
+      
       if(raw_data[GIMBAL_PACKET_SIZE-2] == PACKET_STOP) // check taht the last data correspond to the packet end char
       {
         for(j=0;j<2;j++) // filling the 4 bytes of the float with the data of serial port
@@ -185,12 +190,100 @@ int i,j,x,n;
           ptr_buffer_int16[j] = raw_data[10+j];
         }
         motor_speed_rps = (float)buffer_int16*2000.0/32768.0/rad_to_deg;
-      }
-      sin_amplitude = constrain(0.4+0.1*abs(motor_speed_rps/two_pi),0,0.9); 
-      angle_step_rd = motor_speed_rps/reg_freq;
+        //Serial.print(motor_speed_rps);Serial.write(9);
+
+        for(j=0;j<2;j++) // filling the 4 bytes of the float with the data of serial port
+        {
+          ptr_buffer_int16[j] = raw_data[4+j];
+        }
+        yaw = (float)buffer_int16*180/32768.0;
+        //Serial.print(yaw);Serial.write(9);
+
+        accuracy_flags = raw_data[20];
+        //Serial.print(accuracy_flags);Serial.write(9);
+        //Serial.println(" ");
+        
+///////////////////////////////////////////////////////   
+////////////////// Calcul de la commande //////////////   
+  
+  // Computing command
+        u = 0;
+        angle_error_deg = mod180(yaw-yaw_ref);
+
+        setMotorAngle(current_angle_rd); 
+        
+        if((accuracy_flags & 0x2) == 0x2)
+        { // if the gyro has saturated, we go in open loop mode, just compensating speed measured by base gyro. (correspond to the "else")
+
+          // integral part of the command
+          u_integral += Ki*mod180(angle_error_deg)/IMU_freq;
+          u_integral = constrain(u_integral,-U_MAX,U_MAX);
+
+          // proportional part of the command
+          u_proportionel = Kp * angle_error_deg;
+          u_proportionel = constrain(u_proportionel,-U_MAX,U_MAX);
+          
+          u = u_proportionel + u_integral; // computing the PI correction
+  
+          if((accuracy_flags & 0x1) == 0x1 && imu_init==0 )
+          { //heading has converge, if it is the first time, we will set the 0 of blade0
+            imu_init = 1; // so we will not set a ref again
+            motor_angle_offset = fmod(current_angle_rd+pi,two_pi)-pi;
+          }
+        } else
+        {
+          u_integral = 0;
+        }
+
+        setMotorAngle(current_angle_rd); 
+        
+        //Serial.print(u_integral*two_pi);Serial.write(9);
+        //Serial.print(u_proportionel*two_pi);Serial.write(9);
+        
+        motor_speed_rps += two_pi*constrain(u,-U_MAX,U_MAX);//tps*two_pi;
+
+        //Serial.print(motor_speed_rps);Serial.write(9);
       
+        sin_amplitude = constrain(0.55+0.1*abs(motor_speed_rps/two_pi),0,0.95); 
+        angle_step_rd = motor_speed_rps/reg_freq;
+
+        //Serial.print(sin_amplitude);Serial.write(9);
+
+        //Serial.print(current_angle_rd*two_pi);Serial.write(9);
+        //Serial.print(current_angle_rd_prev*two_pi);Serial.write(9);
+        //Serial.print(normalized_angle);Serial.write(9);
+
+        //Serial.println(" ");
+        
+
+        buffer_int16 = (int16_t)(-motor_speed_rps*rad_to_deg*32768/2000);
+        for(j=0;j<2;j++)
+        {
+          raw_data[10+j] = ptr_buffer_int16[j];
+        }
+        buffer_int16 = (int16_t)(-mod180((current_angle_rd-motor_angle_offset)*rad_to_deg+yaw-yaw_ref)*32768/180);
+        for(j=0;j<2;j++) 
+        {
+          raw_data[4+j] = ptr_buffer_int16[j];
+        }
+
+        setMotorAngle(current_angle_rd); 
+
+///////////////////////////////////////////////////////   
+////// Transmission des data à la partie commande /////
+        if(transmit_raw)
+        {
+          Serial1.write(PACKET_START);
+          for(i=0;i<GIMBAL_PACKET_SIZE-1;i++)
+          {
+            Serial1.write(raw_data[i]);
+            setMotorAngle(current_angle_rd); 
+          }
+        }
+        
+      }
     }
-  }*/
+  }
 }
 
 // sert à changer la fréquence du pwm 

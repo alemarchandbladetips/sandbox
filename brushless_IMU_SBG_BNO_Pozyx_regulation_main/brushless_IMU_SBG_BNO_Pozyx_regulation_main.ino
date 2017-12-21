@@ -1,4 +1,8 @@
-#include <NeoSWSerial.h>
+#include <Arduino.h>   // required before wiring_private.h
+#include "wiring_private.h" // pinPeripheral() function
+#include <Adafruit_Sensor.h>
+#include <Adafruit_BNO055.h>
+#include "math.h"
 
 #define POZYX_PACKET_SIZE 9 // number of bytes to be recieved from 
 #define POZYX_PACKET_START 137 // starting char of package
@@ -17,19 +21,39 @@
 #define DEVICE_STATUS_MASK_IMU 0x67             // mask to read interesting values of device status
 #define DEVICE_STATUS_MASK_IMU_HEADING_NOK 0x27 // mask to read interesting values of device status
 
-#define DELAY_SAMPLE 22         // Delay between IMU and GPS in samples (100Hz = 0.35s)
-#define GRAVITY_FIELD_NORM 9.81 // Gravity field norm m/s2
+#define U_MAX 0.5 // max speed command of the motor
 
 const int8_t transmit_raw = 1;
 const int8_t print_data = 0;
+const int8_t print_timing = 0;
+
+// definition of some constants to ease computations
+const float pi = 3.14159265359;
+const float two_pi = 6.28318530718;
+const float four_pi_on_three = 4.18879020479;
+const float two_pi_on_three = 2.09439510239;
 
 /////////// serial communication with IMU //////////
-uint8_t raw_data[100], start_char, footer[3], data_availability;
+char raw_data[100], start_char, footer[3], data_availability;
 uint8_t device_status;
 uint16_t datalen, checkSum, checkSumCalc;
 
+//////////// for BNO ////////////////////
+Adafruit_BNO055 bno = Adafruit_BNO055();
+uint8_t sys, gyr, accel, mag = 0;
+uint32_t accuracy_flags;
+float alpha_omega = 0.33;
+float nominal_speed_dps = 0;
+//const float BNO_corrective_gain = 0.95491; // MESURÉ SUR LA PYRAMIDE
+const float BNO_corrective_gain = 0.95087; // MESURÉ SUR le petit proto V1
+
+///////////// SBG IMU data ////////////////////////
+float omega[3], quaternion[4], rpy[3], acc[3];
+uint8_t sanity_flag;
+int32_t convergence_timmer;
+uint8_t imu_init = 0;
+
 /////////// serial communication with GPS //////////
-NeoSWSerial mySerial(9, 2); // RX, TX
 //uint8_t gps_buffer[26];
 uint8_t pozyx_correction_flag = 0;
 //int32_t NED_coordinates[3];
@@ -38,7 +62,7 @@ uint8_t pozyx_correction_flag = 0;
 int8_t pozyx_data[8];
 
 /////////// buffers and ptr for data decoding ///////
-float buffer_float, quaternion[4], omega[3], acc[3], proper_acc[3];
+float buffer_float;
 unsigned char *ptr_buffer = (unsigned char *)&buffer_float;
 uint32_t buffer_uint32;
 unsigned char *ptr_buffer_uint32 = (unsigned char *)&buffer_uint32;
@@ -47,69 +71,99 @@ unsigned char *ptr_buffer_int32 = (unsigned char *)&buffer_int32;
 int16_t buffer_int16;
 unsigned char *ptr_buffer_int16 = (unsigned char *)&buffer_int16;
 
+///////////// Commande variable /////////////////////
+volatile float angle_step_rd, current_angle_rd_prev, current_angle_rd = 0;
+float motor_speed_rps = 0; // desired speed of the motor, rps
+float u=0;            // Command, tr/s
+float u_integral = 0; // integral part of the command, tr/s
+float u_proportionel = 0; // proportional part of the command, tr/s
+float speed_step;
+float angle_error_deg;
+uint8_t sinAngleA, sinAngleB, sinAngleC; // the 3 sinusoide values for the PWMs
+const float yaw_ref = 90;//180;
+const float Ki = 0.03;//0.1; // integral gain
+const float Kp = 0.02; // proportional gain
+const float IMU_freq = 100; // IMU frequency
+const float reg_freq = 1000; // regulation frequency
+
+
 /////////// LED handeling /////////////
 
-// V2 connection, real gnd is used
-/*
-int redLedPin = 13;
-int greenLedPin = 12;
-*/
-// V1 connections, gnd is done using pin 7
-int redLedPin = 5;
-int greenLedPin = 6;
-int gndLedPin = 7;
-int signalLedPin = 13;
+int8_t greenLedPin = 14;
+int8_t green_led_counter = 0;
+int8_t green_led_status = 1;
+int8_t green_led_period = 10;
 
-int red_led_blink = 0;
-int red_led_blink_counter = 0;
-int red_led_blink_status = 0;
+int8_t yellowLedPin = 15;
+int8_t yellow_led_counter = 0;
+int8_t yellow_led_status = 1;
+int8_t yellow_led_period = 100;
+
+int8_t redLedPin = 16;
+int8_t red_led_counter = 0;
+int8_t red_led_status = 1;
+int8_t red_led_period = 50;
+
+int8_t synchPin = 12;
 
 /////////// timing /////////////
 uint32_t time1, time2, time3, time4, dt_tmp, time5, time6;
 
-/////////// Kalman filter //////////
-float est_speed_cmps[3] = {0,0,0};            // estimation state speed
-float est_speed_cmps_buffer[DELAY_SAMPLE*3];  // speed buffer
-int16_t est_speed_cmps_buffer_index = 0;      // speed buffer index
-float est_position_cm[3] = {0,0,0};           // estimation state position
-float est_position_cm_buffer[DELAY_SAMPLE*3]; // position buffer
-int16_t est_position_cm_buffer_index = 0;     // position buffer index
-float proper_acc_buffer[DELAY_SAMPLE*3];      // proper acc buffer
-int16_t proper_acc_buffer_index = 0;          // proper acc buffer index
-float K_pos = 0.1;                            // correction gain position
-float K_speed = 0.1;                          // correction gain speed
-float dt;                                     // actual sampling period
-
 int32_t dbg = 0;
 
+//////////////////////////////////////////////////////////////////
+///////////////// declaration of Serial2 /////////////////////////
+Uart Serial2 (&sercom1, 11, 10, SERCOM_RX_PAD_0, UART_TX_PAD_2);
+
+void SERCOM1_Handler()
+{
+  Serial2.IrqHandler();
+}
+//////////////////////////////////////////////////////////////////
+
 void setup() {
+  // Turning LED oon
+  pinMode(greenLedPin, OUTPUT);
+  digitalWrite(greenLedPin, green_led_status);
+  pinMode(yellowLedPin,OUTPUT);
+  digitalWrite(yellowLedPin, yellow_led_status);
+  pinMode(redLedPin, OUTPUT);
+  digitalWrite(redLedPin, red_led_status);
+
+  pinMode(synchPin, OUTPUT);
+  digitalWrite(synchPin, LOW);
+
+  // Assign pins 10 & 11 SERCOM functionality (Serial 2)
+  pinPeripheral(10, PIO_SERCOM);
+  pinPeripheral(11, PIO_SERCOM);
+
   // Starting coms
+  Serial1.begin(115200);
   Serial.begin(115200);
-  mySerial.begin(38400);
+  Serial2.begin(38400);
 
-  Serial.println(" ");
-  Serial.println("Start");
-
-  // Turning LED off
-  
-  // needed for v1 only
+  if(!bno.begin(Adafruit_BNO055::OPERATION_MODE_NDOF))
   {
-    pinMode(gndLedPin,OUTPUT);
-    digitalWrite(gndLedPin, LOW);
+    // There was a problem detecting the BNO055 ... check your connections 
+    Serial.print("Ooops, no BNO055 detected ... Check your wiring or I2C ADDR!");
+    //while(1);
   }
 
-  pinMode(signalLedPin,OUTPUT);
-  digitalWrite(signalLedPin, LOW);
-  pinMode(redLedPin, OUTPUT);
-  digitalWrite(redLedPin, LOW);
-  pinMode(greenLedPin, OUTPUT);
-  digitalWrite(greenLedPin, LOW);
+  while(gyr!=3)
+  {
+    bno.getCalibration(&sys, &gyr, &accel, &mag);
+  }
 
-  // Initialisation of variables and buffers
-  data_availability = 0;
-  clear_buffer3(est_speed_cmps_buffer, &est_speed_cmps_buffer_index, DELAY_SAMPLE);
-  clear_buffer3(est_position_cm_buffer, &est_position_cm_buffer_index, DELAY_SAMPLE);
-  clear_buffer3(proper_acc_buffer, &proper_acc_buffer_index, DELAY_SAMPLE);
+  // turning off leds
+  green_led_status = 0;
+  digitalWrite(greenLedPin, green_led_status);
+  yellow_led_status = 0;
+  digitalWrite(yellowLedPin, yellow_led_status);
+  red_led_status = 0;
+  digitalWrite(redLedPin, red_led_status);
+
+  Serial.print("good to go");
+  
 }
 
 /////////////////////////////////////////////////////////////////////////////
@@ -120,16 +174,35 @@ void loop() {
 //////////////////////////////////////////////////////////////////////
 ////////// reception of Pozyx correction on soft serial ////////////////
 
-  if (mySerial.available() > POZYX_PACKET_SIZE) // Number of data corresponding to the IMU packet size is waiting in the biffer of serial
+  if (Serial2.available() > POZYX_PACKET_SIZE) // Number of data corresponding to the IMU packet size is waiting in the biffer of serial
   { 
-    x = mySerial.read(); // read first data
+    x = Serial2.read(); // read first data
     //Serial.print(x);
     if(x == POZYX_PACKET_START) // check that first data correspond to start char
     {
-      mySerial.readBytes(raw_data,POZYX_PACKET_SIZE); // Reading the IMU packet
+      for(i=0;i<POZYX_PACKET_SIZE;i++)
+      {
+        raw_data[i] = Serial2.read(); // Reading the IMU packet
+      }
       //Serial.print(raw_data[GIMBAL_PACKET_SIZE-1]);
       if(raw_data[POZYX_PACKET_SIZE-1] == POZYX_PACKET_STOP) // check taht the last data correspond to the packet end char
       {
+        
+        if(green_led_period == 0)
+        {
+          green_led_status = 1;
+        } else if(green_led_period < 0)
+        {
+          green_led_status = 0;
+        }
+        if(green_led_counter>green_led_period)
+        {
+          green_led_status = !green_led_status;
+          green_led_counter = 0;
+        }
+        digitalWrite(greenLedPin, green_led_status);
+        green_led_counter ++;
+          
         pozyx_correction_flag = 1;
         for(i=0;i<8;i++) // decode YPR data
         {
@@ -137,32 +210,32 @@ void loop() {
           //if(print_data){ Serial.print(raw_data[i]); Serial.print(" "); }
         }
         //Serial.println(dbg);
-        dbg = 0;
+        //dbg = 0;
         //Serial.println(" ");
       }
     }
   }
- 
+  
+
 ////////////////////////////////////////////////////////////
 ////////// reception of IMU data on serial ////////////////
-
-  if (Serial.available() > PACKET_SIZE_IMU + 8 - 1)
+//Serial.println(Serial1.available());
+  if (Serial1.available() > PACKET_SIZE_IMU + 8 - 1)
   { // data available
     time5 = millis();
-    start_char = Serial.read();
+    start_char = Serial1.read();
     //Serial.print(start_char); Serial.print(" ");
     if (start_char == PACKET_START_IMU) // first character is OK, we can start reading the rest of package
     {
       time2 = micros();
       dt_tmp = (time2 - time1);
-      dt = (float)dt_tmp/1000000.0;
       time1 = time2;
-      //Serial.println(dt_tmp);
+      Serial.println(dt_tmp);
       
       //if(print_data){ Serial.println(" "); Serial.print(dt*1000000-10000); Serial.println(" "); }
       
-      digitalWrite(greenLedPin, HIGH);
-      Serial.readBytes(raw_data, 4);
+      //digitalWrite(greenLedPin, HIGH);
+      Serial1.readBytes(raw_data, 4);
 
       datalen = raw_data[3] + (raw_data[2] << 8); // Number of data to read
       //if(print_data){ Serial.print(datalen); Serial.print(" "); }
@@ -171,16 +244,17 @@ void loop() {
       if (raw_data[0] == PACKET_START_IMU2 && datalen == PACKET_SIZE_IMU) // second char and data length is OK too
       {
 
-        Serial.readBytes(raw_data + 4, datalen); // read the data with the length specified in the header
-        Serial.readBytes(footer, 3); // read the footer
+        Serial1.readBytes(raw_data + 4, datalen); // read the data with the length specified in the header
+        Serial1.readBytes(footer, 3); // read the footer
 
         checkSum = footer[1] + ((uint16_t)footer[0] << 8);
         checkSumCalc = calcCRC(raw_data + 1, datalen + 3);
 
         if (footer[2] == PACKET_STOP_IMU && checkSum == checkSumCalc) // && raw_data[52] == 0xFF && (raw_data[53] & 0x01) == 0x01)
         { // The end char is OK and the computed checksum correspond to the one in the footer.
-          //analogWrite(redLedPin, 0);
-          digitalWrite(signalLedPin, HIGH);
+
+          digitalWrite(synchPin, HIGH);
+          
           data_availability = 1;
           dbg++;
 
@@ -197,6 +271,8 @@ void loop() {
             quaternion[i] = buffer_float; // 180/pi
             //if(print_data){ Serial.print(quaternion[i]); Serial.print(" "); }
           }
+          quat2rpy_ellipse_east(quaternion,rpy);
+          rpy[1] = -rpy[1];
 
           // read gyroscope data
           for (i = 0; i < 3; i++) 
@@ -208,7 +284,9 @@ void loop() {
             omega[i] = buffer_float * RAD_TO_DEG;
             //if(print_data){ Serial.print(omega[i]); Serial.print(" "); }
           }
+          omega[1] = -omega[1];
 
+          /*
           // read acc data
           for (i = 0; i < 3; i++) 
           {
@@ -217,285 +295,191 @@ void loop() {
               ptr_buffer[j] = raw_data[4 * i + j + 32];
             }
             acc[i] = buffer_float;
-            //if(print_data){ Serial.print(acc[i]); Serial.print(" "); }
-          }
+            if(print_data){ Serial.print(acc[i]); Serial.print(" "); }
+          }*/
 
           // Status flags
           device_status = raw_data[45] & DEVICE_STATUS_MASK_IMU;
 
-          //if(print_data){ Serial.print(device_status); Serial.print(" "); }
+          if(print_data){ Serial.print(device_status); Serial.write(9); }
           if ((device_status & DEVICE_STATUS_MASK_IMU) == DEVICE_STATUS_MASK_IMU)
           {
-            //if(print_data){ Serial.print(2); Serial.print(" "); }
-            digitalWrite(redLedPin, LOW);
-            red_led_blink_status = 0;
+            angle_error_deg = mod180(rpy[2]* RAD_TO_DEG-yaw_ref);
+            if(abs(angle_error_deg<3) && imu_init==0)
+            {
+              if( (millis()-convergence_timmer) > 5000)
+              {
+                imu_init = 1;
+                yellow_led_period = 10; // led blinks 5Hz
+              }
+            } else
+            {
+              convergence_timmer = millis();
+              yellow_led_period = 20;
+            }
+            red_led_period = -1;
           } else if ((device_status & DEVICE_STATUS_MASK_IMU) == DEVICE_STATUS_MASK_IMU_HEADING_NOK)
           {
-            //if(print_data){ Serial.print(1); Serial.print(" "); }
-            red_led_blink_counter++;
-            if (red_led_blink_counter >= 50)
-            {
-              red_led_blink_counter = 0;
-              if (red_led_blink_status)
-              {
-                digitalWrite(redLedPin, LOW);
-                red_led_blink_status = 0;
-              } else
-              {
-                digitalWrite(redLedPin, HIGH);
-                red_led_blink_status = 1;
-              }
-            }
+            angle_error_deg = mod180(rpy[2]* RAD_TO_DEG-yaw_ref);
+            red_led_period = 50;
+            convergence_timmer = millis();
           } else
           {
-            //if(print_data){ Serial.print(0); Serial.print(" "); }
-            digitalWrite(redLedPin, HIGH);
-            red_led_blink_status = 1;
+             red_led_period = 0;
+             convergence_timmer = millis();
           }
 
-          /*
-          // projection of acc in world frame and substration of gravity
-          vector_quat_proj(quaternion, acc, proper_acc);
-          proper_acc[2] += GRAVITY_FIELD_NORM;
-          for(i=0;i<3;i++)
-          {
-            proper_acc[i] = proper_acc[i]; // conversion to cm/s2
-          }
-
-          // buffering data
-          add_to_buffer3(proper_acc, proper_acc_buffer, &proper_acc_buffer_index, DELAY_SAMPLE);
-
-///////////////////////////////////////////
-////////// KF : prediction ////////////////
-
-          for(i=0;i<3;i++)
-          { // integration of proper acc and speed
-            est_position_cm[i] += est_speed_cmps[i]*dt + (proper_acc[i])*dt*dt;
-            est_speed_cmps[i] += (proper_acc[i])*dt;
-          }
-          // adding new data to buffer
-          add_to_buffer3(est_speed_cmps, est_speed_cmps_buffer, &est_speed_cmps_buffer_index, DELAY_SAMPLE);
-          add_to_buffer3(est_position_cm, est_position_cm_buffer, &est_position_cm_buffer_index, DELAY_SAMPLE);
-
-////////// KF : correction ////////////////
-
-          if (gps_correction_flag)
-          { // gps correction is available
-
-            gps_correction_flag = 0;
-            
-            // getting oldest data in the buffer
-            x = get_in_buffer3(est_speed_cmps_buffer, &est_speed_cmps_buffer_index, DELAY_SAMPLE, 0, est_speed_cmps);
-            if(x==-1) delay(10000);
-            x = get_in_buffer3(est_position_cm_buffer, &est_position_cm_buffer_index, DELAY_SAMPLE, 0, est_position_cm);
-            if(x==-1) delay(10000);
-  
-            for(i=0;i<3;i++)
-            { // correction of data with the GPS measurements
-              est_position_cm[i] += K_pos*(NED_coordinates[i]-est_position_cm[i]);
-              est_speed_cmps[i] += K_speed*(NED_speed[i]-est_speed_cmps[i]);
-            }
-  
-            // storing in the buffer
-            add_to_buffer3(est_speed_cmps, est_speed_cmps_buffer, &est_speed_cmps_buffer_index, DELAY_SAMPLE);
-            add_to_buffer3(est_position_cm, est_position_cm_buffer, &est_position_cm_buffer_index, DELAY_SAMPLE);
-  
-            for (j=1;j<DELAY_SAMPLE;j++)
-            { // replaying the prediction of the buffer to propagate correction to present time
-              // starting at 1, because element 0 was computed with the correction
-              
-              // get proper acc data in the buffer
-              x = get_in_buffer3(proper_acc_buffer, &proper_acc_buffer_index, DELAY_SAMPLE, j, proper_acc_buffer);
-              if(x==-1) delay(10000);
-  
-              for(i=0;i<3;i++)
-              { // replay prediction
-                est_position_cm[i] += est_speed_cmps[i]*dt + (proper_acc[i])*dt*dt;
-                est_speed_cmps[i] += (proper_acc[i])*dt;
-              }
-  
-              // store in buffer
-              add_to_buffer3(est_speed_cmps, est_speed_cmps_buffer, &est_speed_cmps_buffer_index, DELAY_SAMPLE);
-              add_to_buffer3(est_position_cm, est_position_cm_buffer, &est_position_cm_buffer_index, DELAY_SAMPLE);
-            }
-          }
-          dbg++;
-          // printing data on 1 axis
-          if (print_data) {
-            //Serial.print(dt*1000);
-            //Serial.print(" ");
-            //Serial.print(proper_acc[1]*100);
-            //Serial.print(" ");
-            
-            //Serial.print(NED_speed[1]*1000);
-            //Serial.print(" ");
-            //Serial.print(est_speed_cmps[1]*1000);
-            //Serial.print(" ");
-
-            
-            //Serial.print(NED_coordinates[1]*1000+2160);
-            //Serial.print(" ");
-            //Serial.print(est_position_cm[1]*1000);
-          }
-*/
 ///////////////////////////////////////////////////////         
 /////////// Transmitting data to next layer ///////////
 
-          // header of the package
-          if (transmit_raw) { Serial.write(0xAA); }
+        sanity_flag = (imu_init == 1)
+                    + (((device_status & DEVICE_STATUS_MASK_IMU_HEADING_NOK) == DEVICE_STATUS_MASK_IMU_HEADING_NOK) << 1 )
+                    + (((device_status & DEVICE_STATUS_MASK_IMU) == DEVICE_STATUS_MASK_IMU) << 2 )
+                    + (pozyx_correction_flag << 7); 
+        pozyx_correction_flag = 0;
 
-          // Transmition of gyro data
-          for (i = 0; i < 3; i++)
+        // Data transmition, to the control part of the drone
+
+        if(print_timing) { time3 = micros(); }
+ 
+        if(transmit_raw){ Serial1.write(PACKET_START); } // starting byte
+        
+        // Roll and pitch and yaw
+        for(i=0;i<3;i++)
+        {
+          buffer_int16 = (int16_t)(mod180(rpy[i]* RAD_TO_DEG)*32768/180);
+          if(print_data){ Serial.print(buffer_int16); Serial.write(9); }
+          for(j=0;j<2;j++)
           {
-            buffer_int16 = (int16_t)(omega[i] * 32768 / 1000);
-            for (j = 0; j < 2; j++)
-            {
-              if (transmit_raw) { Serial.write(ptr_buffer_int16[j]); }
-            }
+            if(transmit_raw){ Serial1.write(ptr_buffer_int16[j]); }
           }
+        }
 
-          // transmition of quaternion data
-          for (i = 0; i < 4; i++)
+        // rotation speeds (roll and pitch derivatives)
+        for(i=0;i<2;i++)
+        {
+          buffer_int16 = (int16_t)(omega[i]*32768/2000);
+          if(print_data){ Serial.print(buffer_int16); Serial.write(9); }
+          for(j=0;j<2;j++)
           {
-            buffer_int16 = (int16_t)(quaternion[i] * 32768);
-            for (j = 0; j < 2; j++)
-            {
-              if (transmit_raw) { Serial.write(ptr_buffer_int16[j]); }
-            }
+            if(transmit_raw){ Serial1.write(ptr_buffer_int16[j]); }
           }
+        }
 
-          if (pozyx_correction_flag)
-          { // gps correction is available
-            device_status |= 0x80;
-            pozyx_correction_flag = 0;
-          }
+        // blade rotation speed
+        buffer_int16 = (int16_t)(nominal_speed_dps*32768/2000);
+        if(print_data){ Serial.print(buffer_int16); Serial.write(9); }
+        for(j=0;j<2;j++)
+        {
+          if(transmit_raw){ Serial1.write(ptr_buffer_int16[j]); }
+        }
 
-          // device status
-          if (transmit_raw) { Serial.write(device_status); }
+        // transmition of Pozyx position data
+        for (i = 0; i < 8; i++)
+        {
+          //if(print_data){ Serial.print(pozyx_data[i]); Serial.write(9); }
+          if (transmit_raw) { Serial1.write(pozyx_data[i]); }
+        }
 
-          // transmition of Pozyx position data
-          for (i = 0; i < 8; i++)
+        if(transmit_raw){ Serial1.write(sanity_flag); }
+        if(print_data){ Serial.print(sanity_flag); Serial.write(9); }
+        if(print_data){ Serial.print(device_status); Serial.write(9); }
+        
+        if(transmit_raw){ Serial1.write(PACKET_STOP); } // ending byte
+
+        if(print_data){ Serial.println(" "); }
+
+        digitalWrite(synchPin, LOW);
+
+ /////////////////// Updating LEDs ///////////////////
+
+          // yellow LED
+          if(yellow_led_period == 0)
           {
-              if (transmit_raw) { Serial.write(pozyx_data[i]); }
+            yellow_led_status = 1;
+          } else if(yellow_led_period < 0)
+          {
+            yellow_led_status = 0;
+          } else if(yellow_led_counter>yellow_led_period)
+          {
+            yellow_led_status = !yellow_led_status;
+            yellow_led_counter = 0;
           }
+          digitalWrite(yellowLedPin, yellow_led_status);
+          yellow_led_counter ++;
 
-          if (transmit_raw) { Serial.write((uint8_t)(millis()-time5)); }
-          //Serial.println((uint8_t)(millis()-time5)); 
+          // red LED
+          if(red_led_period == 0)
+          {
+            red_led_status = 1;
+          } else if(red_led_period < 0)
+          {
+            red_led_status = 0;
+          } else if(red_led_counter>red_led_period)
+          {
+            red_led_status = !red_led_status;
+            red_led_counter = 0;
+          }
+          digitalWrite(redLedPin, red_led_status);
+          red_led_counter ++;
 
-          // footer of the package
-          if (transmit_raw) { Serial.write(0x55); }
+///////////////////////////////////// Lecture du BNO du bas /////////////
 
-          digitalWrite(signalLedPin, LOW);
+        if(print_timing) { time4 = micros(); }
 
-          //if (print_data) { Serial.println(" "); }
-/////////////////////////////////////////////////////////
+        // gyro data, only gyro data on z axis will be used
+        imu::Vector<3> gyro=bno.getVector(Adafruit_BNO055::VECTOR_GYROSCOPE);
+        nominal_speed_dps = BNO_corrective_gain*gyro.z()*RAD_TO_DEG;
+          
+//////////////////////////////////////////////////////
+
+        
+        
+/////////////////////////////////////////////////////////////////////
+///////////// Error cases ///////////////////////////////////////////
 
         } else
         { // header and/or footer does not corraspond to expected syntax
           if (print_data) { Serial.println("Corrupted Data"); }
-          if (transmit_raw) {
-            Serial.write(0xAA);
-            Serial.write(0xAA);
-          }
           data_availability = 0;
+          digitalWrite(yellowLedPin, LOW);
           digitalWrite(redLedPin, HIGH);
-          digitalWrite(greenLedPin, LOW);
         }
       }
     }
   } else if ( (micros() - time1) > 15000)
   { // last data is too old, must be a
     if (print_data) {
-      Serial.println("No Data");
+      //Serial.println("No Data");
     }
     //time1 = micros();
-    digitalWrite(greenLedPin, LOW);
-    digitalWrite(redLedPin, LOW);
-    red_led_blink = 0;
-    if (transmit_raw) {
-      Serial.write(0x55);
-      Serial.write(0x55);
-    }
+    digitalWrite(yellowLedPin, LOW);
+    digitalWrite(redLedPin, HIGH);
   }
 }
 
 //////////////////////////////////////////////////////////////////////
 //////////////////////////////////////////////////////////////////////
 
-// Add a 3 element data vector in the ring buffer
-// float input[3]: data vector to be added
-// float *buffer_: adress of the data buffer of size 3*buffer_size;
-// int16_t *buffer_index: adress of the index of the data buffer, points to the next element to be replaced (oldest element)
-// int16_t buffer_size: size of the buffer
+// transformation from quaternion to Roll Pitch Yaw angles
+// input: q[4]: quaternion in flt
+// output: rpy[3]: Euler angles in flt (rd)
+// Measured execution time for a random quaternion : 500us to 750us
 
-void add_to_buffer3(float input[3],float *buffer_, int16_t *buffer_index, int16_t buffer_size)
+void quat2rpy_ellipse_east(float q[4], float rpy[3]) // 
 {
-  int16_t i;
-  for(i=0;i<3;i++)
-  {
-    buffer_[3*(*buffer_index)+i] = input[i];
-  }
-  (*buffer_index)++;
-  if(*buffer_index > buffer_size-1)
-  {
-    *buffer_index = 0;
-  }
+  rpy[0] = atan2(2*q[1]*q[3] + 2*q[2]*q[0], 1 - 2*q[1]*q[1] - 2*q[2]*q[2]);
+  rpy[1] = asin(2*q[2]*q[3] - 2*q[1]*q[0]);
+  rpy[2] = atan2(2*q[1]*q[2] + 2*q[3]*q[0], 1 - 2*q[1]*q[1] - 2*q[3]*q[3]);
 }
 
-//////////////////////////////////////////////////////////////////////
-
-// get a 3 element data vector in the ring buffer
-
-// float *buffer_: adress of the data buffer of size 3*buffer_size;
-// int16_t *buffer_index: adress of the index of the data buffer, points to the next element to be replaced (oldest element)
-// int16_t buffer_size: size of the buffer
-// int16_t data_index: index of the data to get (0: oldest value, buffer_size-1: last value)
-// float output[3]: output vector
-// return -1 if data index is out of bounds, 0 otherwise.
-
-int8_t get_in_buffer3(float *buffer_, int16_t *buffer_index, int16_t buffer_size, int16_t data_index, float output[3])
+void quat2rpy_ellipse(float q[4], float rpy[3]) // 
 {
-  int16_t index_in_buffer, i;
-
-  if(data_index>buffer_size-1 || data_index<0)
-  {
-    return -1;
-  }
-
-  index_in_buffer = data_index+*buffer_index;
-  if(index_in_buffer > buffer_size-1)
-  {
-    index_in_buffer -= buffer_size;
-  }
-  
-  for(i=0;i<3;i++)
-  {
-    output[i] = buffer_[3*index_in_buffer+i];
-  }
-  return 0;
+  rpy[0] = -atan2(2*q[2]*q[3] - 2*q[1]*q[0], 1 - 2*q[1]*q[1] - 2*q[2]*q[2]);
+  rpy[1] = asin(2*q[1]*q[3] + 2*q[2]*q[0]);
+  rpy[2] = -atan2(2*q[1]*q[2] - 2*q[3]*q[0], 1 - 2*q[2]*q[2] - 2*q[3]*q[3]);
 }
 
-//////////////////////////////////////////////////////////////////////
-
-// Fill the buffer with 0 values
-// float *buffer_: adress of the data buffer of size 3*buffer_size;
-// int16_t *buffer_index: adress of the index of the data buffer, points to the next element to be replaced (oldest element), will be 0 at the end of the execution of this function.
-// int16_t buffer_size: size of the buffer
-
-void clear_buffer3(float *buffer_, int16_t *buffer_index, int16_t buffer_size)
-{
-  int16_t i,j;
-  for(i=0;i<buffer_size;i++)
-  {
-    for(j=0;j<3;j++)
-    {
-      buffer_[3*i+j] = 0;
-    }
-  }
-  *buffer_index = 0;
-}
-
-//////////////////////////////////////////////////////////////////////
 //////////////////////////////////////////////////////////////////////
 
 // Projection of a vector using a quaternion
@@ -537,4 +521,15 @@ uint16_t calcCRC(const void *pBuffer, uint16_t bufferSize)
   return crc;
 }
 
-/////////////////////////////////////////////////////////////////////////////
+//////////////////////////////////////////////////////////////////////
+
+// Set an angle between -180 and 180 deg
+// input: angle in deg
+
+float mod180(float angle)
+{
+  return fmod(angle+3780,360)-180;
+}
+// fmod: 12us<t<40us
+
+//////////////////////////////////////////////////////////////////////

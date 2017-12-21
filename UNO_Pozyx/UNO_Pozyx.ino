@@ -53,7 +53,7 @@ void setup(){
   if(!remote){
     remote_id = NULL;
   }
-/*
+
   Serial.println(F("----------POZYX POSITIONING V1.0----------"));
   Serial.println(F("NOTES:"));
   Serial.println(F("- No parameters required."));
@@ -64,7 +64,7 @@ void setup(){
   Serial.println(F("----------POZYX POSITIONING V1.0----------"));
   Serial.println();
   Serial.println(F("Performing manual anchor configuration:"));
-*/
+
   // clear all previous devices in the device list
   Pozyx.clearDevices(remote_id);
   // sets the anchor manually

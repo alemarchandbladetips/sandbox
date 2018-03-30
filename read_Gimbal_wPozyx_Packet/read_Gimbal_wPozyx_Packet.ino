@@ -41,10 +41,10 @@ int i,j,x;
   if (Serial.available() > GIMBAL_PACKET_SIZE-1) // Number of data corresponding to the IMU packet size is waiting in the biffer of serial
   { 
     x = Serial.read(); // read first data
-    Serial.print(x); Serial.print(" ");
+    //Serial.print(x); Serial.print(" ");
     if(x == PACKET_START) // check that first data correspond to start char
     {
-      Serial.print((int32_t)(micros()-t0));Serial.write(9);
+      //Serial.print((int32_t)(micros()-t0));Serial.write(9);
       t0 = micros();
       Serial.readBytes(raw_data,GIMBAL_PACKET_SIZE-1); // Reading the IMU packet
       //Serial.print(raw_data[GIMBAL_PACKET_SIZE-1]);
@@ -59,7 +59,7 @@ int i,j,x;
           if(i<3)
           { // roll, pitch, tips0 angle
             rpy[i] = (float)buffer_int16*180.0/32768.0;
-            if(print_data){ Serial.print(rpy[i]); Serial.write(9); }
+            //if(print_data){ Serial.print(rpy[i]); Serial.write(9); }
           } else
           { // derivatives of roll, pitch, tips0 angle
             rpy_p[i-3] = (float)buffer_int16*2000.0/32768.0;
@@ -74,7 +74,7 @@ int i,j,x;
         }
         
         sanity_flag = raw_data[20];
-        if(print_data){ Serial.print(sanity_flag); Serial.print(" "); }
+        //if(print_data){ Serial.print(sanity_flag); Serial.print(" "); }
         
         if(print_data){ Serial.println(" "); }
       }

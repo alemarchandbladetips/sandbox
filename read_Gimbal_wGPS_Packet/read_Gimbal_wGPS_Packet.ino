@@ -4,11 +4,11 @@
 #define PACKET_STOP 0x55 // starting char of package
 
 // constant used to choose printed data
-const int8_t print_rpy = 0;
-const int8_t print_rpy_p = 0;
-const int8_t print_NED = 1;
-const int8_t print_NED_speed = 1;
-const int8_t print_flag = 1;
+const int8_t print_rpy = 1;
+const int8_t print_rpy_p = 1;
+const int8_t print_NED = 0;
+const int8_t print_NED_speed = 0;
+const int8_t print_flag = 0;
 
 const float pi = 3.14159265359;
 

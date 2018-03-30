@@ -102,22 +102,22 @@ void loop(){
     PosYs=(int16_t)(100.0*promY/30.0);
     VelXs=(int16_t)(10.0*VelX);
     VelYs=(int16_t)(10.0*VelY);
-    /*
+  /*
 //     dt=millis()-last_millis;
 //    last_millis+=dt;
 //   Serial.print("dt: ");Serial.print(dt); Serial.print("  ");
 //    Serial.print("PosX: ");Serial.print(position.x); Serial.print("  ");
 //    Serial.print("PosY: ");Serial.println(position.y);  
-  Serial.print(position.x/24.0);Serial.print(" ");
+//  Serial.print(position.x/24.0);Serial.print(" ");
   Serial.print(PosXs/100.0);Serial.print(" ");
-  //Serial.print(PosYs/100.0);Serial.print(" ");
-  //Serial.print(1.5*400.0*VelXs_);Serial.print(" ");
-  //Serial.print(1.5*400.0*VelYs_);Serial.print(" ");
+  Serial.print(PosYs/100.0);Serial.print(" ");
+  Serial.print(1.5*400.0*VelXs);Serial.print(" ");
+  Serial.print(1.5*400.0*VelYs);Serial.print(" ");
   //Serial.print(VelXs);Serial.print(" ");
   //Serial.print(VelYs);Serial.print(" ");
 
    Serial.println(" ");
-  */
+*/
   
    Serial.write(137);
     buffer_int16 = PosXs;

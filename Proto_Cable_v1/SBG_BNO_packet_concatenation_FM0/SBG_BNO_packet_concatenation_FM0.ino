@@ -1,12 +1,7 @@
 #include <Arduino.h>   // required before wiring_private.h
-#include "wiring_private.h" // pinPeripheral() function
 #include <Adafruit_Sensor.h>
 #include <Adafruit_BNO055.h>
 #include "math.h"
-
-#define POZYX_PACKET_SIZE 9 // number of bytes to be recieved from 
-#define POZYX_PACKET_START 137 // starting char of package
-#define POZYX_PACKET_STOP 173 // starting char of package
 
 #define RAD_TO_DEG 57.2957795 // 180/pi
 
@@ -14,14 +9,13 @@
 #define PACKET_STOP 0x55  // starting char of package
 #define PACKET_SIZE 26    // size to be recieved
 
+// Definitions for SBG IMU
 #define PACKET_START_IMU 0xFF                   // starting char of package
 #define PACKET_START_IMU2 0x02                  // starting char of package
 #define PACKET_STOP_IMU 0x03                    // starting char of package
 #define PACKET_SIZE_IMU 44                      // size to be recieved
 #define DEVICE_STATUS_MASK_IMU 0x67             // mask to read interesting values of device status
 #define DEVICE_STATUS_MASK_IMU_HEADING_NOK 0x27 // mask to read interesting values of device status
-
-#define U_MAX 0.5 // max speed command of the motor
 
 const int8_t transmit_raw = 1;
 const int8_t print_data = 0;
@@ -53,14 +47,7 @@ float omega[3], quaternion[4], rpy[3], acc[3];
 uint8_t sanity_flag;
 int32_t convergence_timmer;
 uint8_t imu_init = 0;
-
-/////////// serial communication with GPS //////////
-//uint8_t gps_buffer[26];
-uint8_t pozyx_correction_flag = 0;
-//int32_t NED_coordinates[3];
-//int16_t NED_coordinates_accuracy[3];
-//int16_t NED_speed[3];
-int8_t pozyx_data[8];
+float angle_error_deg, yaw_ref = 90;
 
 /////////// buffers and ptr for data decoding ///////
 float buffer_float;
@@ -72,24 +59,7 @@ unsigned char *ptr_buffer_int32 = (unsigned char *)&buffer_int32;
 int16_t buffer_int16;
 unsigned char *ptr_buffer_int16 = (unsigned char *)&buffer_int16;
 
-///////////// Commande variable /////////////////////
-volatile float angle_step_rd, current_angle_rd_prev, current_angle_rd = 0;
-float motor_speed_rps = 0; // desired speed of the motor, rps
-float u=0;            // Command, tr/s
-float u_integral = 0; // integral part of the command, tr/s
-float u_proportionel = 0; // proportional part of the command, tr/s
-float speed_step;
-float angle_error_deg;
-uint8_t sinAngleA, sinAngleB, sinAngleC; // the 3 sinusoide values for the PWMs
-const float yaw_ref = 90;//180;
-const float Ki = 0.03;//0.1; // integral gain
-const float Kp = 0.02; // proportional gain
-const float IMU_freq = 100; // IMU frequency
-const float reg_freq = 1000; // regulation frequency
-
-
 /////////// LED handeling /////////////
-
 int8_t greenLedPin = 14;
 int8_t green_led_counter = 0;
 int8_t green_led_status = 1;
@@ -105,25 +75,23 @@ int8_t red_led_counter = 0;
 int8_t red_led_status = 1;
 int8_t red_led_period = 50;
 
-int8_t synchPin = 12;
+//int8_t synchPin = 12;
 
-/////////// timing /////////////
+/////////// timing/debug /////////////
 uint32_t time1, time2, time3, time4, dt_tmp, time5, time6;
 
 int32_t dbg = 0;
 float integrated_yaw = 0;
 
 //////////////////////////////////////////////////////////////////
-///////////////// declaration of Serial2 /////////////////////////
-Uart Serial2 (&sercom1, 11, 10, SERCOM_RX_PAD_0, UART_TX_PAD_2);
-
-void SERCOM1_Handler()
-{
-  Serial2.IrqHandler();
-}
-//////////////////////////////////////////////////////////////////
 
 void setup() {
+
+  // Starting coms
+  Serial1.begin(115200);
+  Serial.begin(115200);
+
+  Serial.println("Starting...  ");
   // Turning LED oon
   pinMode(greenLedPin, OUTPUT);
   digitalWrite(greenLedPin, green_led_status);
@@ -132,17 +100,12 @@ void setup() {
   pinMode(redLedPin, OUTPUT);
   digitalWrite(redLedPin, red_led_status);
 
-  pinMode(synchPin, OUTPUT);
-  digitalWrite(synchPin, LOW);
+  //pinMode(synchPin, OUTPUT);
+  //digitalWrite(synchPin, LOW);
 
-  // Starting coms
-  Serial1.begin(115200);
-  Serial.begin(115200);
-  Serial2.begin(38400);
-  
-// Assign pins 10 & 11 SERCOM functionality (Serial 2)
-  pinPeripheral(10, PIO_SERCOM);
-  pinPeripheral(11, PIO_SERCOM);
+  delay(2000);
+
+  Serial.println("waiting BNO Startup");
   
   if(!bno.begin(Adafruit_BNO055::OPERATION_MODE_NDOF))
   {
@@ -151,10 +114,13 @@ void setup() {
     //while(1);
   }
 
-  while(gyr!=3)
+  gyr = 0;
+  Serial.println("waiting BNO calibration");
+  while(gyr!=3) // Waiting for gyro to be calibrated
   {
     bno.getCalibration(&sys, &gyr, &accel, &mag);
   }
+  Serial.println("BNO ready");
 
   // turning off leds
   green_led_status = 0;
@@ -175,72 +141,26 @@ void setup() {
 void loop() {
   uint8_t i, j, x;
 
-//////////////////////////////////////////////////////////////////////
-////////// reception of Pozyx correction on soft serial ////////////////
-
-  if (Serial2.available() > POZYX_PACKET_SIZE) // Number of data corresponding to the IMU packet size is waiting in the biffer of serial
-  { 
-    x = Serial2.read(); // read first data
-    //Serial.print(x);
-    if(x == POZYX_PACKET_START) // check that first data correspond to start char
-    {
-      for(i=0;i<POZYX_PACKET_SIZE;i++)
-      {
-        raw_data[i] = Serial2.read(); // Reading the IMU packet
-      }
-      //Serial.print(raw_data[GIMBAL_PACKET_SIZE-1]);
-      if(raw_data[POZYX_PACKET_SIZE-1] == POZYX_PACKET_STOP) // check taht the last data correspond to the packet end char
-      {
-        
-        if(green_led_period == 0)
-        {
-          green_led_status = 1;
-        } else if(green_led_period < 0)
-        {
-          green_led_status = 0;
-        }
-        if(green_led_counter>green_led_period)
-        {
-          green_led_status = !green_led_status;
-          green_led_counter = 0;
-        }
-        digitalWrite(greenLedPin, green_led_status);
-        green_led_counter ++;
-          
-        pozyx_correction_flag = 1;
-        for(i=0;i<8;i++) // decode YPR data
-        {
-          pozyx_data[i] = raw_data[i];
-          //if(print_data){ Serial.print(raw_data[i]); Serial.print(" "); }
-        }
-        //Serial.println(dbg);
-        //dbg = 0;
-        //Serial.println(" ");
-      }
-    }
-    //Serial.println(" ");
-  }
 
 ////////////////////////////////////////////////////////////
 ////////// reception of IMU data on serial ////////////////
-//Serial.println(Serial1.available());
+
   if (Serial1.available() > PACKET_SIZE_IMU + 8 - 1)
   { // data available
     time5 = millis();
-    start_char = Serial1.read();
+    start_char = Serial1.read(); //reading first char
     //Serial.print("IMU "); Serial.print(" ");
-    Serial.print(start_char); Serial.println(" ");
+    //Serial.print(start_char); Serial.println(" ");
+    
     if (start_char == PACKET_START_IMU) // first character is OK, we can start reading the rest of package
     {
       time2 = micros();
       dt_tmp = (time2 - time1);
       time1 = time2;
-      //Serial.println(dt_tmp);
-      
       //if(print_data){ Serial.println(" "); Serial.print(dt*1000000-10000); Serial.println(" "); }
       
       //digitalWrite(greenLedPin, HIGH);
-      Serial1.readBytes(raw_data, 4);
+      Serial1.readBytes(raw_data, 4); //reading rest of the header
 
       datalen = raw_data[3] + (raw_data[2] << 8); // Number of data to read
       //if(print_data){ Serial.print(datalen); Serial.print(" "); }
@@ -252,13 +172,15 @@ void loop() {
         Serial1.readBytes(raw_data + 4, datalen); // read the data with the length specified in the header
         Serial1.readBytes(footer, 3); // read the footer
 
+        // reading checksum in packet footer
         checkSum = footer[1] + ((uint16_t)footer[0] << 8);
+        // computing checksum from recieved data
         checkSumCalc = calcCRC(raw_data + 1, datalen + 3);
 
         if (footer[2] == PACKET_STOP_IMU && checkSum == checkSumCalc) // && raw_data[52] == 0xFF && (raw_data[53] & 0x01) == 0x01)
         { // The end char is OK and the computed checksum correspond to the one in the footer.
 
-          digitalWrite(synchPin, HIGH);
+          //digitalWrite(synchPin, HIGH);
           
           data_availability = 1;
           dbg++;
@@ -276,6 +198,7 @@ void loop() {
             quaternion[i] = buffer_float; // 180/pi
             //if(print_data){ Serial.print(quaternion[i]); Serial.print(" "); }
           }
+          // transformation of quaternion to rpy
           quat2rpy_ellipse_east(quaternion,rpy);
           rpy[1] = -rpy[1];
 
@@ -325,15 +248,16 @@ void loop() {
 ///////////////////////////////////////////////////////         
 /////////// Transmitting data to next layer ///////////
 
+        //constructing the bitmasked sanity flag
         sanity_flag = (imu_init == 1)
                     + (((device_status & DEVICE_STATUS_MASK_IMU_HEADING_NOK) == DEVICE_STATUS_MASK_IMU_HEADING_NOK) << 1 )
-                    + (((device_status & DEVICE_STATUS_MASK_IMU) == DEVICE_STATUS_MASK_IMU) << 2 )
-                    + (pozyx_correction_flag << 7); 
-        pozyx_correction_flag = 0;
-
-        // Data transmition, to the control part of the drone
+                    + (((device_status & DEVICE_STATUS_MASK_IMU) == DEVICE_STATUS_MASK_IMU) << 2 );
+                    //+ (pozyx_correction_flag << 7); 
+        //pozyx_correction_flag = 0;
 
         if(print_timing) { time3 = micros(); }
+
+        // Data transmition, to the gimbal regulation arduino
  
         if(transmit_raw){ Serial1.write(PACKET_START); } // starting byte
         
@@ -341,7 +265,7 @@ void loop() {
         for(i=0;i<3;i++)
         {
           buffer_int16 = (int16_t)(mod180(rpy[i]* RAD_TO_DEG)*32768/180);
-          if(print_data){ Serial.print(buffer_int16); Serial.write(9); }
+          if(print_data){ Serial.print(mod180(rpy[i]* RAD_TO_DEG)); Serial.write(9); }
           for(j=0;j<2;j++)
           {
             if(transmit_raw){ Serial1.write(ptr_buffer_int16[j]); }
@@ -352,7 +276,7 @@ void loop() {
         for(i=0;i<2;i++)
         {
           buffer_int16 = (int16_t)(omega[i]*32768/2000);
-          if(print_data){ Serial.print(buffer_int16); Serial.write(9); }
+          //if(print_data){ Serial.print(buffer_int16); Serial.write(9); }
           for(j=0;j<2;j++)
           {
             if(transmit_raw){ Serial1.write(ptr_buffer_int16[j]); }
@@ -361,28 +285,27 @@ void loop() {
 
         // blade rotation speed
         buffer_int16 = (int16_t)(nominal_speed_dps*32768/2000);
-        if(print_data){ Serial.print(buffer_int16); Serial.write(9); }
+        //if(print_data){ Serial.print(buffer_int16); Serial.write(9); }
         for(j=0;j<2;j++)
         {
           if(transmit_raw){ Serial1.write(ptr_buffer_int16[j]); }
         }
 
-        // transmition of Pozyx position data
+        // transmition of Pozyx position data (empty)
         for (i = 0; i < 8; i++)
         {
-          //if(print_data){ Serial.print(pozyx_data[i]); Serial.write(9); }
-          if (transmit_raw) { Serial1.write(pozyx_data[i]); }
+          if (transmit_raw) { Serial1.write(i); }
         }
 
         if(transmit_raw){ Serial1.write(sanity_flag); }
-        if(print_data){ Serial.print(sanity_flag); Serial.write(9); }
-        if(print_data){ Serial.print(device_status); Serial.write(9); }
+        //if(print_data){ Serial.print(sanity_flag); Serial.write(9); }
+        //if(print_data){ Serial.print(device_status); Serial.write(9); }
         
         if(transmit_raw){ Serial1.write(PACKET_STOP); } // ending byte
 
         if(print_data){ Serial.println(" "); }
 
-        digitalWrite(synchPin, LOW);
+        //digitalWrite(synchPin, LOW);
 
  /////////////////// Updating LEDs ///////////////////
 
@@ -422,14 +345,11 @@ void loop() {
 
         // gyro data, only gyro data on z axis will be used
         imu::Vector<3> gyro=bno.getVector(Adafruit_BNO055::VECTOR_GYROSCOPE);
-        nominal_speed_dps = BNO_corrective_gain*gyro.z()*RAD_TO_DEG;
-        integrated_yaw += nominal_speed_dps/100;
-        //Serial.println(integrated_yaw);
-          
-//////////////////////////////////////////////////////
-
-        
-        
+        nominal_speed_dps = BNO_corrective_gain*gyro.y()*RAD_TO_DEG;
+//        Serial.print(gyro.x()); Serial.write(9);
+//        Serial.print(gyro.y()); Serial.write(9);
+//        Serial.println(gyro.z()); Serial.write(9);
+   
 /////////////////////////////////////////////////////////////////////
 ///////////// Error cases ///////////////////////////////////////////
 

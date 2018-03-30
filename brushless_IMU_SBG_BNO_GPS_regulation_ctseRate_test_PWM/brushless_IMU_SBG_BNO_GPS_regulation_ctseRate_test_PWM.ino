@@ -20,7 +20,7 @@
 #define U_MAX 0.5 // max speed command of the motor
 
 // constant used to enable/disable communication, debug, timing checks
-const int8_t transmit_raw = 1;
+const int8_t transmit_raw = 0;
 const int8_t print_data = 0;
 const int8_t print_timing = 0;
 
@@ -106,8 +106,8 @@ int32_t NED_coordinates[3], NED_coordinates_offset[3];
 int16_t NED_coordinates_accuracy[3];
 int16_t NED_speed[3];
 int16_t NED_coordinates_accuracy_max;
-int16_t NED_coordinates_accuracy_max_thr1 = 300;
-int16_t NED_coordinates_accuracy_max_thr2 = 600;
+int16_t NED_coordinates_accuracy_max_thr1 = 150;
+int16_t NED_coordinates_accuracy_max_thr2 = 500;
 uint8_t gps_init = 0;
 uint8_t gps_accuracy = 0;
 
@@ -115,8 +115,8 @@ uint8_t sanity_flag;
 
 long t0,t1,t2,t3,t4,t5,t6,t_;
 
-//const int pwmSin[] = {127, 138, 149, 160, 170, 181, 191, 200, 209, 217, 224, 231, 237, 242, 246, 250, 252, 254, 254, 254, 252, 250, 246, 242, 237, 231, 224, 217, 209, 200, 191, 181, 170, 160, 149, 138, 127, 116, 105, 94, 84, 73, 64, 54, 45, 37, 30, 23, 17, 12, 8, 4, 2, 0, 0, 0, 2, 4, 8, 12, 17, 23, 30, 37, 45, 54, 64, 73, 84, 94, 105, 116 };
-const int pwmSin[] = {128, 132, 136, 140, 143, 147, 151, 155, 159, 162, 166, 170, 174, 178, 181, 185, 189, 192, 196, 200, 203, 207, 211, 214, 218, 221, 225, 228, 232, 235, 238, 239, 240, 241, 242, 243, 244, 245, 246, 247, 248, 248, 249, 250, 250, 251, 252, 252, 253, 253, 253, 254, 254, 254, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 254, 254, 254, 253, 253, 253, 252, 252, 251, 250, 250, 249, 248, 248, 247, 246, 245, 244, 243, 242, 241, 240, 239, 238, 239, 240, 241, 242, 243, 244, 245, 246, 247, 248, 248, 249, 250, 250, 251, 252, 252, 253, 253, 253, 254, 254, 254, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 254, 254, 254, 253, 253, 253, 252, 252, 251, 250, 250, 249, 248, 248, 247, 246, 245, 244, 243, 242, 241, 240, 239, 238, 235, 232, 228, 225, 221, 218, 214, 211, 207, 203, 200, 196, 192, 189, 185, 181, 178, 174, 170, 166, 162, 159, 155, 151, 147, 143, 140, 136, 132, 128, 124, 120, 116, 113, 109, 105, 101, 97, 94, 90, 86, 82, 78, 75, 71, 67, 64, 60, 56, 53, 49, 45, 42, 38, 35, 31, 28, 24, 21, 18, 17, 16, 15, 14, 13, 12, 11, 10, 9, 8, 8, 7, 6, 6, 5, 4, 4, 3, 3, 3, 2, 2, 2, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 2, 2, 2, 3, 3, 3, 4, 4, 5, 6, 6, 7, 8, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 17, 16, 15, 14, 13, 12, 11, 10, 9, 8, 8, 7, 6, 6, 5, 4, 4, 3, 3, 3, 2, 2, 2, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 2, 2, 2, 3, 3, 3, 4, 4, 5, 6, 6, 7, 8, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 21, 24, 28, 31, 35, 38, 42, 45, 49, 53, 56, 60, 64, 67, 71, 75, 78, 82, 86, 90, 94, 97, 101, 105, 109, 113, 116, 120, 124};
+const int pwmSin[] = {255, 254, 252, 250, 246, 242, 237, 231, 224, 217, 209, 200, 191, 181, 170, 160, 149, 138, 127, 116, 105, 94, 84, 73, 64, 54, 45, 37, 30, 23, 17, 12, 8, 4, 2, 0};
+//const int pwmSin[] = {128, 132, 136, 140, 143, 147, 151, 155, 159, 162, 166, 170, 174, 178, 181, 185, 189, 192, 196, 200, 203, 207, 211, 214, 218, 221, 225, 228, 232, 235, 238, 239, 240, 241, 242, 243, 244, 245, 246, 247, 248, 248, 249, 250, 250, 251, 252, 252, 253, 253, 253, 254, 254, 254, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 254, 254, 254, 253, 253, 253, 252, 252, 251, 250, 250, 249, 248, 248, 247, 246, 245, 244, 243, 242, 241, 240, 239, 238, 239, 240, 241, 242, 243, 244, 245, 246, 247, 248, 248, 249, 250, 250, 251, 252, 252, 253, 253, 253, 254, 254, 254, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 254, 254, 254, 253, 253, 253, 252, 252, 251, 250, 250, 249, 248, 248, 247, 246, 245, 244, 243, 242, 241, 240, 239, 238, 235, 232, 228, 225, 221, 218, 214, 211, 207, 203, 200, 196, 192, 189, 185, 181, 178, 174, 170, 166, 162, 159, 155, 151, 147, 143, 140, 136, 132, 128, 124, 120, 116, 113, 109, 105, 101, 97, 94, 90, 86, 82, 78, 75, 71, 67, 64, 60, 56, 53, 49, 45, 42, 38, 35, 31, 28, 24, 21, 18, 17, 16, 15, 14, 13, 12, 11, 10, 9, 8, 8, 7, 6, 6, 5, 4, 4, 3, 3, 3, 2, 2, 2, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 2, 2, 2, 3, 3, 3, 4, 4, 5, 6, 6, 7, 8, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 17, 16, 15, 14, 13, 12, 11, 10, 9, 8, 8, 7, 6, 6, 5, 4, 4, 3, 3, 3, 2, 2, 2, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 2, 2, 2, 3, 3, 3, 4, 4, 5, 6, 6, 7, 8, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 21, 24, 28, 31, 35, 38, 42, 45, 49, 53, 56, 60, 64, 67, 71, 75, 78, 82, 86, 90, 94, 97, 101, 105, 109, 113, 116, 120, 124};
 int sineArraySize;
 
 //debug
@@ -195,17 +195,58 @@ void setup() {
 
 void setMotorAngle(float angle_rd)
 {
+  float angle;
   if(current_angle_rd!=current_angle_rd_prev)
   {
     // Computes normalized angle 0->2pi for one slice
     normalized_angle = (int16_t)(fmod(angle_rd,slice_angle_rd)*angle_scale_factor);
+    angle = fmod(angle_rd,slice_angle_rd);
+
+    if(angle<slice_angle_rd/6)
+    {
+      sinAngleA = 255 - pwmSin[(int16_t)(fmod(angle,slice_angle_rd/6)*angle_scale_factor*6)];
+      sinAngleB = 255;
+      sinAngleC = 0;
+    } else if(angle<2*slice_angle_rd/6)
+    {
+      sinAngleA = 255;
+      sinAngleB = pwmSin[(int16_t)(fmod(angle,slice_angle_rd/6)*angle_scale_factor*6)];
+      sinAngleC = 0;
+    } else if(angle<3*slice_angle_rd/6)
+    {
+      sinAngleA = 255;
+      sinAngleB = 0;
+      sinAngleC = 255 - pwmSin[(int16_t)(fmod(angle,slice_angle_rd/6)*angle_scale_factor*6)];
+    } else if(angle<4*slice_angle_rd/6)
+    {
+      sinAngleA = pwmSin[(int16_t)(fmod(angle,slice_angle_rd/6)*angle_scale_factor*6)];
+      sinAngleB = 0;
+      sinAngleC = 255;
+    } else if(angle<5*slice_angle_rd/6)
+    {
+      sinAngleA = 0;
+      sinAngleB = 255 - pwmSin[(int16_t)(fmod(angle,slice_angle_rd/6)*angle_scale_factor*6)];
+      sinAngleC = 255;
+    } else
+    {
+      sinAngleA = 0;
+      sinAngleB = 255;
+      sinAngleC = pwmSin[(int16_t)(fmod(angle,slice_angle_rd/6)*angle_scale_factor*6)];
+    }
   
     // Computes sin from the normalized angles
-    sinAngleA = (uint8_t)(pwmSin[normalized_angle]*sin_amplitude);
-    sinAngleB = (uint8_t)(pwmSin[(int16_t)fmod(normalized_angle+sineArraySize/3,sineArraySize)]*sin_amplitude);
-    sinAngleC = (uint8_t)(pwmSin[(int16_t)fmod(normalized_angle+2*sineArraySize/3,sineArraySize)]*sin_amplitude);
-  
+    //sinAngleA = (uint8_t)(pwmSin[normalized_angle]*sin_amplitude);
+    //sinAngleB = (uint8_t)(pwmSin[(int16_t)fmod(normalized_angle+sineArraySize/3,sineArraySize)]*sin_amplitude);
+    //sinAngleB = 0;
+    //sinAngleC = (uint8_t)(pwmSin[(int16_t)fmod(normalized_angle+2*sineArraySize/3,sineArraySize)]*sin_amplitude);
+    //sinAngleC = 255;
+/*
+    Serial.print(sinAngleA);Serial.print(" ");
+    Serial.print(sinAngleB);Serial.print(" ");
+    Serial.print(sinAngleC);Serial.println(" ");
+  */
     // Applies sin on PWM outputs
+    
     analogWrite(IN1, sinAngleA);
     analogWrite(IN2, sinAngleB);
     analogWrite(IN3, sinAngleC);
@@ -419,7 +460,7 @@ int i,j,x,n, nSerial;
         if(print_timing) { t2 = micros(); }
   
   // Computing command
-  
+  /*
         u = 0;
         angle_error_deg = mod180(rpy[2]* rad_to_deg-yaw_ref);
 
@@ -456,8 +497,12 @@ int i,j,x,n, nSerial;
           u_integral = 0;
         }
 
-        u = constrain(u,-U_MAX,U_MAX) + nominal_speed_rps/two_pi; // adding current rotation speed to PI correction
+        u = constrain(u,-U_MAX,U_MAX) + nominal_speed_rps/two_pi; // adding current rotation speed to PI correction*/
 
+        u+=0.001;
+
+        Serial.println(u);
+        
         sin_amplitude = constrain(0.7+0.15*abs(u),0,1); // Modulation of amplitude vs rotation speed to work at quasi constant current
 
         // Transformation from rotation speed to angle increment (incrementation is done in the interuption
@@ -484,8 +529,7 @@ int i,j,x,n, nSerial;
         }
         
 ///////////////////////////////////// 
-//Serial.print(NED_coordinates_accuracy[0]);Serial.print(" ");
-//Serial.println(NED_coordinates_accuracy[1]);
+
         gps_accuracy = (uint8_t)(NED_coordinates_accuracy_max!=0) 
                      + (uint8_t)(NED_coordinates_accuracy_max < NED_coordinates_accuracy_max_thr1 && NED_coordinates_accuracy_max!=0)
                      + (uint8_t)(NED_coordinates_accuracy_max < NED_coordinates_accuracy_max_thr2 && NED_coordinates_accuracy_max!=0);

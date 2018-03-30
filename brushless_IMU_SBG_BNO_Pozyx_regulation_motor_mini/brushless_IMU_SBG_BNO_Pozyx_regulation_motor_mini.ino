@@ -19,7 +19,7 @@ const float two_pi_on_three = 2.09439510239;
 const float rad_to_deg = 57.2957795; // 180/pi
 
 ////////////////// motor related constants and variable ////////////////
-const uint8_t nb_pole = 14;
+const uint8_t nb_pole = 22;
 float slice_angle_rd, angle_scale_factor;
 int16_t normalized_angle;
 float sin_amplitude = 0.3;
@@ -43,7 +43,7 @@ uint8_t accuracy_flags,imu_init = 0;
 
 ////////////////// Pin definition for connection to ESC ////////////////
 const int EN1 = 4;   // pin enable bls
-const int IN1 = 10;    //pins des pwm
+const int IN1 = 5;    //pins des pwm
 const int IN2 = 6;   //pins des pwm
 const int IN3 = 9;   //pins des pwm
 
@@ -75,7 +75,7 @@ const uint8_t pwmSin[] = {127, 127, 127, 128, 128, 128, 130, 130, 130, 132, 132,
 int16_t sineArraySize;
  
 void setup() {
-  Serial1.begin(115200);
+//  Serial1.begin(115200);
   Serial.begin(115200);
 
 // augmentation fréquence PWM
@@ -103,14 +103,14 @@ void setup() {
   angle_scale_factor = sineArraySize/slice_angle_rd;
   Serial.println(slice_angle_rd*360/two_pi);
   current_angle_rd_prev = 5000;
-
+/*
   cli(); // Désactive l'interruption globale
-  bitClear (TCCR3A, WGM30); // WGM20 = 0
-  bitClear (TCCR3A, WGM31); // WGM21 = 0 
-  //TCCR3B = 0b00000001; // Clock / 128 soit 8 micro-s et WGM22 = 0
-  TIMSK3 = 0b00000001; // Interruption locale autorisée par TOIE3
-  //sei(); // Active l'interruption globale
-
+  bitClear (TCCR2A, WGM20); // WGM20 = 0
+  bitClear (TCCR2A, WGM21); // WGM21 = 0 
+  TCCR2B = 0b00000101; // Clock / 128 soit 8 micro-s et WGM22 = 0
+  TIMSK2 = 0b00000001; // Interruption locale autorisée par TOIE2
+  sei(); // Active l'interruption globale
+  */
   motor_speed_rps = pi/4;//two_pi;
   sin_amplitude = constrain(0.65+0.1*abs(motor_speed_rps/two_pi),0,0.9); 
   angle_step_rd = motor_speed_rps/reg_freq;
@@ -146,16 +146,14 @@ void setMotorAngle(float angle_rd)
 /////////////////////////////////////////////////////////////////////
 // Routine d'interruption
 // Just increment the desired angle
-
-ISR(TIMER3_OVF_vect) 
+/*
+ISR(TIMER2_OVF_vect) 
 {
-  TCNT3 = 65536 - 250; // 250*4us = 1ms
+  TCNT2 = 256 - 125; // 125*8us = 1ms
   // increment the desired angle from the increment computed from the command
   current_angle_rd = fmod((current_angle_rd + angle_step_rd)+two_pi,two_pi); 
-  pin_dbg_status = !pin_dbg_status;
-  digitalWrite(pin_dbg, pin_dbg_status);
 }
-
+*/
 //////////////////////////////////////////////////////////////////////
 
 // Set an angle between -180 and 180 deg
@@ -174,19 +172,19 @@ void loop() {
 int i,j,x,n;
 
   delay(1);
-  current_angle_rd = fmod((current_angle_rd + angle_step_rd)+two_pi,two_pi); 
+  current_angle_rd = fmod((current_angle_rd + angle_step_rd)+two_pi,two_pi);
   setMotorAngle(current_angle_rd); 
 
 // Applying the command if new
   //setMotorAngle(current_angle_rd);               //  une fois par ms // Question : combien de temps elle prend ? 500us
   /*
-  if (Serial1.available() > GIMBAL_PACKET_SIZE-1) // Number of data corresponding to the IMU packet size is waiting in the biffer of serial
+  if (Serial.available() > GIMBAL_PACKET_SIZE-1) // Number of data corresponding to the IMU packet size is waiting in the biffer of serial
   { 
-    x = Serial1.read(); // read first data
+    x = Serial.read(); // read first data
     //Serial.print(x); Serial.print(" ");
     if(x == PACKET_START) // check that first data correspond to start char
     {
-      Serial1.readBytes(raw_data,GIMBAL_PACKET_SIZE-1); // Reading the IMU packet
+      Serial.readBytes(raw_data,GIMBAL_PACKET_SIZE-1); // Reading the IMU packet
       
       setMotorAngle(current_angle_rd); 
       
@@ -249,7 +247,7 @@ int i,j,x,n;
 
         //Serial.print(normalized_angle);Serial.write(9);
 
-        Serial.print(-motor_speed_rps+motor_speed_rps_prev);Serial.write(9);
+        //Serial.print(-motor_speed_rps+motor_speed_rps_prev);Serial.write(9);
         motor_speed_rps_prev = motor_speed_rps;
         motor_speed_rps  = 2*pi;//+= two_pi*constrain(u,-U_MAX,U_MAX);//tps*two_pi;
 
@@ -264,7 +262,7 @@ int i,j,x,n;
         //Serial.print(current_angle_rd_prev*two_pi);Serial.write(9);
         //Serial.print(normalized_angle);Serial.write(9);
 
-        Serial.println(" ");
+        //Serial.println(" ");
         
 
         buffer_int16 = (int16_t)(-motor_speed_rps*rad_to_deg*32768/2000);
@@ -284,10 +282,10 @@ int i,j,x,n;
 ////// Transmission des data à la partie commande /////
         if(transmit_raw)
         {
-          Serial1.write(PACKET_START);
+          Serial.write(PACKET_START);
           for(i=0;i<GIMBAL_PACKET_SIZE-1;i++)
           {
-            Serial1.write(raw_data[i]);
+            Serial.write(raw_data[i]);
             setMotorAngle(current_angle_rd); 
           }
         }
@@ -299,21 +297,15 @@ int i,j,x,n;
 
 // sert à changer la fréquence du pwm 
 void setPwmFrequency(int pin) {
-  if(pin == 3) {
+  if(pin == 5 || pin == 6 || pin == 9 || pin == 10) {
+    if(pin == 5 || pin == 6) {
       TCCR0B = TCCR0B & 0b11111000 | 0x01;
+    } else {
+      TCCR1B = TCCR1B & 0b11111000 | 0x01;
     }
-  if(pin == 5) {
-    TCCR3B = TCCR3B & 0b11111000 | 0x01;
-    }
-  if(pin == 6) {
-    TCCR4B = TCCR4B & 0b11111000 | 0x01;
-   }
-    if(pin == 9) {
-    TCCR1B = TCCR1B & 0b11111000 | 0x01;
-   }
-   if(pin == 10) {
-    TCCR1A = TCCR1A & 0b11111000 | 0x01;
-   }
+  } else if(pin == 3 || pin == 11) {
+    TCCR2B = TCCR2B & 0b11111000 | 0x01;
+  }
 }
 
 

@@ -32,10 +32,10 @@ float u_proportionel = 0; // proportional part of the command, tr/s
 uint8_t sinAngleA, sinAngleB, sinAngleC; // the 3 sinusoide values for the PWMs
 
 // Pin definition for connection to ESC
-const int EN1 = 4;   // pin enable bls
-const int IN1 = 5;    //pins des pwm
-const int IN2 = 6;   //pins des pwm
-const int IN3 = 9;   //pins des pwm
+const int EN1 = 12;   // pin enable bls
+const int IN1 = 9;    //pins des pwm
+const int IN2 = 10;   //pins des pwm
+const int IN3 = 6;   //pins des pwm
 
 // interuptions gestion
 uint32_t time_counter; // counting the number of interuptions

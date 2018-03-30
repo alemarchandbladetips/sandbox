@@ -20,8 +20,8 @@ const float two_pi_on_three = 2.09439510239;
 // motor related constants and variables
 const uint8_t nb_pole = 22;
 float slice_angle_rd, angle_scale_factor;
-float normalized_angle;
-float sin_amplitude = 50;
+int16_t normalized_angle;
+float sin_amplitude = 1;
 
 // Commande variable
 volatile float angle_step_rd, current_angle_rd_prev, current_angle_rd = 0;
@@ -33,9 +33,9 @@ uint8_t sinAngleA, sinAngleB, sinAngleC; // the 3 sinusoide values for the PWMs
 
 // Pin definition for connection to ESC
 const int EN1 = 4;   // pin enable bls
-const int IN1 = 5;    //pins des pwm
-const int IN2 = 6;   //pins des pwm
-const int IN3 = 9;   //pins des pwm
+const int IN1 = 6;    //pins des pwm
+const int IN2 = 9;   //pins des pwm
+const int IN3 = 10;   //pins des pwm
 
 // interuptions gestion
 uint32_t time_counter; // counting the number of interuptions
@@ -52,6 +52,9 @@ int8_t init_;
 // Others
 float speed_step = 0.25;
 
+//const int pwmSin[] = {127, 138, 149, 160, 170, 181, 191, 200, 209, 217, 224, 231, 237, 242, 246, 250, 252, 254, 254, 254, 252, 250, 246, 242, 237, 231, 224, 217, 209, 200, 191, 181, 170, 160, 149, 138, 127, 116, 105, 94, 84, 73, 64, 54, 45, 37, 30, 23, 17, 12, 8, 4, 2, 0, 0, 0, 2, 4, 8, 12, 17, 23, 30, 37, 45, 54, 64, 73, 84, 94, 105, 116 };
+const int pwmSin[] = {128, 132, 136, 140, 143, 147, 151, 155, 159, 162, 166, 170, 174, 178, 181, 185, 189, 192, 196, 200, 203, 207, 211, 214, 218, 221, 225, 228, 232, 235, 238, 239, 240, 241, 242, 243, 244, 245, 246, 247, 248, 248, 249, 250, 250, 251, 252, 252, 253, 253, 253, 254, 254, 254, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 254, 254, 254, 253, 253, 253, 252, 252, 251, 250, 250, 249, 248, 248, 247, 246, 245, 244, 243, 242, 241, 240, 239, 238, 239, 240, 241, 242, 243, 244, 245, 246, 247, 248, 248, 249, 250, 250, 251, 252, 252, 253, 253, 253, 254, 254, 254, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 254, 254, 254, 253, 253, 253, 252, 252, 251, 250, 250, 249, 248, 248, 247, 246, 245, 244, 243, 242, 241, 240, 239, 238, 235, 232, 228, 225, 221, 218, 214, 211, 207, 203, 200, 196, 192, 189, 185, 181, 178, 174, 170, 166, 162, 159, 155, 151, 147, 143, 140, 136, 132, 128, 124, 120, 116, 113, 109, 105, 101, 97, 94, 90, 86, 82, 78, 75, 71, 67, 64, 60, 56, 53, 49, 45, 42, 38, 35, 31, 28, 24, 21, 18, 17, 16, 15, 14, 13, 12, 11, 10, 9, 8, 8, 7, 6, 6, 5, 4, 4, 3, 3, 3, 2, 2, 2, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 2, 2, 2, 3, 3, 3, 4, 4, 5, 6, 6, 7, 8, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 17, 16, 15, 14, 13, 12, 11, 10, 9, 8, 8, 7, 6, 6, 5, 4, 4, 3, 3, 3, 2, 2, 2, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 2, 2, 2, 3, 3, 3, 4, 4, 5, 6, 6, 7, 8, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 21, 24, 28, 31, 35, 38, 42, 45, 49, 53, 56, 60, 64, 67, 71, 75, 78, 82, 86, 90, 94, 97, 101, 105, 109, 113, 116, 120, 124};
+int sineArraySize;
  
 void setup() {
   Serial.begin(115200);
@@ -72,47 +75,51 @@ void setup() {
 
 // Pre-computation of variables for 
   slice_angle_rd = 2*pi/(nb_pole/2.0);
-  angle_scale_factor = 2*pi/slice_angle_rd;
+  angle_scale_factor = sineArraySize/slice_angle_rd;
   Serial.println(slice_angle_rd*360/two_pi);
+  current_angle_rd_prev = 5000;
+  speed_step = 0.1;
+  u = 0;
 
   u = 0.0;
   sin_amplitude = 125;
   init_ = 0;
+  
   cli(); // Désactive l'interruption globale
-  bitClear (TCCR2A, WGM20); // WGM20 = 0
-  bitClear (TCCR2A, WGM21); // WGM21 = 0 
-  TCCR2B = 0b00000101; // Clock / 128 soit 8 micro-s et WGM22 = 0
-  TIMSK2 = 0b00000001; // Interruption locale autorisée par TOIE2
+  //bitClear (TCCR3A, WGM30); // WGM20 = 0
+  //bitClear (TCCR3A, WGM31); // WGM21 = 0 
+  TCCR3B = 0b00000001; // Clock / 128 soit 8 micro-s et WGM22 = 0
+  //TIMSK3 = 0b00000001; // Interruption locale autorisée par TOIE3
   sei(); // Active l'interruption globale
 }
 //////////////////////////////////////////////////////////////////////////////
+
 
 void setMotorAngle(float angle_rd)
 {
   if(current_angle_rd!=current_angle_rd_prev)
   {
     // Computes normalized angle 0->2pi for one slice
-    normalized_angle = fmod(angle_rd,slice_angle_rd)*angle_scale_factor;
+    normalized_angle = (int16_t)(fmod(angle_rd,slice_angle_rd)*angle_scale_factor);
   
     // Computes sin from the normalized angles
-    sinAngleA = round(sin(normalized_angle)*sin_amplitude+127.0);
-    sinAngleB = round(sin(normalized_angle+two_pi_on_three)*sin_amplitude+127.0);
-    sinAngleC = round(sin(normalized_angle+four_pi_on_three)*sin_amplitude+127.0);
+    sinAngleA = (uint8_t)(pwmSin[normalized_angle]*sin_amplitude);
+    sinAngleB = (uint8_t)(pwmSin[(int16_t)fmod(normalized_angle+sineArraySize/3,sineArraySize)]*sin_amplitude);
+    sinAngleC = (uint8_t)(pwmSin[(int16_t)fmod(normalized_angle+2*sineArraySize/3,sineArraySize)]*sin_amplitude);
   
     // Applies sin on PWM outputs
     analogWrite(IN1, sinAngleA);
     analogWrite(IN2, sinAngleB);
     analogWrite(IN3, sinAngleC);
-    
     current_angle_rd_prev = current_angle_rd;
   }
 }
 
 /////////////////////////////////////////////////////////////////////
 // Routine d'interruption
-ISR(TIMER2_OVF_vect) 
+ISR(TIMER3_OVF_vect) 
 {
-  TCNT2 = 256 - 125; // 125*8us = 1ms
+  TCNT3 = 256 - 125; // 125*8us = 1ms
   interupt_happened = 1; // interuption flag to trigger computation in main loop
   current_angle_rd = fmod((current_angle_rd + angle_step_rd),two_pi); // increment the desired angle
   time_counter++; // counter in ms (replace the micros())
@@ -123,61 +130,26 @@ ISR(TIMER2_OVF_vect)
  
 void loop() {
 int i,j,x;
-
-// Applying the command if new
-  
-    //Serial.println(current_angle_rd);
-    setMotorAngle(current_angle_rd);
-
-// This generates a speed profile that increments fro speed step every second.
-  if(time_counter > 5000 )
-  {
-    interupt_happened = interupt_happened != 0 ? 0 : 100;
-    time_counter = 0;
-    
-    if(u >= 1.5)
-    {
-      init_ = 0;
-      //speed_step = -0.0;
-    }
-    if (init_ == 1)
-    {
-      speed_step = -speed_step;
-    }
-    if(u <= 0)
-    {
-      speed_step = 0.25;
-    }
-    u+=speed_step;
- 
-    u = constrain(u,-U_MAX,U_MAX);
-    sin_amplitude = constrain(10,SIN_APMLITUDE_MIN,SIN_APMLITUDE_MAX);
-  }
-
-  u = constrain(u,-U_MAX,U_MAX);
-  
-  
-  //u = 0;
-  sin_amplitude = constrain(40+40*abs(u),SIN_APMLITUDE_MIN,SIN_APMLITUDE_MAX);
-  motor_speed_rps = two_pi*u; // conversion from tr/s to rps
-  Serial.print(sin_amplitude); Serial.print(" ");
-  Serial.println(u);
-  angle_step_rd = motor_speed_rps/1000;
   
 }
 
 // sert à changer la fréquence du pwm 
-
 void setPwmFrequency(int pin) {
-  if(pin == 5 || pin == 6 || pin == 9 || pin == 10) {
-    if(pin == 5 || pin == 6) {
+  if(pin == 3) {
       TCCR0B = TCCR0B & 0b11111000 | 0x01;
-    } else {
-      TCCR1B = TCCR1B & 0b11111000 | 0x01;
     }
-  }
-  else if(pin == 3 || pin == 11) {
-    TCCR2B = TCCR2B & 0b11111000 | 0x01;
-  }
+  if(pin == 5) {
+    TCCR3B = TCCR3B & 0b11111000 | 0x01;
+    }
+  if(pin == 6) {
+    TCCR4B = TCCR4B & 0b11111000 | 0x01;
+   }
+    if(pin == 9) {
+    TCCR1B = TCCR1B & 0b11111000 | 0x01;
+   }
+   if(pin == 10) {
+    TCCR1A = TCCR1A & 0b11111000 | 0x01;
+   }
 }
+
 

@@ -21,7 +21,7 @@
 #define U_MAX 0.5 // max speed command of the motor
 
 // constant used to enable/disable communication, debug, timing checks
-const int8_t transmit_raw = 0;
+const int8_t transmit_raw = 1;
 const int8_t print_data = 0;
 const int8_t print_timing = 0;
 

@@ -1,6 +1,7 @@
 #include "math.h"
 
 #define GIMBAL_PACKET_SIZE 23 // number of bytes to be recieved from 
+#define GIMBAL_PACKET_SIZE_TRANSMIT 32 // number of bytes to transmit
 #define PACKET_START 0xAA // starting char of package
 #define PACKET_STOP 0x55 // starting char of package
 
@@ -79,6 +80,8 @@ const uint8_t pwmSin[] = {127, 127, 127, 128, 128, 128, 130, 130, 130, 132, 132,
 int16_t sineArraySize;
  
 void setup() {
+  int8_t i;
+  
   Serial1.begin(115200);
   Serial.begin(115200);
 
@@ -122,6 +125,12 @@ void setup() {
 
   interupt_happened = 0;
   t0 = micros();
+
+  for(i=0;i<GIMBAL_PACKET_SIZE_TRANSMIT-1;i++)
+  {
+    raw_data[i] = 0;
+  }
+  
 }
 //////////////////////////////////////////////////////////////////////////////
 
@@ -257,7 +266,7 @@ int i,j,x,n;
         //Serial.print(-motor_speed_rps+motor_speed_rps_prev);Serial.write(9);
         motor_speed_rps += two_pi*constrain(u,-U_MAX,U_MAX);
 
-        sin_amplitude = constrain(0.3+0.15*abs(motor_speed_rps/two_pi),0,1); 
+        sin_amplitude = constrain(0.5+0.15*abs(motor_speed_rps/two_pi),0,1); 
         angle_step_rd = motor_speed_rps/reg_freq;
 
         //Serial.print(sin_amplitude);Serial.write(9);
@@ -287,7 +296,7 @@ int i,j,x,n;
         if(transmit_raw)
         {
           Serial1.write(PACKET_START);
-          for(i=0;i<GIMBAL_PACKET_SIZE-1;i++)
+          for(i=0;i<GIMBAL_PACKET_SIZE_TRANSMIT-1;i++)
           {
             Serial1.write(raw_data[i]);
             setMotorAngle(current_angle_rd); 

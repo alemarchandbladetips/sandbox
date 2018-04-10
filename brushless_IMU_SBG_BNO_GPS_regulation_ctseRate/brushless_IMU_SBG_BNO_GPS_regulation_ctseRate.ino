@@ -4,6 +4,7 @@
 // 0xAA, Yaw (Float, 4bytes), Pitch (Float, 4bytes), Roll (Float, 4bytes), 
 // Omegax (Float, 4bytes), Omegay (Float, 4bytes), Omegaz (Float, 4bytes), 0x55
 // = 26 bytes
+// Max speed 4,3 tours/s
 
 #include <Adafruit_Sensor.h>
 #include <Adafruit_BNO055.h>
@@ -20,7 +21,7 @@
 #define U_MAX 0.5 // max speed command of the motor
 
 // constant used to enable/disable communication, debug, timing checks
-const int8_t transmit_raw = 1;
+const int8_t transmit_raw = 0;
 const int8_t print_data = 0;
 const int8_t print_timing = 0;
 

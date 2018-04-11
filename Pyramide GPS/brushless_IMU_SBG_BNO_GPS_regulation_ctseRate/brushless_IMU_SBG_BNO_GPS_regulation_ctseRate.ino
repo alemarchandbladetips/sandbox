@@ -4,6 +4,7 @@
 // 0xAA, Yaw (Float, 4bytes), Pitch (Float, 4bytes), Roll (Float, 4bytes), 
 // Omegax (Float, 4bytes), Omegay (Float, 4bytes), Omegaz (Float, 4bytes), 0x55
 // = 26 bytes
+// Max speed 4,3 tours/s
 
 #include <Adafruit_Sensor.h>
 #include <Adafruit_BNO055.h>
@@ -31,7 +32,7 @@ const float four_pi_on_three = 4.18879020479;
 const float two_pi_on_three = 2.09439510239;
 const float rad_to_deg = 57.2957795; // 180/pi
 
-// motor related constants and variable
+// motor related constants and variable 
 const uint8_t nb_pole = 22;
 float slice_angle_rd, angle_scale_factor;
 int16_t normalized_angle;
@@ -106,8 +107,8 @@ int32_t NED_coordinates[3], NED_coordinates_offset[3];
 int16_t NED_coordinates_accuracy[3];
 int16_t NED_speed[3];
 int16_t NED_coordinates_accuracy_max;
-int16_t NED_coordinates_accuracy_max_thr1 = 150;
-int16_t NED_coordinates_accuracy_max_thr2 = 500;
+int16_t NED_coordinates_accuracy_max_thr1 = 300;
+int16_t NED_coordinates_accuracy_max_thr2 = 600;
 uint8_t gps_init = 0;
 uint8_t gps_accuracy = 0;
 
@@ -187,6 +188,7 @@ void setup() {
 
   digitalWrite(ledy_pin, LOW);
   ledy_status = 0;
+  u = 0;
 }
 //////////////////////////////////////////////////////////////////////////////
 
@@ -418,6 +420,7 @@ int i,j,x,n, nSerial;
         if(print_timing) { t2 = micros(); }
   
   // Computing command
+  
         u = 0;
         angle_error_deg = mod180(rpy[2]* rad_to_deg-yaw_ref);
 
@@ -455,8 +458,8 @@ int i,j,x,n, nSerial;
         }
 
         u = constrain(u,-U_MAX,U_MAX) + nominal_speed_rps/two_pi; // adding current rotation speed to PI correction
-        
-        sin_amplitude = constrain(0.4+0.1*abs(u),0,1); // Modulation of amplitude vs rotation speed to work at quasi constant current
+
+        sin_amplitude = constrain(0.7+0.15*abs(u),0,1); // Modulation of amplitude vs rotation speed to work at quasi constant current
 
         // Transformation from rotation speed to angle increment (incrementation is done in the interuption
         motor_speed_rps = two_pi*u;//tps*two_pi;
@@ -482,7 +485,8 @@ int i,j,x,n, nSerial;
         }
         
 ///////////////////////////////////// 
-
+//Serial.print(NED_coordinates_accuracy[0]);Serial.print(" ");
+//Serial.println(NED_coordinates_accuracy[1]);
         gps_accuracy = (uint8_t)(NED_coordinates_accuracy_max!=0) 
                      + (uint8_t)(NED_coordinates_accuracy_max < NED_coordinates_accuracy_max_thr1 && NED_coordinates_accuracy_max!=0)
                      + (uint8_t)(NED_coordinates_accuracy_max < NED_coordinates_accuracy_max_thr2 && NED_coordinates_accuracy_max!=0);

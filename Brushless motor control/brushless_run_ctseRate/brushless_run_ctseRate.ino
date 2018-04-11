@@ -1,6 +1,6 @@
 // run a brushless motor, using interuption at constant rate
 
-#define U_MAX 2 // max speed command of the motor
+#define U_MAX 10 // max speed command of the motor
 #define SIN_APMLITUDE_MAX 125 // max amplitude of sinus (around a 127 offset)
 #define SIN_APMLITUDE_MIN 60 // max amplitude of sinus (around a 127 offset)
 #define GIMBAL_PACKET_SIZE 33 // number of bytes to be recieved from 
@@ -32,10 +32,10 @@ float u_proportionel = 0; // proportional part of the command, tr/s
 uint8_t sinAngleA, sinAngleB, sinAngleC; // the 3 sinusoide values for the PWMs
 
 // Pin definition for connection to ESC
-const int EN1 = 12;   // pin enable bls
-const int IN1 = 9;    //pins des pwm
-const int IN2 = 10;   //pins des pwm
-const int IN3 = 6;   //pins des pwm
+const int EN1 = 4;   // pin enable bls
+const int IN1 = 5;    //pins des pwm
+const int IN2 = 6;   //pins des pwm
+const int IN3 = 9;   //pins des pwm
 
 // interuptions gestion
 uint32_t time_counter; // counting the number of interuptions
@@ -47,10 +47,10 @@ uint8_t raw_data[100];
 float buffer_float;
 unsigned char *ptr_buffer = (unsigned char *)&buffer_float;
 
-
+int8_t init_;
 
 // Others
-float speed_step = 0.05;
+float speed_step = 0.25;
 
  
 void setup() {
@@ -77,6 +77,7 @@ void setup() {
 
   u = 0.0;
   sin_amplitude = 125;
+  init_ = 0;
   cli(); // Désactive l'interruption globale
   bitClear (TCCR2A, WGM20); // WGM20 = 0
   bitClear (TCCR2A, WGM21); // WGM21 = 0 
@@ -129,18 +130,23 @@ int i,j,x;
     setMotorAngle(current_angle_rd);
 
 // This generates a speed profile that increments fro speed step every second.
-  if(time_counter > 1000 )
+  if(time_counter > 5000 )
   {
     interupt_happened = interupt_happened != 0 ? 0 : 100;
     time_counter = 0;
     
-    if(u == 1.5)
+    if(u >= 1.5)
     {
-      speed_step = 0.0;
+      init_ = 0;
+      //speed_step = -0.0;
+    }
+    if (init_ == 1)
+    {
+      speed_step = -speed_step;
     }
     if(u <= 0)
     {
-      speed_step = 0.05;
+      speed_step = 0.25;
     }
     u+=speed_step;
  
@@ -150,10 +156,12 @@ int i,j,x;
 
   u = constrain(u,-U_MAX,U_MAX);
   
-  //u = 0;
-  sin_amplitude = constrain(40+20*abs(u),SIN_APMLITUDE_MIN,SIN_APMLITUDE_MAX);
-  motor_speed_rps = two_pi*u; // conversion from tr/s to rps
   
+  //u = 0;
+  sin_amplitude = constrain(40+40*abs(u),SIN_APMLITUDE_MIN,SIN_APMLITUDE_MAX);
+  motor_speed_rps = two_pi*u; // conversion from tr/s to rps
+  Serial.print(sin_amplitude); Serial.print(" ");
+  Serial.println(u);
   angle_step_rd = motor_speed_rps/1000;
   
 }

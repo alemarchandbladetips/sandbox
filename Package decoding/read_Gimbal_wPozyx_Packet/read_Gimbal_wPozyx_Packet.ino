@@ -1,14 +1,11 @@
 
-#define GIMBAL_PACKET_SIZE 33 // number of bytes to be recieved from 
+#define GIMBAL_PACKET_SIZE 23 // number of bytes to be recieved from 
 #define PACKET_START 0xAA // starting char of package
 #define PACKET_STOP 0x55 // starting char of package
 
-// constant used to choose printed data
-const int8_t print_rpy = 0;
-const int8_t print_rpy_p = 0;
-const int8_t print_NED = 1;
-const int8_t print_NED_speed = 1;
-const int8_t print_flag = 1;
+// constant used to enable/disable communication, debug, timing checks
+const int8_t transmit_raw = 0;
+const int8_t print_data = 1;
 
 const float pi = 3.14159265359;
 
@@ -16,9 +13,7 @@ const float pi = 3.14159265359;
 float all_data[8];
 float rpy[3];
 float rpy_p[3];
-int32_t NED_coordinates[3];
-float NED_coordinates_flt[3];
-int16_t NED_speed[3];
+uint8_t pozyx_data[4];
 uint8_t sanity_flag;
 
 uint8_t raw_data[100];
@@ -64,40 +59,24 @@ int i,j,x;
           if(i<3)
           { // roll, pitch, tips0 angle
             rpy[i] = (float)buffer_int16*180.0/32768.0;
-            if(print_rpy){ Serial.print(rpy[i]); Serial.write(9); }
+            //if(print_data){ Serial.print(rpy[i]); Serial.write(9); }
           } else
           { // derivatives of roll, pitch, tips0 angle
             rpy_p[i-3] = (float)buffer_int16*2000.0/32768.0;
-            if(i<5)
-            {
-            if(print_rpy_p){ Serial.print(rpy_p[i-3]); Serial.write(9);}
-            }
+            if(print_data){ Serial.print(rpy_p[i-3]); Serial.write(9); }
           }
         }
          /// GPS DATA
-        for (i = 0; i < 3; i++)
+        for (i = 0; i < 8; i++)
         {
-          for (j = 0; j < 4; j++)
-          {
-            ptr_buffer_int32[j] = raw_data[4*i+j+12];
-          }
-          NED_coordinates[i] = buffer_int32;
-          NED_coordinates_flt[i] = (float)NED_coordinates[i]/100.0;
-          if(print_NED){ Serial.print(NED_coordinates_flt[i]); Serial.write(9);}
+          pozyx_data[i] = raw_data[i+12];
+          //if(print_data){ Serial.print(pozyx_data[i]); Serial.print(" "); }
         }
-        for (i = 0; i < 3; i++)
-        {
-          for (j = 0; j < 2; j++)
-          {
-            ptr_buffer_int16[j] = raw_data[2*i+j+24];
-          }
-          NED_speed[i] = buffer_int16;
-          if(print_NED_speed){ Serial.print(NED_speed[i]); Serial.write(9);}
-        }
-
-        sanity_flag = raw_data[30];
-        if(print_flag){ Serial.print(sanity_flag); Serial.write(9);}
-        Serial.println(" ");
+        
+        sanity_flag = raw_data[20];
+        //if(print_data){ Serial.print(sanity_flag); Serial.print(" "); }
+        
+        if(print_data){ Serial.println(" "); }
       }
     }
   }

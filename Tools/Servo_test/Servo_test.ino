@@ -38,11 +38,11 @@ void setup(void)
 
 void loop(void)
 {
- /*myservo_min.writeMicroseconds(450);
+ myservo_min.writeMicroseconds(450);
  delay(1000);
  myservo_min.writeMicroseconds(800);
- delay(1000);*/
+ delay(1000);
  myservo_min.writeMicroseconds(1085);
- //delay(1000);
+ delay(1000);
 }
 

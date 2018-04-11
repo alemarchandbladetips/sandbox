@@ -32,7 +32,7 @@ const float four_pi_on_three = 4.18879020479;
 const float two_pi_on_three = 2.09439510239;
 const float rad_to_deg = 57.2957795; // 180/pi
 
-// motor related constants and variable
+// motor related constants and variable 
 const uint8_t nb_pole = 22;
 float slice_angle_rd, angle_scale_factor;
 int16_t normalized_angle;

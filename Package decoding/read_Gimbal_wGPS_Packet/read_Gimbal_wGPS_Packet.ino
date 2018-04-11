@@ -1,3 +1,5 @@
+// 
+
 
 #define GIMBAL_PACKET_SIZE 33 // number of bytes to be recieved from 
 #define PACKET_START 0xAA // starting char of package
@@ -68,7 +70,7 @@ int i,j,x;
           } else
           { // derivatives of roll, pitch, tips0 angle
             rpy_p[i-3] = (float)buffer_int16*2000.0/32768.0;
-            if(i<5)
+            //if(i<5)
             {
             if(print_rpy_p){ Serial.print(rpy_p[i-3]); Serial.write(9);}
             }

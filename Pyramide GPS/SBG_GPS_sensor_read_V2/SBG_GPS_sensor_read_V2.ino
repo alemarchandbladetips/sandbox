@@ -1,6 +1,13 @@
+// Read and treat and concatenate IMU and GPS package before retransmission.
+// A package is transmitted each time we recieve a IMU package, last available GPS data is transmitted.
+// Taget : Arduino UNO on the top of the "Big pyramide" for the V2 version (led connected on pin 5 and 6, pin 7 used as ground)
+// Treatments: reduction of header and footer, Conversion to fxp
+
+// Output Package 40 bytes
+// 0xAA | int16 SBG_gyr[3]*1000/32768 dps | int16 SBG_quaternion[4]/32768 | int8 SBG_accuracy
+// int32 NED_coordinates[3] cm | int16 NED_accuracy[3]*100 cm | int16 NED_speed[3]*100 cm | 0x55
+
 #include <NeoSWSerial.h>
-
-
 
 #define RAD_TO_DEG 57.2957795 // 180/pi
 

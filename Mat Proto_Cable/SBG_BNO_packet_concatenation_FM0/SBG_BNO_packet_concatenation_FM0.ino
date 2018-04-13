@@ -1,3 +1,4 @@
+
 #include <Arduino.h>   // required before wiring_private.h
 #include <Adafruit_Sensor.h>
 #include <Adafruit_BNO055.h>
@@ -389,7 +390,7 @@ void quat2rpy_ellipse_east(float q[4], float rpy[3]) //
   rpy[2] = atan2(2*q[1]*q[2] + 2*q[3]*q[0], 1 - 2*q[1]*q[1] - 2*q[3]*q[3]);
 }
 
-void quat2rpy_ellipse(float q[4], float rpy[3]) // 
+void quat2rpy_ellipse_north(float q[4], float rpy[3]) // 
 {
   rpy[0] = -atan2(2*q[2]*q[3] - 2*q[1]*q[0], 1 - 2*q[1]*q[1] - 2*q[2]*q[2]);
   rpy[1] = asin(2*q[1]*q[3] + 2*q[2]*q[0]);

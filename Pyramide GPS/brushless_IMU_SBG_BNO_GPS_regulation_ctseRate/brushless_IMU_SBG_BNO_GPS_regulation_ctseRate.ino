@@ -1,9 +1,24 @@
-// Control of a brushless motor ensuring the yaw of IMU BNO055 sticks to 0, using interuption at constant rate
+// Gimbal control for the "Big pyramide" with SBG, BNO, and GPS. Brushless motor has 22 poles controlled by the Drotek ESC.
+// Target board : arduino pro-mini.
 
-// It transmits data via Tx in the following form:
-// 0xAA, Yaw (Float, 4bytes), Pitch (Float, 4bytes), Roll (Float, 4bytes), 
-// Omegax (Float, 4bytes), Omegay (Float, 4bytes), Omegaz (Float, 4bytes), 0x55
-// = 26 bytes
+// 1 - Reception and treatment of the packet from the UNO (connected to SBG IMU and to the promicro that reads GPS data) of the top of pyramide 
+// 2 - Computation of the PI command to the Gimbal motor (speed)
+// 3 - Set ref of Yaw, and GPS (set to 0 once a certain accuracy level is reached)
+// 4 - Transmission of data to the control part of the drone
+// 5 - readings of the BNO gyro data
+
+// The increment of the targeted angle from the speed target is done in the 1kHz interruption.
+// The setMotorAngle function is call all along the execution of the program, if the target angle has changed the new target will be applied if not nothing is done.
+
+// Input Package 40 bytes
+// 0xAA | int16 SBG_gyr[3]*1000/32768 dps | int16 SBG_quaternion[4]/32768 | int8 SBG_accuracy
+// int32 NED_coordinates[3] cm | int16 NED_accuracy[3]*100 cm | int16 NED_speed[3]*100 cm | 0x55
+
+// Output Package 33 bytes
+// 0xAA |int16 Roll*32768/180 deg | int16 Pitch*32768/180 deg | int16 Yaw*32768/180 deg | 
+// int16 OmegaX*32768/2000 dps) | int16 OmegaY*32768/2000 dps | int16 OmegaZ*32768/2000 dps | 
+// int32 NED_coordinates[3] cm | int16 NED_speed[3]*100 cm | int8_t sanity_flag | 0x55
+
 // Max speed 4,3 tours/s
 
 #include <Adafruit_Sensor.h>
@@ -13,10 +28,6 @@
 #define IUM_PACKET_SIZE 40 // number of bytes to be recieved from IMU not counting starting char + gyr 3*2 + quat 4*2 + accuracy 1 + stop char 1
 #define PACKET_START 0xAA // starting char of package
 #define PACKET_STOP 0x55 // starting char of package
-
-#define POZYX_PACKET_SIZE 5 // number of bytes to be recieved from 
-#define POZYX_PACKET_START 137 // starting char of package
-#define POZYX_PACKET_STOP 173 // starting char of package
 
 #define U_MAX 0.5 // max speed command of the motor
 
@@ -306,11 +317,15 @@ int i,j,x,n, nSerial;
     setMotorAngle(current_angle_rd); 
   }
 */
+
+////////////////////////////////////////////////////////////////////////////
+/////////////////////////// Reception of data //////////////////////////////
+
   nSerial = Serial.available();
   if ( nSerial > IUM_PACKET_SIZE) // Number of data corresponding to the IMU packet size is waiting in the biffer of serial
   { 
     //Serial.println(time_counter2);
-/////////////////////// Lecture des données du port série venant de l'arduino "du BNO du haut"
+/////////////////////// Lecture des données du port série venant de l'arduino "du haut"
     if(print_timing) { t0 = micros(); }
 
     t_ = t0;
@@ -414,8 +429,8 @@ int i,j,x,n, nSerial;
 
         setMotorAngle(current_angle_rd); 
         
-        
-///////////////////////////////////// Calcul de la commande
+////////////////////////////////////////////////////////////////////////////////
+/////////////////////////// Calcul de la commande //////////////////////////////
 
         if(print_timing) { t2 = micros(); }
   

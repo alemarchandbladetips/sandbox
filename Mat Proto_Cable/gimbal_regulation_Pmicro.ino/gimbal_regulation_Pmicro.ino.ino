@@ -1,7 +1,7 @@
 #include "math.h"
 
 #define GIMBAL_PACKET_SIZE 23 // number of bytes to be recieved from 
-#define GIMBAL_PACKET_SIZE_TRANSMIT 32 // number of bytes to transmit
+#define GIMBAL_PACKET_SIZE_TRANSMIT 33 // number of bytes to transmit
 #define PACKET_START 0xAA // starting char of package
 #define PACKET_STOP 0x55 // starting char of package
 
@@ -296,7 +296,7 @@ int i,j,x,n;
         if(transmit_raw)
         {
           Serial1.write(PACKET_START);
-          for(i=0;i<GIMBAL_PACKET_SIZE_TRANSMIT-1;i++)
+          for(i=0;i<GIMBAL_PACKET_SIZE_TRANSMIT-2;i++)
           {
             Serial1.write(raw_data[i]);
             setMotorAngle(current_angle_rd); 

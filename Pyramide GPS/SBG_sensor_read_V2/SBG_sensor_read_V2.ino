@@ -1,3 +1,10 @@
+// Read and treat IMU package before retransmission.
+// Taget : Arduino UNO on the top of the "Big pyramide" for the V2 version (led connected on pin 12 and 13)
+// Treatments: reduction of header and footer, Conversion to fxp
+
+// Output Package 40 bytes
+// 0xAA | int16 SBG_gyr[3]*1000/32768 dps | int16 SBG_quaternion[4]/32768 | int8 SBG_accuracy | 0x55
+
 #include "MemoryFree.h"
 
 #define RAD_TO_DEG 57.2957795 // 180/pi
@@ -19,7 +26,6 @@ unsigned char *ptr_buffer_int16 = (unsigned char *)&buffer_int16;
 
 int redLedPin = 13;
 int greenLedPin = 12;
-//int gndLedPin = 7;
 
 int red_led_blink = 0;
 int red_led_blink_counter = 0;

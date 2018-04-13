@@ -1,7 +1,5 @@
 #include <SoftwareSerial.h>
 
-#include <Adafruit_Sensor.h>
-#include <Adafruit_BNO055.h>
 #include "math.h"
 
 #define PACKET_START 0xAA // starting char of package
@@ -33,11 +31,6 @@ int32_t NED_speed[3];
 uint32_t NED_speed_accuracy;
 float NED_acc[3];
 uint8_t gps_flag, diffSoln, carrSoln, carrSoln_prev, relPosValid, gpsSanity = 0;
-
-// for BNO
-Adafruit_BNO055 bno = Adafruit_BNO055();
-uint8_t sys, gyr, accel, mag = 0;
-float quaternion[4], proper_acc[3];
 
 uint32_t last_time,time_since_last, t0;
 uint32_t time_period_us = 10000;

@@ -347,6 +347,7 @@ void loop() {
         // gyro data, only gyro data on z axis will be used
         imu::Vector<3> gyro=bno.getVector(Adafruit_BNO055::VECTOR_GYROSCOPE);
         nominal_speed_dps = BNO_corrective_gain*gyro.y()*RAD_TO_DEG;
+        //Serial.println(nominal_speed_dps);
 //        Serial.print(gyro.x()); Serial.write(9);
 //        Serial.print(gyro.y()); Serial.write(9);
 //        Serial.println(gyro.z()); Serial.write(9);

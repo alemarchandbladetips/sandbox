@@ -1,4 +1,8 @@
-// run a brushless motor, using interuption at constant rate
+// Asservissment of the motor for the rotating cable work on 2 proto (big and big cabled)
+// It recieve the packet from IMU stabilization arduino (same packet recieved by command part)
+// The program read the current yaw of the drone and apply it on the buttom motor
+// the regulation is at 100Hz (driven by the reception of packet.
+// Target board is Arduino pro-micro.
 
 #define U_MAX 10 // max speed command of the motor
 #define SIN_APMLITUDE_MAX 125 // max amplitude of sinus (around a 127 offset)
@@ -12,7 +16,7 @@ const int8_t transmit_raw = 0;
 const int8_t print_data = 1;
 // constant used to choose printed data
 const int8_t print_rpy = 1;
-const int8_t print_rpy_p = 1;
+const int8_t print_rpy_p = 0;
 
 // definition of some constants to ease computations
 const float pi = 3.14159265359;
@@ -30,7 +34,7 @@ float sin_amplitude = 1;
 // Commande variable
 volatile float angle_step_rd, current_angle_rd_prev, current_angle_rd = 0;
 float motor_speed_rps = 0; // desired speed of the motor, rps
-float u=0;            // Command, tr/s
+float u,u_prev=0;            // Command, tr/s
 float u_integral = 0; // integral part of the command, tr/s
 float u_proportionel = 0; // proportional part of the command, tr/s
 uint8_t sinAngleA, sinAngleB, sinAngleC; // the 3 sinusoide values for the PWMs
@@ -87,7 +91,7 @@ void setup() {
   pinMode(EN1, OUTPUT); 
   digitalWrite(EN1, HIGH);
 
-// Pre-computation of variables for 
+// Pre-computation of variables for motor command
   sineArraySize = sizeof(pwmSin)/sizeof(uint8_t); 
   slice_angle_rd = 2*pi/(nb_pole/2.0);
   angle_scale_factor = sineArraySize/slice_angle_rd;
@@ -99,14 +103,6 @@ void setup() {
   u = 0.0;
   sin_amplitude = 125;
   init_ = 0;
-  
-  cli(); // Désactive l'interruption globale
-  //bitClear (TCCR3A, WGM30); // WGM20 = 0
-  //bitClear (TCCR3A, WGM31); // WGM21 = 0 
-  TCCR3B = 0b00000100; // Clock / 128 soit 8 micro-s et WGM22 = 0
-  TCCR3A = 0b00000100; // Clock / 128 soit 8 micro-s et WGM22 = 0
-  TIMSK3 = 0b00000001; // Interruption locale autorisée par TOIE3
-  sei(); // Active l'interruption globale
 
   t0 = micros();
 }
@@ -118,7 +114,7 @@ void setMotorAngle(float angle_rd)
   if(current_angle_rd!=current_angle_rd_prev)
   {
     // Computes normalized angle 0->2pi for one slice
-    normalized_angle = (int16_t)(fmod(angle_rd,slice_angle_rd)*angle_scale_factor);
+    normalized_angle = (int16_t)(fmod(angle_rd+2*nb_pole*slice_angle_rd,slice_angle_rd)*angle_scale_factor);
   
     // Computes sin from the normalized angles
     sinAngleA = (uint8_t)(pwmSin[normalized_angle]*sin_amplitude);
@@ -133,17 +129,6 @@ void setMotorAngle(float angle_rd)
   }
 }
 
-/////////////////////////////////////////////////////////////////////
-// Routine d'interruption
-ISR(TIMER3_OVF_vect) 
-{
-  TCNT3 = 65536-62; // 125*8us = 1ms
-  interupt_happened = 1; // interuption flag to trigger computation in main loop
-  current_angle_rd = fmod((current_angle_rd + angle_step_rd),two_pi); // increment the desired angle
-  time_counter++; // counter in ms (replace the micros())
-}
-
-
 //////////////////////////////////////////////////////////////////////
  
 void loop() {
@@ -152,7 +137,7 @@ int i,j,x;
 // Applying the command if new
   
     //Serial.println(current_angle_rd);
-    setMotorAngle(current_angle_rd);
+    
     //Serial.println(Serial1.available() );
   if (Serial1.available() > GIMBAL_PACKET_SIZE-1) // Number of data corresponding to the IMU packet size is waiting in the biffer of serial
   { 
@@ -173,27 +158,28 @@ int i,j,x;
           if(i==2)
           { // roll, pitch, tips0 angle
             yaw = (float)buffer_int16*180.0/32768.0;
-            if(print_rpy){ Serial.print(yaw); Serial.write(9); }
+            //if(print_rpy){ Serial.print(buffer_int16); Serial.write(9); }
           } else if(i==5)
           { // derivatives of roll, pitch, tips0 angle
             yaw_p = (float)buffer_int16*2000.0/32768.0;
-            if(print_rpy_p){ Serial.print(yaw_p); Serial.write(9);}
+            //if(print_rpy_p){ Serial.print(yaw_p); Serial.write(9);}
           }
         }
-        Serial.println(" ");
+        //Serial.println(" ");
+
+        // "Just" read the yaw and apply it to the motor
         current_angle_rd = yaw/rad_to_deg;
+        current_angle_rd = fmod((current_angle_rd + angle_step_rd)+5*two_pi,two_pi);
+
+        // read the rotation speed of the proto to adapt the amplitude.
+        u = yaw_p/rad_to_deg/two_pi;
+        sin_amplitude = constrain(0.6+0.2*abs(u),0,1); // variation of the amplitude vs rotation speed to limit heating
+        
+        setMotorAngle(current_angle_rd);
+
       }
     }
   }
-
-  u = yaw_p/rad_to_deg/two_pi;
-  
-  sin_amplitude = constrain(0.7+0.15*abs(u),0,1);
-  motor_speed_rps = two_pi*u; // conversion from tr/s to rps
-//  Serial.print(current_angle_rd); Serial.print(" ");
-//  Serial.println(u);
-  angle_step_rd = motor_speed_rps/1000;
-  
 }
 
 // sert à changer la fréquence du pwm 

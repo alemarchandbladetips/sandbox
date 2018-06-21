@@ -24,7 +24,7 @@ void loop()
       last_time = millis();
     }
   }
-  if((millis() - last_time) > 500)
+  if((millis() - last_time) > 2000)
   {
     Serial.println("Time Out");
     MeanTension = 0;

@@ -107,21 +107,7 @@ void setup() {
   delay(2000);
 
   Serial.println("waiting BNO Startup");
-  
-  if(!bno.begin(Adafruit_BNO055::OPERATION_MODE_NDOF))
-  {
-    // There was a problem detecting the BNO055 ... check your connections 
-    Serial.print("Ooops, no BNO055 detected ... Check your wiring or I2C ADDR!");
-    //while(1);
-  }
 
-  gyr = 0;
-  Serial.println("waiting BNO calibration");
-  while(gyr!=3) // Waiting for gyro to be calibrated
-  {
-    bno.getCalibration(&sys, &gyr, &accel, &mag);
-  }
-  Serial.println("BNO ready");
 
   // turning off leds
   green_led_status = 0;

@@ -13,11 +13,12 @@ const int print_data = 1;
 uint16_t idx,i,j;
 uint8_t GPS_buffer[100];
 String inString = "";    // string to hold input
-float NED[3];
+float NED[2],NED_speed[2],NED_tmp;
 
 float lat, lat_int_tmp, lat_dec_tmp;
 float lon, lon_int_tmp, lon_dec_tmp;
 float alt, alt_tmp;
+
 
 float lat_0_int;
 float lat_0_dec;
@@ -87,7 +88,9 @@ void loop() {
       }
       lat = lat_int_tmp-lat_0_int;
       lat += (lat_dec_tmp-lat_0_dec);
-      NED[0] = lat*R_TERRE/180*PI;
+      NED_tmp = lat*R_TERRE/180*PI;
+      NED_speed[0] = 0.9*NED_speed[0] + 0.1*(NED_tmp - NED[0])*10;
+      NED[0] = NED_tmp;
       
       
     }
@@ -127,35 +130,12 @@ void loop() {
       }
       lon = lon_int_tmp-lon_0_int;
       lon += (lon_dec_tmp-lon_0_dec);
-      NED[1] = lon*R_TERRE/180*PI;
+      NED_tmp = lon*R_TERRE/180*PI;
+      NED_speed[1] = 0.9*NED_speed[1] + 0.1*(NED_tmp - NED[1])*10;
+      NED[1] = NED_tmp;
       
       //if(print_data){ Serial.print(NED[1],20);Serial.print(" ");}
     }
-
-////////////////////////////////////////////////////////
-    // altitude
-
-    if(idx>=54 && idx<= 59)
-    {
-      if(x!=44)
-      {
-        inString += (char)x;
-      }
-    }
-    if(idx==59)
-    {
-      alt_tmp = inString.toFloat();
-      if(init_done==0)
-      {
-        alt_0 = alt_tmp;
-      }
-      alt = alt_tmp-alt_0;
-      inString = "";
-      NED[2] = -alt;
-
-      //if(print_data){ Serial.print(NED[2],20);Serial.print(" ");}
-    }
-
 ////////////////////////////////////////////////////////
   // transmission
 
@@ -163,9 +143,17 @@ void loop() {
   {
     
     if(transmit_raw){ mySerial.write(PACKET_START); }
-    for (i = 0; i < 3; i++)
+    for (i = 0; i < 2; i++)
     {
       buffer_float = NED[i];
+      for (j = 0; j < 4; j++)
+      {
+        if (transmit_raw) { mySerial.write(ptr_buffer[j]); }
+      }
+    }
+    for (i = 0; i < 2; i++)
+    {
+      buffer_float = NED_speed[i];
       for (j = 0; j < 4; j++)
       {
         if (transmit_raw) { mySerial.write(ptr_buffer[j]); }
@@ -179,9 +167,12 @@ void loop() {
     if(x==0x24)
     {
       //if(print_data){ Serial.println(" ");}
-      if(print_data){ Serial.print(NED[0],20);Serial.print(" ");
-    Serial.print(NED[1],20);Serial.print(" ");
-    Serial.print(NED[2],20);Serial.println(" ");}
+      if(print_data){ //Serial.print(millis()-timer);Serial.print(" ");
+      Serial.print(NED[0]);Serial.print(" ");
+      Serial.print(NED[1]);Serial.println(" ");
+      //Serial.print(NED_speed[0]*3.6);Serial.print(" ");
+      //Serial.print(NED_speed[1]*3.6);Serial.println(" ");
+      }
       if(millis()-timer>60000*INIT_TIME_MN)
       {
         init_done = 1; 
@@ -193,5 +184,3 @@ void loop() {
 //    Serial.print(" ");
   }
 }
-
-

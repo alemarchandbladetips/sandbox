@@ -2,7 +2,7 @@
 #include <SD.h>
 #include <Wire.h>
 
-#define PACKAGE_SIZE 42
+#define PACKAGE_SIZE 50
 
 const int chipSelect = 4;
 String filename;
@@ -146,7 +146,7 @@ void loop() {
       
       if( package_buffer[PACKAGE_SIZE-2]==173 && (log_state == 1)){
 
-        for(i=0;i<10;i++)
+        for(i=0;i<12;i++)
         {
           for(j=0;j<4;j++)
           {

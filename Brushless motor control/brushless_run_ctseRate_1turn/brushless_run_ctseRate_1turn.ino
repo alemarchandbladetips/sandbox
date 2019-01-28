@@ -1,6 +1,6 @@
 // run a brushless motor, using interuption at constant rate
 
-#define U_MAX 10 // max speed command of the motor
+#define U_MAX 5 // max speed command of the motor
 #define SIN_APMLITUDE_MAX 125 // max amplitude of sinus (around a 127 offset)
 #define SIN_APMLITUDE_MIN 60 // max amplitude of sinus (around a 127 offset)
 #define GIMBAL_PACKET_SIZE 33 // number of bytes to be recieved from 
@@ -18,7 +18,7 @@ const float four_pi_on_three = 4.18879020479;
 const float two_pi_on_three = 2.09439510239;
 
 // motor related constants and variables
-const uint8_t nb_pole = 12;
+const uint8_t nb_pole = 14;
 float slice_angle_rd, angle_scale_factor;
 float normalized_angle;
 float sin_amplitude = 50;
@@ -50,7 +50,7 @@ unsigned char *ptr_buffer = (unsigned char *)&buffer_float;
 int8_t init_;
 
 // Others
-float speed_step = 0.25;
+float speed_step = 1;
 
  
 void setup() {
@@ -75,7 +75,7 @@ void setup() {
   angle_scale_factor = 2*pi/slice_angle_rd;
   Serial.println(slice_angle_rd*360/two_pi);
 
-  u = 0.0;
+  u = 0.5;
   sin_amplitude = 125;
   init_ = 0;
   cli(); // Désactive l'interruption globale
@@ -158,7 +158,7 @@ int i,j,x;
   
   
   //u = 0;
-  sin_amplitude = constrain(40+40*abs(u),SIN_APMLITUDE_MIN,SIN_APMLITUDE_MAX);
+  sin_amplitude = constrain(40+10 *abs(u),SIN_APMLITUDE_MIN,SIN_APMLITUDE_MAX);
   motor_speed_rps = two_pi*u; // conversion from tr/s to rps
   Serial.print(sin_amplitude); Serial.print(" ");
   Serial.println(u);

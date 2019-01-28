@@ -29,7 +29,7 @@ unsigned char *ptr_buffer = (unsigned char *)&buffer_float;
 
 float NED_coordinates[3], NED_coordinates_prev[3], NED_coordinates_offset[3];
 float NED_coordinates_accuracy[3];
-int32_t NED_speed[3];
+float NED_speed[3];
 uint32_t NED_speed_accuracy;
 float NED_acc[3];
 uint8_t gps_flag, diffSoln, carrSoln, carrSoln_prev, relPosValid, gpsSanity = 0;
@@ -144,9 +144,11 @@ void loop() {
     { // position
       Serial1.readBytes(gps_msg_pos,44);
       position_recieved = 1;
+      //if(print_data){ Serial.print("pos"); Serial.print(" ");}
     } else if (gps_header[0] == 0x01 && gps_header[1] == 0x12 )
     { // speed
       Serial1.readBytes(gps_msg_speed,40);
+      //if(print_data){ Serial.print(gps_flag); Serial.print(" ");}
     }
   }
 
@@ -191,6 +193,7 @@ void loop() {
       NED_coordinates[i] = ((float)(int32_buffer)+((float)gps_msg_pos[i+22]*0.01));
       //Serial.print(NED_coordinates[i]);Serial.print(" ");
     }
+    //Serial.print(gpsSanity);Serial.print(" ");
       //Serial.println(Serial.available());
 //      for(i=0;i<3;i++)
 //      {
@@ -201,13 +204,13 @@ void loop() {
 //        NED_coordinates_accuracy[i] = (float)(uint32_buffer)*0.01;
 //        Serial.print(NED_coordinates_accuracy[i]);Serial.print(" ");
 //      }
-
-      //if(print_data){ Serial.print(carrSoln); Serial.print(" ");}
-      //if(print_data){ Serial.print(carrSoln_prev); Serial.print(" ");}
-      //if(print_data){ Serial.print(NED_coordinates_prev[0]); Serial.print(" ");}
-      //if(print_data){ Serial.print(NED_coordinates[0]); Serial.print(" ");}
+/*
+      if(print_data){ Serial.print(carrSoln); Serial.print(" ");}
+      if(print_data){ Serial.print(carrSoln_prev); Serial.print(" ");}
+      if(print_data){ Serial.print(NED_coordinates_prev[0]); Serial.print(" ");}
+      if(print_data){ Serial.print(NED_coordinates[0]); Serial.print(" ");}
       
-
+*/
       if(((carrSoln==1) && (carrSoln_prev==2)) || ((carrSoln==2) && (carrSoln_prev==1)))
       {
         if(print_data){ Serial.print("switch"); Serial.print(" ");}
@@ -246,7 +249,7 @@ void loop() {
     // Data transmition, to the control part of the drone
 
     if(transmit_raw){ mySerial.write(PACKET_START); } // starting byte
-    //if(print_data){ Serial.print(gpsSanity); Serial.print(" ");}
+    if(print_data){ Serial.print(gpsSanity); Serial.print(" ");}
     if(print_data){ Serial.print(init_done); Serial.print(" ");}
     // NED_coordinates
     for(i=0;i<2;i++)
@@ -255,7 +258,7 @@ void loop() {
       {
         buffer_float = NED_coordinates[i]/100.0;
       }
-      if(print_data){ Serial.print(buffer_float); Serial.print(" ");}
+      if(print_data){ Serial.print(buffer_float*100); Serial.print(" ");}
       for (j = 0; j < 4; j++)
       {
         if (transmit_raw) { mySerial.write(ptr_buffer[j]); }
@@ -280,7 +283,7 @@ void loop() {
       {
         buffer_float = NED_speed[i]/100.0;
       }
-      if(print_data){ Serial.print(buffer_float); Serial.print(" ");}
+      if(print_data){ Serial.print(buffer_float*100); Serial.print(" ");}
       for (j = 0; j < 4; j++)
       {
         if (transmit_raw) { mySerial.write(ptr_buffer[j]); }

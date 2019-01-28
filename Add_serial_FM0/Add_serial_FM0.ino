@@ -13,13 +13,13 @@ void SERCOM1_Handler()
 
 void setup() {
   // put your setup code here, to run once:
-  // Assign pins 10 & 11 SERCOM functionality (Serial 2)
-  pinPeripheral(10, PIO_SERCOM);
-  pinPeripheral(11, PIO_SERCOM);
-
   Serial.begin(115200);
   Serial2.begin(38400);
   Serial1.begin(38400);
+
+   // Assign pins 10 & 11 SERCOM functionality (Serial 2)
+  pinPeripheral(10, PIO_SERCOM);
+  pinPeripheral(11, PIO_SERCOM);
 }
 
 void loop() {

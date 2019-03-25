@@ -429,7 +429,7 @@ bool Adafruit_BNO055::getSensorOffsets(uint8_t* calibData)
 /**************************************************************************/
 bool Adafruit_BNO055::getSensorOffsets(adafruit_bno055_offsets_t &offsets_type)
 {
-    if (isFullyCalibrated())
+    //if (isFullyCalibrated())
     {
         adafruit_bno055_opmode_t lastMode = _mode;
         setMode(OPERATION_MODE_CONFIG);

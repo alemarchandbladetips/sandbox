@@ -15,6 +15,8 @@ int log_state = 0;
 int long_num = 0;
 File dataFile;
 
+float courant,tension,puissance, puissance_filt = 0.0;
+
 const int32_t Ts=1000;
 uint8_t input;
 uint32_t timer, timer_tmp;
@@ -82,7 +84,7 @@ void loop() {
   uint8_t x,i,j;
 
   
-  if(Serial1.available()>SERIAL1_DATA_SIZE-1)
+   if(Serial1.available()>3)
   {
     timer_tmp = micros();
     dt = timer_tmp - timer;
@@ -90,75 +92,41 @@ void loop() {
 
     x = Serial1.read();
     
-    if(x == START_BYTE)
+    if(x == 0xAA)
     {
      
-    Serial1.readBytes(serial_data,SERIAL1_DATA_SIZE-1);
+    Serial1.readBytes(serial_data,3);
 
-      if(serial_data[SERIAL1_DATA_SIZE-2] == STOP_BYTE)
+      if(serial_data[2] == 0x55)
       {
+        
 
+        courant = ((serial_data[0]-(76.0))*8.0/46.0);
+        tension = (0.96*(5.0*serial_data[1]/256.0)*(24.1/3.03));
+        puissance = courant*tension;
+        puissance_filt = 0.9*puissance_filt + 0.1*puissance;
+
+        Serial.print(dt/1000000.0); Serial.print(" ");
+        Serial.print(tension); Serial.print(" ");
+        Serial.print(courant); Serial.print(" ");
+        //Serial.print(puissance); Serial.print(" ");
+        Serial.print(puissance_filt/10);
+        Serial.print("20"); Serial.print(" ");
+        Serial.print("24"); Serial.print(" ");
+        Serial.print("22"); Serial.print(" ");
+        Serial.print("26"); Serial.print(" ");
+        Serial.print("30"); Serial.print(" ");
+        Serial.println(" ");
+        
         if(log_state == 1)
         {
-          dataFile.print(dt);dataFile.print("\t");
-          dataFile.print(serial_data[0]);dataFile.print("\t"); // pertes signal
-          dataFile.print(serial_data[1]);dataFile.print("\t"); // tension 4S
-          dataFile.print(serial_data[2]);dataFile.print("\t"); // tension 2S
-  
-          for (i = 0; i < 3; i++)
-          {
-            for (j = 0; j < 2; j++)
-            {
-              *(ptr_buffer_int16 + j) = serial_data[2 * i + j + 3];
-            }
-            dataFile.print((float)buffer_int16*180.0/32768);dataFile.print("\t"); // YPR
-          }
-  
-          for (i = 0; i < 3; i++)
-          {
-            for (j = 0; j < 2; j++)
-            {
-              *(ptr_buffer_int16 + j) = serial_data[2 * i + j + 9];
-            }
-            dataFile.print((float)buffer_int16*2000.0/32768);dataFile.print("\t"); // Wxyz
-          }
-  
-          dataFile.print(serial_data[15]);dataFile.print("\t"); // tension 4S
-          dataFile.print(serial_data[16]);dataFile.print("\t"); // tension 2S
-          dataFile.print(serial_data[17]);dataFile.print("\t"); // tension 4S
-          dataFile.print(serial_data[18]);dataFile.print("\t"); // tension 2S
-          dataFile.print(serial_data[19]);dataFile.print("\t"); // tension 4S
-          dataFile.print(serial_data[20]);dataFile.print("\t"); // tension 2S
-  
-          for (i = 0; i < 6; i++)
-          {
-            for (j = 0; j < 2; j++)
-            {
-              *(ptr_buffer_int16 + j) = serial_data[2 * i + j + 21];
-            }
-            dataFile.print(buffer_int16);dataFile.print("\t"); // PWMs
-          }
-  
-          for (i = 0; i < 2; i++)
-          {
-            for (j = 0; j < 2; j++)
-            {
-              *(ptr_buffer_int16 + j) = serial_data[2 * i + j + 33];
-            }
-            dataFile.print((float)buffer_int16/100.0);dataFile.print("\t"); // YPR
-          }
-  
-          for (i = 0; i < 1; i++)
-          {
-            for (j = 0; j < 2; j++)
-            {
-              *(ptr_buffer_int16 + j) = serial_data[2 * i + j + 37];
-            }
-            dataFile.print((float)buffer_int16*180.0/32768);dataFile.print("\t"); // YPR
-          }
-
-          dataFile.println(" ");
-        }
+     
+          dataFile.print(dt); dataFile.print(" "); 
+          dataFile.print(tension); dataFile.print(" "); 
+          dataFile.print(puissance_filt); dataFile.print(" "); 
+          dataFile.println(courant);
+          
+        }  
       }
     }
   }

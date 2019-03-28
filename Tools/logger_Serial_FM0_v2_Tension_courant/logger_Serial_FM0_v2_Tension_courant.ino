@@ -15,7 +15,7 @@ int log_state = 0;
 int long_num = 0;
 File dataFile;
 
-float courant,tension,puissance, puissance_filt = 0.0;
+float courant,tension,puissance, puissance_filt, tension_filt, courant_filt = 0.0;
 
 const int32_t Ts=1000;
 uint8_t input;
@@ -104,7 +104,9 @@ void loop() {
         courant = ((serial_data[0]-(76.0))*8.0/46.0);
         tension = (0.96*(5.0*serial_data[1]/256.0)*(24.1/3.03));
         puissance = courant*tension;
-        puissance_filt = 0.9*puissance_filt + 0.1*puissance;
+        puissance_filt = 0.95*puissance_filt + 0.05*puissance;
+        courant_filt = 0.98*courant_filt + 0.02*courant;
+        tension_filt = 0.95*tension_filt + 0.05*tension;
 
         Serial.print(dt/1000000.0); Serial.print(" ");
         Serial.print(tension); Serial.print(" ");
@@ -116,12 +118,15 @@ void loop() {
         Serial.print("22"); Serial.print(" ");
         Serial.print("26"); Serial.print(" ");
         Serial.print("30"); Serial.print(" ");
+        Serial.print("40"); Serial.print(" ");
+        Serial.print("50"); Serial.print(" ");
         Serial.println(" ");
         
         if(log_state == 1)
         {
      
           dataFile.print(dt); dataFile.print(" "); 
+          
           dataFile.print(tension); dataFile.print(" "); 
           dataFile.print(puissance_filt); dataFile.print(" "); 
           dataFile.println(courant);

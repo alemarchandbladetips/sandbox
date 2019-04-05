@@ -91,6 +91,7 @@ void loop() {
     timer = timer_tmp;
 
     x = Serial1.read();
+    Serial.print(x);
     
     if(x == 0xAA)
     {

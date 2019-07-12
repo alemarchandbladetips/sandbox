@@ -342,7 +342,7 @@ int i,j,x;
           }
 
           // Computing sinus amplitude (i.e. voltage on motor) and angle step
-          sin_amplitude = constrain(0.55+0.15*abs(u),0,1);
+          sin_amplitude = constrain(0.5+0.15*abs(u),0,1);
           motor_speed_rps = two_pi*u; // conversion from tr/s to rps
           angle_step_rd = motor_speed_rps/1000;
 

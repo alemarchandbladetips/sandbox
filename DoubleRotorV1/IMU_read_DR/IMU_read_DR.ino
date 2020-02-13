@@ -29,6 +29,7 @@ const int8_t print_data = 0;
 
 // definition of some constants to ease computations
 const float rad_to_deg = 57.2957795; // 180/pi
+const float pi = 3.14159265358979;
 
 ///////////// SBG IMU data ////////////////////////
 float rpy[3], acc[3];
@@ -121,7 +122,7 @@ int i,j,x;
           // transformation of quaternion to rpy
           quat2rpy_ellipse_east(quaternion,rpy);
           rpy[1] = -rpy[1];
-          rpy[2] = -rpy[2];
+          rpy[2] = -rpy[2]-pi/2.0;
 
           // read gyroscope data
           for (i = 0; i < 3; i++) 
@@ -133,7 +134,7 @@ int i,j,x;
             omega[i] = buffer_float * RAD_TO_DEG;
             //if(print_data){ Serial.print(omega[i]); Serial.print(" "); }
           }
-          omega[1] = -omega[1];
+          omega[0] = -omega[0];
           omega[2] = -omega[2];
 
           // accelerometer data

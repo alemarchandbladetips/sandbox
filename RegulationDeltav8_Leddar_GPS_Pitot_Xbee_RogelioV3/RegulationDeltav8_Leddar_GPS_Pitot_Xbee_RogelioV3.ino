@@ -104,7 +104,7 @@ float Commande_I_Moteur, Commande_KP_Moteur;
 ///// mode dauphin
 // paramètres
 float flaps_amplitude, hyst_width, hauteur_switch, hauteur_cabrage;
-float flaps_amplitude_plus, flaps_amplitude_moins, flaps_amplitude;
+float flaps_amplitude_plus, flaps_amplitude_moins;
 float alpha_dauphin = 0.015; // filtrage au passage en mode dauphin
 
 // variables et flags pour le mode dauphin
@@ -229,8 +229,8 @@ void loop()
     bte_HistoriqueVal(GPS_pitot._speed_pitot, v_pitot_buffer, Ndata);
     bte_Mean(v_pitot_buffer, &v_pitot_mean, Ndata, Ndata-1);
     
-    Serial.print(GPS_pitot._speed_pitot);Serial.print(" ");
-    Serial.println(v_pitot_mean);
+   // Serial.print(GPS_pitot._speed_pitot);Serial.print(" ");
+   // Serial.println(v_pitot_mean);
 
 /***************** Modes de régulation *********************/
  
@@ -371,14 +371,14 @@ void loop()
 
       // paramètres mode dauphin
       K_Pitch = 0; KD_Pitch = 0; KI_Pitch = 0;
-      K_Roll = 0.013*2*remote._knob; KD_Roll = 0.0006*2*remote._knob;
+      K_Roll = 0.013; KD_Roll = 0.0;
       K_Yaw = 0; KD_Yaw = 0;
       KP_Moteur = 0.1; KI_Moteur = 0.0005; Offset_gaz_reg = 0.0;
       //elevation_trim = 0.0;
 
       Commande_I_flaps = 0;
-      Commande_I_Moteur = 0;
-      remote._elevator = 0;
+      //Commande_I_Moteur = 0;
+      
       
 //////// paramètres du mode dauphin
       // consigne de pitch et largeur de l'hystéresis
@@ -386,28 +386,36 @@ void loop()
       
       if(remote._switch_F==2)
       {
-        pitch_des = 9;
+        flaps_amplitude = 0.45;
       } else if(remote._switch_F==1)
       {
-        pitch_des = 6;
+        flaps_amplitude = 0.35;
       } else
       {
-        pitch_des = 3;
+        flaps_amplitude = 0.25;
       }
+
+      pitch_des = -30.0*remote._elevator;
+
+     
+      
+      remote._elevator = 0;
       
       hyst_width = 0.0;
       // Amplitude des oscillation de flaps
 
       if(remote._switch_D==2)
       {
-        flaps_amplitude = 0.7;
+        vitesse_des = 9.0;
       } else if(remote._switch_D==1)
       {
-        flaps_amplitude = 0.5;
+        vitesse_des = 8.0;
       } else
       {
-        flaps_amplitude = 0.3;
+        vitesse_des = 7.0;
       }
+
+      
 
       flaps_amplitude_plus = flaps_amplitude;
       flaps_amplitude_moins = flaps_amplitude;
@@ -476,10 +484,10 @@ void loop()
       vitesse_des = 10.0;
       
       Commande_I_Moteur += -KI_Moteur * (v_pitot_mean - vitesse_des);
-      Commande_I_Moteur = constrain(Commande_I_Moteur, 0, 0.3); // sat = 200
+      Commande_I_Moteur = constrain(Commande_I_Moteur, 0, 0.5); // sat = 200
     
       Commande_KP_Moteur = -KP_Moteur * (v_pitot_mean - vitesse_des);
-      Commande_KP_Moteur = constrain(Commande_KP_Moteur, -0.2, 0.5);
+      Commande_KP_Moteur = constrain(Commande_KP_Moteur, -0.5, 0.5);
     
       thrust = Offset_gaz_reg + Commande_KP_Moteur + Commande_I_Moteur;
     
@@ -518,7 +526,8 @@ void loop()
     
     // Sécurité, coupure des moteurs sur le switch ou si la carte SD n'est pas présente, ou perte de signal télécommande
 //    /*
-    if(  !OK_SDCARD || remote._perte_connection || remote._thrust <= 0.02 ){
+    if(  !OK_SDCARD || remote._perte_connection )//|| remote._thrust <= 0.02 )
+    {
       pwm_norm_prop = 0;
     }
 

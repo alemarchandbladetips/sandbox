@@ -5,7 +5,10 @@
 
 #define RAD2DEG 57.29577951308
 #define DEG2RAD 0.0174532925
+
+#ifndef PI
 #define PI 3.14159265359
+#endif
 
 void bte_Mean(float A[], float* prom, int NbData, int posf);
 

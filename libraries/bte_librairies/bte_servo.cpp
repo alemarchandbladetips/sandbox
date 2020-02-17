@@ -63,13 +63,21 @@ int8_t bte_servo::set_pwm(uint16_t pwm_int)
 {
   if( pwm_int > _max_servo )
   {
+  	_current_pwm = _max_servo;
     my_servo.writeMicroseconds(_max_servo);
     return -1;
   } else if ( pwm_int < _min_servo )
   {
-    my_servo.writeMicroseconds(_min_servo);
+  	_current_pwm = _min_servo;
+    my_servo.writeMicroseconds(_current_pwm);
     return -1;
   }
-  my_servo.writeMicroseconds(pwm_int);
+  _current_pwm = pwm_int;
+  my_servo.writeMicroseconds(_current_pwm);
   return 0;
+}
+
+uint16_t bte_servo::get_current_pwm(void)
+{
+	return _current_pwm;
 }

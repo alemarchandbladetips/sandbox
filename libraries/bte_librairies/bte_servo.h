@@ -14,6 +14,8 @@ class bte_servo
 	int8_t set_normalized_pwm(float pwm_norm);
 	int8_t set_pwm(uint16_t pwm_int);
 	uint16_t get_current_pwm(void);
+	void power_on(void);
+	void power_off(void);
 
   	private:
   
@@ -21,6 +23,7 @@ class bte_servo
 	uint16_t _max_servo;
   	uint16_t _zero_servo;
   	uint16_t _current_pwm;
+  	uint8_t _power_flag;
   	Servo my_servo;
 	
 };

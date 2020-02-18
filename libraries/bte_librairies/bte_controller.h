@@ -14,6 +14,7 @@ class bte_controller
 
   bte_controller(HardwareSerial *controller_serial);
   void update_controller(void);
+  void set_connection_lost_time_millis(uint32_t connection_lost_time_millis);
 
   float _thrust;
   float _elevator;
@@ -33,6 +34,7 @@ class bte_controller
   uint8_t DataRadio[BTE_CONTROLLER_NB_DATA_RADIO - 3];
   uint32_t last_millis;
   uint32_t temps_radio;
+  uint32_t _connection_lost_time_millis;
   HardwareSerial *_controller_serial;
 
 

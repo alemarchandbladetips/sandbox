@@ -35,6 +35,8 @@ bte_controller::bte_controller(HardwareSerial *controller_serial)
   lastSwitch_C = 1;
   lastSwitch_D = 1;
   lastSwitch_F = 1;
+  
+  _connection_lost_time_millis = 2000;
 
   _controller_serial = controller_serial;
   (*_controller_serial).begin(115200); // lecture radio télécommande
@@ -178,7 +180,7 @@ void bte_controller::update_controller(void)
     }
   }
   temps_radio = millis() - last_millis; //temps entre deux lecture des données de la télécommande
-  if ( temps_radio > 2000 ) //perte de Connection, on conserve les valeur d'avant sauf pour le collectif
+  if ( temps_radio > _connection_lost_time_millis ) //perte de Connection, on conserve les valeur d'avant sauf pour le collectif
   {
     Trim      = lastTrim;
     Queue     = lastQueue;
@@ -212,4 +214,9 @@ void bte_controller::update_controller(void)
   _switch_D = Switch_D;
   _switch_F = Switch_F;
 
+}
+
+void bte_controller::set_connection_lost_time_millis(uint32_t connection_lost_time_millis)
+{
+	_connection_lost_time_millis = connection_lost_time_millis;
 }

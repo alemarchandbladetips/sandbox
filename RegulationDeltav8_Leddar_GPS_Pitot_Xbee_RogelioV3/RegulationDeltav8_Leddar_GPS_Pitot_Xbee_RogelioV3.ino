@@ -47,6 +47,8 @@ bte_GPS_pitot GPS_pitot = bte_GPS_pitot(&Serial3);
 
 float v_pitot_mean;
 float v_pitot_buffer[100];
+float vh_pitot_mean;
+float vh_pitot_buffer[100];
 const int16_t Ndata = 100;
 
 /******* leddar **************/
@@ -96,20 +98,30 @@ float alpha_stab = 0.025; // filtrage au passage en mode stabilisé
 //consignes
 float pitch_des = 0, pitch_des_f = 0, yaw_des = 0, vitesse_des = 10;
 
-// variables
+// states
 float Commande_Roll;
-float Commande_Pitch, Commande_P_flaps, Commande_I_flaps, Commande_D_flaps, Commande_dauphin = 0;
+float Commande_Pitch, Commande_P_flaps, Commande_I_flaps, Commande_D_flaps;
 float Commande_I_Moteur, Commande_KP_Moteur;
 
 ///// mode dauphin
-// paramètres
+// params
 float flaps_amplitude, hyst_width, hauteur_switch, hauteur_cabrage;
 float flaps_amplitude_plus, flaps_amplitude_moins;
 float alpha_dauphin = 0.015; // filtrage au passage en mode dauphin
-
-// variables et flags pour le mode dauphin
+// states
+float Commande_dauphin = 0;
 int8_t arrondi_almost_ready,arrondi_ready,flap_state_mem,flap_state = 1;
 float filtre_dauphin=0;
+
+// asservissement de la pente de descente
+// params
+float slope_aero, slope_ground, slope_aero_f = 0;
+float alpha_slope = 0.025;
+//consigne
+float slope_des, slope_des_f = 0;
+// states
+float Commande_I_slope, KI_slope;
+
 
 /******* debug **************/
 
@@ -155,12 +167,17 @@ void setup()
   
   Servo_R.set_range(750,2050,1400);
   Servo_R.set_normalized_pwm(0);
+  Servo_R.power_on();
   
   Servo_L.set_range(850,2150,1500);
   Servo_L.set_normalized_pwm(0);
+  Servo_L.power_on();
 
   Motor_Prop.set_range(1000,2000);
+  Motor_Prop.power_off(); // should already be off (normally)...
   Motor_Prop.set_normalized_pwm(0);
+
+  remote.set_connection_lost_time_millis(1000);
 
   /*****************************************/
 
@@ -218,6 +235,20 @@ void loop()
     BNO_pitch = bte_ang_180(-eulAng.y() - PitchOffs);
     BNO_lacet = bte_ang_180(-eulAng.x() - YawOffs);
 
+
+/***************** Estimation des angles de descente, vitesse pitot filtrée...  *********************/
+
+    bte_HistoriqueVal(GPS_pitot._speed_pitot, v_pitot_buffer, Ndata);
+    bte_Mean(v_pitot_buffer, &v_pitot_mean, Ndata, Ndata-1);
+
+    bte_HistoriqueVal(GPS_pitot._speed_pitot*cosf(BNO_pitch*DEG2RAD), vh_pitot_buffer, Ndata);
+    bte_Mean(vh_pitot_buffer, &vh_pitot_mean, Ndata, Ndata-1);
+    
+    slope_aero = atan2(GPS_pitot._vz_gps/100.0,GPS_pitot._speed_pitot*cosf(BNO_pitch*DEG2RAD))*RAD2DEG;
+    slope_aero_f = atan2(GPS_pitot._vz_gps/100.0,vh_pitot_mean)*RAD2DEG;
+    
+    slope_ground = atan2(GPS_pitot._vz_gps,sqrtf(GPS_pitot._vx_gps*GPS_pitot._vx_gps + GPS_pitot._vy_gps*GPS_pitot._vy_gps))*RAD2DEG;
+
 /***************** Paramètres de régulation par defaut*********************/
     // peuvent être modifiés dans les différents modes, par défaut, juste le D sur le roll
     
@@ -225,12 +256,7 @@ void loop()
     K_Roll = 0; KD_Roll = 0.0006;
     K_Yaw = 0; KD_Yaw = 0;
     KP_Moteur = 0; KP_Moteur = 0; Offset_gaz_reg = 0;
-
-    bte_HistoriqueVal(GPS_pitot._speed_pitot, v_pitot_buffer, Ndata);
-    bte_Mean(v_pitot_buffer, &v_pitot_mean, Ndata, Ndata-1);
-    
-   // Serial.print(GPS_pitot._speed_pitot);Serial.print(" ");
-   // Serial.println(v_pitot_mean);
+   
 
 /***************** Modes de régulation *********************/
  
@@ -294,6 +320,7 @@ void loop()
       // mise à 0 des commandes inutilisées
       Commande_dauphin=0;
       flap_state = 1;
+      slope_des_f = slope_aero_f;
 
       // consignes de pitch et de vitesse
       pitch_des = 4;
@@ -383,40 +410,61 @@ void loop()
 //////// paramètres du mode dauphin
       // consigne de pitch et largeur de l'hystéresis
 
-      
+      hyst_width = 0.0;
+      vitesse_des = 8.0;
+
+
       if(remote._switch_F==2)
       {
-        flaps_amplitude = 0.45;
+        pitch_des = 10;
       } else if(remote._switch_F==1)
       {
-        flaps_amplitude = 0.35;
+        pitch_des = 0;
       } else
       {
-        flaps_amplitude = 0.25;
+        pitch_des = -10;
       }
 
-      pitch_des = -30.0*remote._elevator;
-
-     
-      
-      remote._elevator = 0;
-      
-      hyst_width = 0.0;
-      // Amplitude des oscillation de flaps
-
-      if(remote._switch_D==2)
+      if(remote._switch_D == 2)
       {
-        vitesse_des = 9.0;
-      } else if(remote._switch_D==1)
+        flaps_amplitude = 0.6;
+      } else if(remote._switch_D == 1)
       {
-        vitesse_des = 8.0;
+        flaps_amplitude = 0.5;
       } else
       {
-        vitesse_des = 7.0;
+        flaps_amplitude = 0.4;
       }
 
       
 
+//      if(remote._elevator < 0)
+//      {
+//        slope_des = -20*remote._elevator;
+//      } else
+//      {
+//        slope_des = -60*remote._elevator;
+//      }
+//      remote._elevator = 0;
+//
+//      KI_slope = 0.0002;
+//
+//      slope_des_f = (1 - alpha_slope) * slope_des_f + alpha_dauphin * slope_des; 
+//
+//      Commande_I_slope += -KI_slope * (slope_des_f - slope_aero_f); 
+//      Commande_I_slope = constrain(Commande_I_slope, -20, 20);
+//      Commande_I_slope = constrain(Commande_I_slope, -50-slope_des_f, 30-slope_des_f);
+//
+//      pitch_des = slope_des_f + Commande_I_slope;
+//      pitch_des = constrain(pitch_des,-50,30);
+//      pitch_des_f = pitch_des;
+//
+//      // -40 deg = 0.8, +20deg = 0.4 par exemple
+//      flaps_amplitude = 0.5333-0.006667*pitch_des_f;
+//      flaps_amplitude = constrain(flaps_amplitude,0.4,0.8);
+
+
+      
       flaps_amplitude_plus = flaps_amplitude;
       flaps_amplitude_moins = flaps_amplitude;
       
@@ -493,7 +541,6 @@ void loop()
     
       thrust = constrain(thrust, 0, 1);
       
- 
     }
   
    // */
@@ -526,9 +573,12 @@ void loop()
     
     // Sécurité, coupure des moteurs sur le switch ou si la carte SD n'est pas présente, ou perte de signal télécommande
 //    /*
-    if(  !OK_SDCARD || remote._perte_connection )//|| remote._thrust <= 0.02 )
+    if(  !OK_SDCARD || remote._perte_connection || remote._rudder < 0.0 )
     {
-      pwm_norm_prop = 0;
+      Motor_Prop.power_off();
+    } else
+    {
+      Motor_Prop.power_on();
     }
 
 /*************Ecriture PWMs Servo et Moteurs*****************/
@@ -589,7 +639,9 @@ void loop()
         dataFile.print(Commande_Roll*1000, 0); dataFile.print(";");
         dataFile.print(Commande_Pitch*1000, 0); dataFile.print(";");
 
-        dataFile.print(hyst_width*10,0); dataFile.print(";");
+        dataFile.print(slope_aero*10,0); dataFile.print(";");
+        dataFile.print(slope_aero_f*10,0); dataFile.print(";");
+        dataFile.print(slope_ground*10,0); dataFile.print(";");
 
         dataFile.println(" "); // gaffe à la dernière ligne
         

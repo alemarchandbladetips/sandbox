@@ -244,10 +244,10 @@ void loop()
     bte_HistoriqueVal(GPS_pitot._speed_pitot*cosf(BNO_pitch*DEG2RAD), vh_pitot_buffer, Ndata);
     bte_Mean(vh_pitot_buffer, &vh_pitot_mean, Ndata, Ndata-1);
     
-    slope_aero = atan2(GPS_pitot._vz_gps/100.0,GPS_pitot._speed_pitot*cosf(BNO_pitch*DEG2RAD))*RAD2DEG;
-    slope_aero_f = atan2(GPS_pitot._vz_gps/100.0,vh_pitot_mean)*RAD2DEG;
+    slope_aero = atan2f(GPS_pitot._vz_gps/100.0,GPS_pitot._speed_pitot*cosf(BNO_pitch*DEG2RAD))*RAD2DEG;
+    slope_aero_f = atan2f(GPS_pitot._vz_gps/100.0,vh_pitot_mean)*RAD2DEG;
     
-    slope_ground = atan2(GPS_pitot._vz_gps,sqrtf(GPS_pitot._vx_gps*GPS_pitot._vx_gps + GPS_pitot._vy_gps*GPS_pitot._vy_gps))*RAD2DEG;
+    slope_ground = atan2f(GPS_pitot._vz_gps,sqrtf(GPS_pitot._vx_gps*GPS_pitot._vx_gps + GPS_pitot._vy_gps*GPS_pitot._vy_gps))*RAD2DEG;
 
 /***************** Paramètres de régulation par defaut*********************/
     // peuvent être modifiés dans les différents modes, par défaut, juste le D sur le roll
@@ -398,12 +398,13 @@ void loop()
 
       // paramètres mode dauphin
       K_Pitch = 0; KD_Pitch = 0; KI_Pitch = 0;
-      K_Roll = 0.013; KD_Roll = 0.0;
+      K_Roll = 0.0; KD_Roll = 0.0006;
       K_Yaw = 0; KD_Yaw = 0;
       KP_Moteur = 0.1; KI_Moteur = 0.0005; Offset_gaz_reg = 0.0;
       //elevation_trim = 0.0;
 
       Commande_I_flaps = 0;
+      remote._elevator = 0;
       //Commande_I_Moteur = 0;
       
       
@@ -411,7 +412,8 @@ void loop()
       // consigne de pitch et largeur de l'hystéresis
 
       hyst_width = 0.0;
-      vitesse_des = 8.0;
+      vitesse_des = 9.0;
+      //pitch_des = -20;
 
 
       if(remote._switch_F==2)
@@ -559,6 +561,7 @@ void loop()
     Commande_P_flaps = - K_Pitch * (BNO_pitch - pitch_des_f);
     Commande_D_flaps = - KD_Pitch * BNO_wy;
     Commande_Pitch = - K_Pitch_remote * remote._elevator + Commande_dauphin  + Commande_P_flaps + Commande_I_flaps + Commande_D_flaps + elevation_trim; //+ Commande_P_flapping;
+
     
     // Construction de pwm servo a partir des commandes roll et pitch autour du zero des servo
     pwm_norm_R = Commande_Roll + Commande_Pitch;
@@ -580,6 +583,8 @@ void loop()
     {
       Motor_Prop.power_on();
     }
+
+    
 
 /*************Ecriture PWMs Servo et Moteurs*****************/
 

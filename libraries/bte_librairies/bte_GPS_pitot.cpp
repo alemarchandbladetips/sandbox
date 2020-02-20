@@ -37,7 +37,7 @@ void bte_GPS_pitot::read_GPS_pitot(void)
                         }
                         if(j==0) _y_gps = val_float;
                         if(j==1) _x_gps = val_float;
-                        if(j==2) _z_gps = -val_float;
+                        if(j==2) _z_gps = val_float;
                         if(j==3) _vy_gps = val_float;
                         if(j==4) _vx_gps = val_float;
                         if(j==5) _vz_gps = -val_float;

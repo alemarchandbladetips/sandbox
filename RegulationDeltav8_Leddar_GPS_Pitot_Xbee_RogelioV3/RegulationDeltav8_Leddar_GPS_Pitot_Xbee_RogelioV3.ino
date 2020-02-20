@@ -313,12 +313,14 @@ void loop()
 
       // paramètres mode stabilisé
       K_Pitch = 0.004; KD_Pitch = 0.0005; KI_Pitch = 0.0004;
-      K_Roll = 0.013; KD_Roll = 0.0006;
-      K_Yaw = 0; KD_Yaw = 0;
+      K_Roll = 0.007; KD_Roll = 0.0006;
+      K_Yaw = 0.01; KD_Yaw = 0.001;
+      //K_Yaw = 0.0; KD_Yaw = 0.0;
       KP_Moteur = 0.3; KI_Moteur = 0.0015; Offset_gaz_reg = 0.0;
 
       // mise à 0 des commandes inutilisées
-      Commande_dauphin=0;
+      Commande_dauphin = 0;
+      Commande_I_slope = 0;
       flap_state = 1;
       slope_des_f = slope_aero_f;
 
@@ -358,7 +360,7 @@ void loop()
 
       // paramètres mode stabilisé
       K_Pitch = 0.004; KD_Pitch = 0.0005; KI_Pitch = 0.0004;
-      K_Roll = 0.013; KD_Roll = 0.0006;
+      K_Roll = 0.007; KD_Roll = 0.0006;
       K_Yaw = 0; KD_Yaw = 0;
       KP_Moteur = 0; KI_Moteur = 0; Offset_gaz_reg = 0.0;
 
@@ -399,7 +401,8 @@ void loop()
       // paramètres mode dauphin
       K_Pitch = 0; KD_Pitch = 0; KI_Pitch = 0;
       K_Roll = 0.0; KD_Roll = 0.0006;
-      K_Yaw = 0; KD_Yaw = 0;
+      K_Yaw = 0.01*remote._knob; KD_Yaw = 0.001*remote._knob;
+      //K_Yaw = 0.0; KD_Yaw = 0.0;
       KP_Moteur = 0.1; KI_Moteur = 0.0005; Offset_gaz_reg = 0.0;
       //elevation_trim = 0.0;
 
@@ -416,57 +419,64 @@ void loop()
       //pitch_des = -20;
 
 
+//      if(remote._switch_F==2)
+//      {
+//        pitch_des = 10;
+//      } else if(remote._switch_F==1)
+//      {
+//        pitch_des = 0;
+//      } else
+//      {
+//        pitch_des = -10;
+//      }
+//
+//      if(remote._switch_D == 2)
+//      {
+//        flaps_amplitude = 0.6;
+//      } else if(remote._switch_D == 1)
+//      {
+//        flaps_amplitude = 0.5;
+//      } else
+//      {
+//        flaps_amplitude = 0.4;
+//      }
+
+      
       if(remote._switch_F==2)
       {
-        pitch_des = 10;
+        slope_des = 10;
       } else if(remote._switch_F==1)
       {
-        pitch_des = 0;
+        slope_des = -10;
       } else
       {
-        pitch_des = -10;
+        slope_des = -30;
       }
 
       if(remote._switch_D == 2)
       {
-        flaps_amplitude = 0.6;
+        KI_slope = 0.0005;
       } else if(remote._switch_D == 1)
       {
-        flaps_amplitude = 0.5;
+        KI_slope = 0.0002;
       } else
       {
-        flaps_amplitude = 0.4;
+        KI_slope = 0.0001;
       }
 
-      
+      //KI_slope = 0.0002;
 
-//      if(remote._elevator < 0)
-//      {
-//        slope_des = -20*remote._elevator;
-//      } else
-//      {
-//        slope_des = -60*remote._elevator;
-//      }
-//      remote._elevator = 0;
-//
-//      KI_slope = 0.0002;
-//
-//      slope_des_f = (1 - alpha_slope) * slope_des_f + alpha_dauphin * slope_des; 
-//
-//      Commande_I_slope += -KI_slope * (slope_des_f - slope_aero_f); 
-//      Commande_I_slope = constrain(Commande_I_slope, -20, 20);
-//      Commande_I_slope = constrain(Commande_I_slope, -50-slope_des_f, 30-slope_des_f);
-//
-//      pitch_des = slope_des_f + Commande_I_slope;
-//      pitch_des = constrain(pitch_des,-50,30);
-//      pitch_des_f = pitch_des;
-//
-//      // -40 deg = 0.8, +20deg = 0.4 par exemple
-//      flaps_amplitude = 0.5333-0.006667*pitch_des_f;
-//      flaps_amplitude = constrain(flaps_amplitude,0.4,0.8);
+      slope_des_f = (1 - alpha_slope) * slope_des_f + alpha_slope * slope_des; 
 
+      Commande_I_slope += -KI_slope * (slope_des_f - slope_aero_f); 
+      Commande_I_slope = constrain(Commande_I_slope, -20, 20);
 
-      
+      pitch_des = slope_des + 15 + Commande_I_slope;
+      pitch_des = constrain(pitch_des,-40,20);
+      pitch_des_f = pitch_des;
+
+      flaps_amplitude = 0.6;
+
       flaps_amplitude_plus = flaps_amplitude;
       flaps_amplitude_moins = flaps_amplitude;
       
@@ -644,7 +654,7 @@ void loop()
         dataFile.print(Commande_Roll*1000, 0); dataFile.print(";");
         dataFile.print(Commande_Pitch*1000, 0); dataFile.print(";");
 
-        dataFile.print(slope_aero*10,0); dataFile.print(";");
+        dataFile.print(slope_des_f*10,0); dataFile.print(";");
         dataFile.print(slope_aero_f*10,0); dataFile.print(";");
         dataFile.print(slope_ground*10,0); dataFile.print(";");
 

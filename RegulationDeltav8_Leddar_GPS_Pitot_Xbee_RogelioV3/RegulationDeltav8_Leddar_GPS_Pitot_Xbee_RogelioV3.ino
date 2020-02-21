@@ -91,7 +91,7 @@ float RollOffs = 0, PitchOffs = 0, YawOffs = 0; //en deg
 // params
 float K_Pitch_remote = 0.3, K_Pitch = 0, KD_Pitch = 0, KI_Pitch = 0;
 float K_Roll_remote = -0.3, K_Roll = 0, KD_Roll = 0.0006;
-float K_Yaw = 0, KD_Yaw = 0;
+float K_Yaw = 0, KD_Yaw = 0, KI_yaw = 0;
 float KP_Moteur = 0, KI_Moteur = 0, Offset_gaz_reg = 0;
 float alpha_stab = 0.025; // filtrage au passage en mode stabilisé
 
@@ -100,7 +100,7 @@ float pitch_des = 0, pitch_des_f = 0, yaw_des = 0, vitesse_des = 10;
 
 // states
 float Commande_Roll;
-float Commande_Pitch, Commande_P_flaps, Commande_I_flaps, Commande_D_flaps;
+float Commande_Pitch, Commande_P_flaps, Commande_I_flaps, Commande_D_flaps, Commande_I_yaw;
 float Commande_I_Moteur, Commande_KP_Moteur;
 
 ///// mode dauphin
@@ -116,7 +116,7 @@ float filtre_dauphin=0;
 // asservissement de la pente de descente
 // params
 float slope_aero, slope_ground, slope_aero_f = 0;
-float alpha_slope = 0.025;
+float alpha_slope = 0.008;
 //consigne
 float slope_des, slope_des_f = 0;
 // states
@@ -321,6 +321,7 @@ void loop()
       // mise à 0 des commandes inutilisées
       Commande_dauphin = 0;
       Commande_I_slope = 0;
+      Commande_I_yaw = 0;
       flap_state = 1;
       slope_des_f = slope_aero_f;
 
@@ -401,7 +402,7 @@ void loop()
       // paramètres mode dauphin
       K_Pitch = 0; KD_Pitch = 0; KI_Pitch = 0;
       K_Roll = 0.0; KD_Roll = 0.0006;
-      K_Yaw = 0.01*remote._knob; KD_Yaw = 0.001*remote._knob;
+      K_Yaw = 0.0; KD_Yaw = 0.0, KI_yaw = 0.0001*2*remote._knob;
       //K_Yaw = 0.0; KD_Yaw = 0.0;
       KP_Moteur = 0.1; KI_Moteur = 0.0005; Offset_gaz_reg = 0.0;
       //elevation_trim = 0.0;
@@ -441,41 +442,45 @@ void loop()
 //        flaps_amplitude = 0.4;
 //      }
 
-      
+
       if(remote._switch_F==2)
       {
-        slope_des = 10;
+        vitesse_des = 9.0;
       } else if(remote._switch_F==1)
       {
-        slope_des = -10;
+        vitesse_des = 8.0;
       } else
       {
-        slope_des = -30;
+        vitesse_des = 7.0;
       }
 
       if(remote._switch_D == 2)
       {
-        KI_slope = 0.0005;
+        flaps_amplitude = 0.5;
       } else if(remote._switch_D == 1)
       {
-        KI_slope = 0.0002;
+        flaps_amplitude = 0.4;
       } else
       {
-        KI_slope = 0.0001;
+        flaps_amplitude = 0.3;
       }
 
-      //KI_slope = 0.0002;
+      slope_des = -10;
+
+      KI_slope = 0.005;
 
       slope_des_f = (1 - alpha_slope) * slope_des_f + alpha_slope * slope_des; 
 
-      Commande_I_slope += -KI_slope * (slope_des_f - slope_aero_f); 
+      Commande_I_slope += KI_slope * (slope_des_f - slope_aero_f); 
       Commande_I_slope = constrain(Commande_I_slope, -20, 20);
 
       pitch_des = slope_des + 15 + Commande_I_slope;
-      pitch_des = constrain(pitch_des,-40,20);
+      pitch_des = constrain(pitch_des,-40,30);
       pitch_des_f = pitch_des;
 
-      flaps_amplitude = 0.6;
+      Commande_I_yaw += KI_yaw * bte_ang_180(BNO_lacet - yaw_des); // += addition de la valeur précédente
+      Commande_I_yaw = constrain(Commande_I_yaw, -0.1, 0.1);
+      
 
       flaps_amplitude_plus = flaps_amplitude;
       flaps_amplitude_moins = flaps_amplitude;
@@ -533,10 +538,10 @@ void loop()
 
       if(flap_state>0)
       {
-        Commande_dauphin = filtre_dauphin*((float)flap_state)*flaps_amplitude_plus;
+        Commande_dauphin = ((float)flap_state)*flaps_amplitude_plus;
       } else
       {
-        Commande_dauphin = filtre_dauphin*((float)flap_state)*flaps_amplitude_moins;
+        Commande_dauphin = ((float)flap_state)*flaps_amplitude_moins;
       }
 
 //////// Régulation de vitesse
@@ -565,7 +570,7 @@ void loop()
 /*****************Commande générale avec les paramètres définis pour les différents modes *********************/
     
     // Commande correspondant au roll, télécommande + P roll + D roll + P yaw + D yaw
-    Commande_Roll = K_Roll_remote * remote._aileron + K_Roll * BNO_roll + KD_Roll * BNO_wx + K_Yaw * bte_ang_180(BNO_lacet - yaw_des) + KD_Yaw * BNO_wz + aileron_trim; //
+    Commande_Roll = K_Roll_remote * remote._aileron + K_Roll * BNO_roll + KD_Roll * BNO_wx + K_Yaw * bte_ang_180(BNO_lacet - yaw_des) + KD_Yaw * BNO_wz + Commande_I_yaw + aileron_trim; //
     
     // Commande correspondant au pitch
     Commande_P_flaps = - K_Pitch * (BNO_pitch - pitch_des_f);

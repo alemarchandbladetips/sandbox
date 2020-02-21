@@ -139,24 +139,28 @@ void bte_controller::update_controller(void)
 
           if (DataRadio[13] < 68 )
           {
+          //Serial.println(DataRadio[13]);
           auxSwitch_C = switchState(DataRadio[13], 57, 60, 62); //position de valeur du Switch et 3 possible valeurs
           }
           //auxSwitch_C = switchState(DataRadio[13], 57, 60, 62); //position de valeur du Switch et 3 possible valeurs
 
           if (DataRadio[27] > 32)
           {
+          //Serial.println(DataRadio[27]);
               auxSwitch_D = switchState(DataRadio[27], 33, 36, 38);
           }
           else if (DataRadio[27] < 32)
           {
               if(DataRadio[11] < 32)
               {
+              //Serial.println(DataRadio[11]);
                   auxSwitch_D = switchState(DataRadio[11], 33, 36, 38);
               }
           }
           
           if (DataRadio[15] < 76)
           {
+          		
               auxSwitch_F = switchState(DataRadio[15], 49, 52, 54);
           }
 

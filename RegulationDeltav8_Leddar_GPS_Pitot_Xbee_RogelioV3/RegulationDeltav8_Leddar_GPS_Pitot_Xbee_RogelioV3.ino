@@ -290,7 +290,6 @@ void loop()
 
       // paramètres mode manuel
       K_Pitch = 0; KD_Pitch = 0; KI_Pitch = 0;
-      //K_Roll = 0; KD_Roll = 0.0006*360;
       K_Roll = 0; KD_Roll = 0.2;
       K_Yaw = 0; KD_Yaw = 0;
       KP_Moteur = 0; KI_Moteur = 0; Offset_gaz_reg = 0;
@@ -333,14 +332,9 @@ void loop()
       timer_mode = millis() - time_switch;  // timer_mode = 0 tt le temps.
 
       // paramètres mode stabilisé
-      //K_Pitch = 0.004*360; KD_Pitch = 0.0005*360; KI_Pitch = 0.0004*360*100;
       K_Pitch = 1.5; KD_Pitch = 0.2; KI_Pitch = 15.0;
-      //K_Roll = 0.007*360; KD_Roll = 0.0006;
       K_Roll = 2.5; KD_Roll = 0.2;
-      //K_Yaw = 0.01; KD_Yaw = 0.001;
       K_Yaw = 3.6; KD_Yaw = 0.36;
-      //K_Yaw = 0.0; KD_Yaw = 0.0;
-      //KP_Moteur = 0.3; KI_Moteur = 0.002*100; Offset_gaz_reg = 0.0;
       KP_Moteur = 0.3; KI_Moteur = 0.2; Offset_gaz_reg = 0.0;
 
       // mise à 0 des commandes inutilisées
@@ -391,9 +385,7 @@ void loop()
     { 
 
       // paramètres mode stabilisé
-      //K_Pitch = 0.004*360; KD_Pitch = 0.0005*360; KI_Pitch = 0.0004*360*100;
       K_Pitch = 1.5; KD_Pitch = 0.2; KI_Pitch = 15;
-      //K_Roll = 0.007*360; KD_Roll = 0.0006*360;
       K_Roll = 2.5; KD_Roll = 0.2;
       K_Yaw = 0; KD_Yaw = 0;
       KP_Moteur = 0; KI_Moteur = 0; Offset_gaz_reg = 0.0;
@@ -445,11 +437,8 @@ void loop()
 
       // paramètres mode dauphin
       K_Pitch = 0; KD_Pitch = 0; KI_Pitch = 0;
-      //K_Roll = 0.013 * 360; KD_Roll = 0.0006 * 360;
       K_Roll = 4.5; KD_Roll = 0.2;
-      //K_Yaw = 0.01 *360; KD_Yaw = 0.001*360; KI_Yaw = 0.0;
       K_Yaw = 3.6; KD_Yaw = 0.36; KI_yaw = 0.0;
-      //KP_Moteur = 0.1; KI_Moteur = 0.002*100; Offset_gaz_reg = 0.0;
       KP_Moteur = 0.1; KI_Moteur = 0.2; Offset_gaz_reg = 0.0;
       //elevation_trim = 0.0;
 
@@ -504,7 +493,6 @@ void loop()
 
       flaps_amplitude = 0.5;
 
-      // KI_slope = 0.003;
       KI_slope = 0.3;
 
       slope_des_f = (1 - alpha_slope) * slope_des_f + alpha_slope * slope_des; 

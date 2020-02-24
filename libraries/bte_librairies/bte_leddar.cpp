@@ -35,7 +35,7 @@ void bte_leddar::read_leddar(void)
                 *(ptr_buffer_uint16+1) = DataLeddar[1];
                 _hauteur = (buffer_uint16/10.0);
 
-                if( (buffer_uint16>15000) || buffer_uint16 == HistoLeddar[BTE_LEDDAR_NFILT_MED-20] && HistoLeddar[BTE_LEDDAR_NFILT_MED-3]==HistoLeddar[BTE_LEDDAR_NFILT_MED-2] && HistoLeddar[BTE_LEDDAR_NFILT_MED-2]==HistoLeddar[BTE_LEDDAR_NFILT_MED-1] )
+                if( (buffer_uint16<10) || (buffer_uint16>30000) || buffer_uint16 == HistoLeddar[BTE_LEDDAR_NFILT_MED-20] && HistoLeddar[BTE_LEDDAR_NFILT_MED-3]==HistoLeddar[BTE_LEDDAR_NFILT_MED-2] && HistoLeddar[BTE_LEDDAR_NFILT_MED-2]==HistoLeddar[BTE_LEDDAR_NFILT_MED-1] )
                 {
                   _validity_flag = 0;
                 } else

@@ -390,7 +390,7 @@ void loop()
       
       if(hauteur_leddar_corrigee > hauteur_cabrage) // phase pré-cabrage
       {
-        pitch_des = -25;
+        pitch_des = -20;
         pitch_des_f = pitch_des;
         
       } else //cabrage final
@@ -422,7 +422,7 @@ void loop()
       K_Roll = 0.013; KD_Roll = 0.0006;
       //K_Yaw = 0.0; KD_Yaw = 0.0;
       K_Yaw = 0.01; KD_Yaw = 0.001;
-      KP_Moteur = 0.2; KI_Moteur = 0.002; Offset_gaz_reg = 0.0;
+      KP_Moteur = 0.02; KI_Moteur = 0.002; Offset_gaz_reg = 0.0;
       //elevation_trim = 0.0;
 
       Commande_I_flaps = 0;
@@ -442,10 +442,29 @@ void loop()
 
       vitesse_des_f = (1-alpha_vitesse)*vitesse_des_f + alpha_vitesse*vitesse_des;
 
-      if(remote._switch_F==2)
-      {
-        slope_des = -10;
-      } else if(remote._switch_F==1)
+//      if(remote._switch_F==2)
+//      {
+//        slope_des = -10;
+//      } else if(remote._switch_F==1)
+//      {
+//        slope_des = -30;
+//      } else
+//      {
+//        slope_des = -45;
+//      }
+
+//      if(remote._switch_D == 2)
+//      {
+//        KP_Moteur = 0.2; KI_Moteur = 0.002; Offset_gaz_reg = 0.0;
+//      } else if(remote._switch_D == 1)
+//      {
+//        KP_Moteur = 0.4; KI_Moteur = 0.004; Offset_gaz_reg = 0.0;
+//      } else
+//      {
+//        KP_Moteur = 0.8; KI_Moteur = 0.008; Offset_gaz_reg = 0.0;
+//      }
+
+      if(hauteur_leddar_corrigee<2000.0 && leddar._validity_flag==1 )
       {
         slope_des = -30;
       } else
@@ -454,26 +473,6 @@ void loop()
       }
 
       vitesse_des = 9.0;
-
-      if(remote._switch_D == 2)
-      {
-        KP_Moteur = 0.2; KI_Moteur = 0.002; Offset_gaz_reg = 0.0;
-      } else if(remote._switch_D == 1)
-      {
-        KP_Moteur = 0.4; KI_Moteur = 0.004; Offset_gaz_reg = 0.0;
-      } else
-      {
-        KP_Moteur = 0.8; KI_Moteur = 0.008; Offset_gaz_reg = 0.0;
-      }
-
-      if(remote._knob > 0.5)
-      {
-        vitesse_des = 11.0;
-      } else
-      {
-        vitesse_des = 9.0;
-      }
-      
 
       flaps_amplitude = 0.5;
 
@@ -495,7 +494,7 @@ void loop()
       flaps_amplitude_moins = flaps_amplitude;
       
       // hauteur du min du dernier dauphin
-      hauteur_switch = 1200.0;//2000.0; // en cm 
+      hauteur_switch = 1000.0;//2000.0; // en cm 
 
       // hauteur de cabrage final
       hauteur_cabrage = 250.0; // en cm
@@ -540,7 +539,7 @@ void loop()
       
       if(hauteur_leddar_corrigee<hauteur_switch && leddar._validity_flag==1 )
       {
-        arrondi_almost_ready = 0;//1;
+        arrondi_almost_ready = 1;
       }
 
 //////// Création de la commande dauphin

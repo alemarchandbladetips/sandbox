@@ -421,7 +421,7 @@ void loop()
       K_Pitch = 0; KD_Pitch = 0; KI_Pitch = 0;
       K_Roll = 0.013; KD_Roll = 0.0006;
       K_Yaw = 0.0; KD_Yaw = 0.0;
-      //K_Yaw = 0.01*2*remote._knob; KD_Yaw = 0.001;
+      K_Yaw = 0.01*2*remote._knob; KD_Yaw = 0.001;
       KP_Moteur = 0.1; KI_Moteur = 0.00075; Offset_gaz_reg = 0.0;
       //elevation_trim = 0.0;
 
@@ -443,61 +443,30 @@ void loop()
 
       vitesse_des_f = (1-alpha_vitesse)*vitesse_des_f + alpha_vitesse*vitesse_des;
 
-//      if(remote._switch_F==2)
-//      {
-//        vitesse_des = 10.0;
-//      } else if(remote._switch_F==1)
-//      {
-//        kR = (remote._knob-0.5);
-//      } else
-//      {
-//        K_Roll = 0.0; KD_Roll = 0.0;
-//        kR = (remote._knob-0.5);
-//      }
-
       if(remote._switch_F==2)
       {
-        vitesse_des = 12.0;
+        slope_des = -10;
       } else if(remote._switch_F==1)
       {
-        if(remote._switch_D == 2)
-        {
-          vitesse_des = 11.0;
-        } else if(remote._switch_D == 1)
-        {
-          vitesse_des = 10.0;
-        } else
-        {
-          vitesse_des = 9.0;
-        }
+        slope_des = -30;
       } else
       {
-        if(remote._switch_D == 2)
-        {
-          vitesse_des = 8.0;
-        } else if(remote._switch_D == 1)
-        {
-          vitesse_des = 7.0;
-        } else
-        {
-          vitesse_des = 6.0;
-        }
+        slope_des = -45;
       }
+
 
       if(remote._switch_D == 2)
       {
-        vitesse_des = 8.0;
+        vitesse_des = 9.0;
       } else if(remote._switch_D == 1)
       {
-        vitesse_des = 7.0;
+        vitesse_des = 8.0;
       } else
       {
-        vitesse_des = 6.0;
+        vitesse_des = 7.0;
       }
 
       flaps_amplitude = 0.5;
-
-      slope_des = -10;
 
       KI_slope = 0.005;
 
@@ -512,7 +481,6 @@ void loop()
 
       Commande_I_yaw += KI_yaw * bte_ang_180(BNO_lacet - yaw_des); // += addition de la valeur précédente
       Commande_I_yaw = constrain(Commande_I_yaw, -0.1, 0.1);
-      
 
       flaps_amplitude_plus = flaps_amplitude;
       flaps_amplitude_moins = flaps_amplitude;

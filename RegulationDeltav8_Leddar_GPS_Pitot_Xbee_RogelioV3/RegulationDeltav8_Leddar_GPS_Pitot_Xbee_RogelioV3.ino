@@ -125,6 +125,15 @@ float Commande_I_slope, KI_slope;
 
 /******* debug **************/
 
+float alpha_roll = 0.04;
+float BNO_roll_f = 0;
+
+float alpha_vitesse = 0.004;
+float vitesse_des_f;
+
+float err_yaw_f;
+float kR;
+
 //autres
 uint32_t temps, temps2, dt, time_idx;
 uint32_t temps_tmp, dt1, dt2, dt3, dt4;
@@ -290,6 +299,9 @@ void loop()
       // mise à jour des consignes avec les valeurs courantes de la BNO
       yaw_des = BNO_lacet;
       pitch_des_f = BNO_pitch; 
+
+
+      kR = 0.0;
     }
 
 
@@ -316,7 +328,7 @@ void loop()
       K_Roll = 0.007; KD_Roll = 0.0006;
       K_Yaw = 0.01; KD_Yaw = 0.001;
       //K_Yaw = 0.0; KD_Yaw = 0.0;
-      KP_Moteur = 0.3; KI_Moteur = 0.0015; Offset_gaz_reg = 0.0;
+      KP_Moteur = 0.3; KI_Moteur = 0.002; Offset_gaz_reg = 0.0;
 
       // mise à 0 des commandes inutilisées
       Commande_dauphin = 0;
@@ -324,6 +336,8 @@ void loop()
       Commande_I_yaw = 0;
       flap_state = 1;
       slope_des_f = slope_aero_f;
+      BNO_roll_f = BNO_roll;
+      vitesse_des_f = GPS_pitot._speed_pitot;
 
       // consignes de pitch et de vitesse
       pitch_des = 4;
@@ -339,12 +353,16 @@ void loop()
     
       thrust = constrain(thrust, 0, 1);
 
+      err_yaw_f = bte_ang_180(BNO_lacet - yaw_des);
+
       
       pitch_des_f = (1 - alpha_stab) * pitch_des_f + alpha_stab * pitch_des; //
 
       // Intégrateur des flaps pour régulation du pitch
       Commande_I_flaps += -KI_Pitch * (BNO_pitch - pitch_des_f); // += addition de la valeur précédente
       Commande_I_flaps = constrain(Commande_I_flaps, -0.4, 0.4);
+
+      kR = 0.0;
     
     }
 
@@ -401,10 +419,10 @@ void loop()
 
       // paramètres mode dauphin
       K_Pitch = 0; KD_Pitch = 0; KI_Pitch = 0;
-      K_Roll = 0.0; KD_Roll = 0.0006;
-      K_Yaw = 0.0; KD_Yaw = 0.0, KI_yaw = 0.0001*2*remote._knob;
-      //K_Yaw = 0.0; KD_Yaw = 0.0;
-      KP_Moteur = 0.1; KI_Moteur = 0.0005; Offset_gaz_reg = 0.0;
+      K_Roll = 0.013; KD_Roll = 0.0006;
+      K_Yaw = 0.0; KD_Yaw = 0.0;
+      //K_Yaw = 0.01*2*remote._knob; KD_Yaw = 0.001;
+      KP_Moteur = 0.1; KI_Moteur = 0.00075; Offset_gaz_reg = 0.0;
       //elevation_trim = 0.0;
 
       Commande_I_flaps = 0;
@@ -416,54 +434,68 @@ void loop()
       // consigne de pitch et largeur de l'hystéresis
 
       hyst_width = 0.0;
-      vitesse_des = 9.0;
-      //pitch_des = -20;
 
+      BNO_roll_f = (1-alpha_roll)*BNO_roll_f + alpha_roll*BNO_roll;
+      BNO_roll = BNO_roll_f;
+
+      
+      err_yaw_f = (1-alpha_roll)*err_yaw_f + alpha_roll*bte_ang_180(BNO_lacet - yaw_des);
+
+      vitesse_des_f = (1-alpha_vitesse)*vitesse_des_f + alpha_vitesse*vitesse_des;
 
 //      if(remote._switch_F==2)
 //      {
-//        pitch_des = 10;
+//        vitesse_des = 10.0;
 //      } else if(remote._switch_F==1)
 //      {
-//        pitch_des = 0;
+//        kR = (remote._knob-0.5);
 //      } else
 //      {
-//        pitch_des = -10;
+//        K_Roll = 0.0; KD_Roll = 0.0;
+//        kR = (remote._knob-0.5);
 //      }
-//
-//      if(remote._switch_D == 2)
-//      {
-//        flaps_amplitude = 0.6;
-//      } else if(remote._switch_D == 1)
-//      {
-//        flaps_amplitude = 0.5;
-//      } else
-//      {
-//        flaps_amplitude = 0.4;
-//      }
-
 
       if(remote._switch_F==2)
       {
-        vitesse_des = 9.0;
+        vitesse_des = 12.0;
       } else if(remote._switch_F==1)
       {
-        vitesse_des = 8.0;
+        if(remote._switch_D == 2)
+        {
+          vitesse_des = 11.0;
+        } else if(remote._switch_D == 1)
+        {
+          vitesse_des = 10.0;
+        } else
+        {
+          vitesse_des = 9.0;
+        }
       } else
       {
-        vitesse_des = 7.0;
+        if(remote._switch_D == 2)
+        {
+          vitesse_des = 8.0;
+        } else if(remote._switch_D == 1)
+        {
+          vitesse_des = 7.0;
+        } else
+        {
+          vitesse_des = 6.0;
+        }
       }
 
       if(remote._switch_D == 2)
       {
-        flaps_amplitude = 0.5;
+        vitesse_des = 8.0;
       } else if(remote._switch_D == 1)
       {
-        flaps_amplitude = 0.4;
+        vitesse_des = 7.0;
       } else
       {
-        flaps_amplitude = 0.3;
+        vitesse_des = 6.0;
       }
+
+      flaps_amplitude = 0.5;
 
       slope_des = -10;
 
@@ -545,11 +577,9 @@ void loop()
       }
 
 //////// Régulation de vitesse
-
-      vitesse_des = 10.0;
       
       Commande_I_Moteur += -KI_Moteur * (v_pitot_mean - vitesse_des);
-      Commande_I_Moteur = constrain(Commande_I_Moteur, 0, 0.5); // sat = 200
+      Commande_I_Moteur = constrain(Commande_I_Moteur, 0, 0.7); // sat = 200
     
       Commande_KP_Moteur = -KP_Moteur * (v_pitot_mean - vitesse_des);
       Commande_KP_Moteur = constrain(Commande_KP_Moteur, -0.5, 0.5);
@@ -570,7 +600,7 @@ void loop()
 /*****************Commande générale avec les paramètres définis pour les différents modes *********************/
     
     // Commande correspondant au roll, télécommande + P roll + D roll + P yaw + D yaw
-    Commande_Roll = K_Roll_remote * remote._aileron + K_Roll * BNO_roll + KD_Roll * BNO_wx + K_Yaw * bte_ang_180(BNO_lacet - yaw_des) + KD_Yaw * BNO_wz + Commande_I_yaw + aileron_trim; //
+    Commande_Roll = K_Roll_remote * remote._aileron + K_Roll * BNO_roll + KD_Roll * BNO_wx + K_Yaw * err_yaw_f + KD_Yaw * BNO_wz + Commande_I_yaw + aileron_trim; //
     
     // Commande correspondant au pitch
     Commande_P_flaps = - K_Pitch * (BNO_pitch - pitch_des_f);
@@ -605,7 +635,7 @@ void loop()
 
     // Saturation des pwm normalisés.
     pwm_norm_R = constrain(pwm_norm_R,-0.8,1);
-    pwm_norm_L = constrain(pwm_norm_L,-1,0.8);
+    pwm_norm_L = constrain((1+kR)*pwm_norm_L,-1,0.8);
     
     Servo_R.set_normalized_pwm(pwm_norm_R);
     Servo_L.set_normalized_pwm(pwm_norm_L);
@@ -661,7 +691,7 @@ void loop()
 
         dataFile.print(slope_des_f*10,0); dataFile.print(";");
         dataFile.print(slope_aero_f*10,0); dataFile.print(";");
-        dataFile.print(slope_ground*10,0); dataFile.print(";");
+        dataFile.print(kR*100,0); dataFile.print(";");
 
         dataFile.println(" "); // gaffe à la dernière ligne
         

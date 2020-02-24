@@ -88,10 +88,12 @@ float RollOffs = 0, PitchOffs = 0, YawOffs = 0; //en deg
 
 /******* Variables et paramètres des régulation **************/
 
+const float dt_flt = 0.01;
+
 //// régulation d'attitude et vitesse
 // params
 float K_Pitch_remote = 0.3, K_Pitch = 0, KD_Pitch = 0, KI_Pitch = 0;
-float K_Roll_remote = -0.3, K_Roll = 0, KD_Roll = 0.0006;
+float K_Roll_remote = -0.3, K_Roll = 0, KD_Roll = 0.2;
 float K_Yaw = 0, KD_Yaw = 0, KI_yaw = 0;
 float KP_Moteur = 0, KI_Moteur = 0, Offset_gaz_reg = 0;
 float alpha_stab = 0.025; // filtrage au passage en mode stabilisé
@@ -268,7 +270,7 @@ void loop()
     // peuvent être modifiés dans les différents modes, par défaut, juste le D sur le roll
     
     K_Pitch = 0; KD_Pitch = 0; KI_Pitch = 0;
-    K_Roll = 0; KD_Roll = 0.0006;
+    K_Roll = 0; KD_Roll = 0.2;
     K_Yaw = 0; KD_Yaw = 0;
     KP_Moteur = 0; KP_Moteur = 0; Offset_gaz_reg = 0;
    
@@ -288,7 +290,8 @@ void loop()
 
       // paramètres mode manuel
       K_Pitch = 0; KD_Pitch = 0; KI_Pitch = 0;
-      K_Roll = 0; KD_Roll = 0.0006;
+      //K_Roll = 0; KD_Roll = 0.0006*360;
+      K_Roll = 0; KD_Roll = 0.2;
       K_Yaw = 0; KD_Yaw = 0;
       KP_Moteur = 0; KI_Moteur = 0; Offset_gaz_reg = 0;
       
@@ -330,11 +333,15 @@ void loop()
       timer_mode = millis() - time_switch;  // timer_mode = 0 tt le temps.
 
       // paramètres mode stabilisé
-      K_Pitch = 0.004; KD_Pitch = 0.0005; KI_Pitch = 0.0004;
-      K_Roll = 0.007; KD_Roll = 0.0006;
-      K_Yaw = 0.01; KD_Yaw = 0.001;
+      //K_Pitch = 0.004*360; KD_Pitch = 0.0005*360; KI_Pitch = 0.0004*360*100;
+      K_Pitch = 1.5; KD_Pitch = 0.2; KI_Pitch = 15.0;
+      //K_Roll = 0.007*360; KD_Roll = 0.0006;
+      K_Roll = 2.5; KD_Roll = 0.2;
+      //K_Yaw = 0.01; KD_Yaw = 0.001;
+      K_Yaw = 3.6; KD_Yaw = 0.36;
       //K_Yaw = 0.0; KD_Yaw = 0.0;
-      KP_Moteur = 0.3; KI_Moteur = 0.002; Offset_gaz_reg = 0.0;
+      //KP_Moteur = 0.3; KI_Moteur = 0.002*100; Offset_gaz_reg = 0.0;
+      KP_Moteur = 0.3; KI_Moteur = 0.2; Offset_gaz_reg = 0.0;
 
       // mise à 0 des commandes inutilisées
       Commande_dauphin = 0;
@@ -349,7 +356,7 @@ void loop()
       pitch_des = 4;
       vitesse_des = 10.0;
       
-      Commande_I_Moteur += -KI_Moteur * (GPS_pitot._speed_pitot - vitesse_des);
+      Commande_I_Moteur += -KI_Moteur * (GPS_pitot._speed_pitot - vitesse_des) * dt_flt;
       Commande_I_Moteur = constrain(Commande_I_Moteur, 0, 0.3); // sat = 200
     
       Commande_KP_Moteur = -KP_Moteur * (GPS_pitot._speed_pitot - vitesse_des);
@@ -365,7 +372,7 @@ void loop()
       pitch_des_f = (1 - alpha_stab) * pitch_des_f + alpha_stab * pitch_des; //
 
       // Intégrateur des flaps pour régulation du pitch
-      Commande_I_flaps += -KI_Pitch * (BNO_pitch - pitch_des_f); // += addition de la valeur précédente
+      Commande_I_flaps += -KI_Pitch * (BNO_pitch - pitch_des_f) * 360.0 * dt_flt; // += addition de la valeur précédente
       Commande_I_flaps = constrain(Commande_I_flaps, -0.4, 0.4);
 
       kR = 0.0;
@@ -384,8 +391,10 @@ void loop()
     { 
 
       // paramètres mode stabilisé
-      K_Pitch = 0.004; KD_Pitch = 0.0005; KI_Pitch = 0.0004;
-      K_Roll = 0.007; KD_Roll = 0.0006;
+      //K_Pitch = 0.004*360; KD_Pitch = 0.0005*360; KI_Pitch = 0.0004*360*100;
+      K_Pitch = 1.5; KD_Pitch = 0.2; KI_Pitch = 15;
+      //K_Roll = 0.007*360; KD_Roll = 0.0006*360;
+      K_Roll = 2.5; KD_Roll = 0.2;
       K_Yaw = 0; KD_Yaw = 0;
       KP_Moteur = 0; KI_Moteur = 0; Offset_gaz_reg = 0.0;
 
@@ -420,7 +429,7 @@ void loop()
       pitch_des_f = (1 - alpha_stab) * pitch_des_f + alpha_stab * pitch_des; //
 
       // Intégrateur des flaps pour régulation du pitch
-      Commande_I_flaps += -KI_Pitch * (BNO_pitch - pitch_des_f); // += addition de la valeur précédente
+      Commande_I_flaps += -KI_Pitch * (BNO_pitch - pitch_des_f) * dt_flt * 360.0; // += addition de la valeur précédente
       Commande_I_flaps = constrain(Commande_I_flaps, -0.4, 0.4);
 
     }
@@ -436,10 +445,12 @@ void loop()
 
       // paramètres mode dauphin
       K_Pitch = 0; KD_Pitch = 0; KI_Pitch = 0;
-      K_Roll = 0.013; KD_Roll = 0.0006;
-      //K_Yaw = 0.0; KD_Yaw = 0.0;
-      K_Yaw = 0.01; KD_Yaw = 0.001;
-      KP_Moteur = 0.05; KI_Moteur = 0.08; Offset_gaz_reg = 0.0;
+      //K_Roll = 0.013 * 360; KD_Roll = 0.0006 * 360;
+      K_Roll = 4.5; KD_Roll = 0.2;
+      //K_Yaw = 0.01 *360; KD_Yaw = 0.001*360; KI_Yaw = 0.0;
+      K_Yaw = 3.6; KD_Yaw = 0.36; KI_yaw = 0.0;
+      //KP_Moteur = 0.1; KI_Moteur = 0.002*100; Offset_gaz_reg = 0.0;
+      KP_Moteur = 0.1; KI_Moteur = 0.2; Offset_gaz_reg = 0.0;
       //elevation_trim = 0.0;
 
       Commande_I_flaps = 0;
@@ -481,7 +492,7 @@ void loop()
         vitesse_des = 9.0;
       }
 
-      if(hauteur_leddar_corrigee<2000.0 && leddar._validity_flag==1 )
+      if(hauteur_leddar_corrigee<20.0 && leddar._validity_flag==1 )
       {
         slope_des = -20;
       } else
@@ -493,28 +504,29 @@ void loop()
 
       flaps_amplitude = 0.5;
 
-      KI_slope = 0.003;
+      // KI_slope = 0.003;
+      KI_slope = 0.3;
 
       slope_des_f = (1 - alpha_slope) * slope_des_f + alpha_slope * slope_des; 
 
-      Commande_I_slope += KI_slope * (slope_des_f - slope_aero_f); 
+      Commande_I_slope += KI_slope * (slope_des_f - slope_aero_f) * dt_flt; 
       Commande_I_slope = constrain(Commande_I_slope, -20, 20);
 
       pitch_des = slope_des + 15 + Commande_I_slope;
       pitch_des = constrain(pitch_des,-40,30);
       pitch_des_f = pitch_des;
 
-      Commande_I_yaw += KI_yaw * bte_ang_180(BNO_lacet - yaw_des); // += addition de la valeur précédente
+      Commande_I_yaw += KI_yaw * err_yaw_f * dt_flt * 360.0; // += addition de la valeur précédente
       Commande_I_yaw = constrain(Commande_I_yaw, -0.1, 0.1);
 
       flaps_amplitude_plus = flaps_amplitude;
       flaps_amplitude_moins = flaps_amplitude;
       
       // hauteur du min du dernier dauphin
-      hauteur_switch = 1000.0;//2000.0; // en cm 
+      hauteur_switch = 10.0; // en m 
 
       // hauteur de cabrage final
-      hauteur_cabrage = 250.0; // en cm
+      hauteur_cabrage = 2.5; // en m
       
       
 //////// filtrage de la consigne et du créneau des flaps
@@ -571,8 +583,8 @@ void loop()
 
 //////// Régulation de vitesse
       
-      Commande_I_Moteur += -KI_Moteur * (v_pitot_mean - vitesse_des);
-      Commande_I_Moteur = constrain(Commande_I_Moteur, 0, 1); // sat = 200
+      Commande_I_Moteur += -KI_Moteur * (v_pitot_mean - vitesse_des) * dt_flt;
+      Commande_I_Moteur = constrain(Commande_I_Moteur, 0, 0.8); // sat = 200
     
       Commande_KP_Moteur = -KP_Moteur * (v_pitot_mean - vitesse_des);
       Commande_KP_Moteur = constrain(Commande_KP_Moteur, -0.5, 0.5);
@@ -593,12 +605,23 @@ void loop()
 /*****************Commande générale avec les paramètres définis pour les différents modes *********************/
     
     // Commande correspondant au roll, télécommande + P roll + D roll + P yaw + D yaw
-    Commande_Roll = K_Roll_remote * remote._aileron + K_Roll * BNO_roll + KD_Roll * BNO_wx + K_Yaw * err_yaw_f + KD_Yaw * BNO_wz + Commande_I_yaw + aileron_trim; //
+    Commande_Roll = K_Roll_remote * remote._aileron 
+                    + K_Roll * BNO_roll * 360.0 
+                    + KD_Roll * BNO_wx  * 360.0
+                    + K_Yaw * err_yaw_f * 360.0
+                    + KD_Yaw * BNO_wz  * 360.0
+                    + Commande_I_yaw 
+                    + aileron_trim; //
     
     // Commande correspondant au pitch
-    Commande_P_flaps = - K_Pitch * (BNO_pitch - pitch_des_f);
-    Commande_D_flaps = - KD_Pitch * BNO_wy;
-    Commande_Pitch = - K_Pitch_remote * remote._elevator + Commande_dauphin  + Commande_P_flaps + Commande_I_flaps + Commande_D_flaps + elevation_trim; //+ Commande_P_flapping;
+    Commande_P_flaps = - K_Pitch * (BNO_pitch - pitch_des_f)  * 360.0;
+    Commande_D_flaps = - KD_Pitch * BNO_wy  * 360.0;
+    Commande_Pitch = - K_Pitch_remote * remote._elevator 
+                      + Commande_dauphin  
+                      + Commande_P_flaps 
+                      + Commande_I_flaps 
+                      + Commande_D_flaps 
+                      + elevation_trim; //+ Commande_P_flapping;
 
     
     // Construction de pwm servo a partir des commandes roll et pitch autour du zero des servo
@@ -665,8 +688,8 @@ void loop()
         dataFile.print(GPS_pitot._y_gps, 0); dataFile.print(";");
         dataFile.print(GPS_pitot._z_gps, 0); dataFile.print(";");
         
-        dataFile.print(leddar._hauteur,0); dataFile.print(";");
-        dataFile.print(hauteur_leddar_corrigee,0); dataFile.print(";");
+        dataFile.print(leddar._hauteur*100,0); dataFile.print(";");
+        dataFile.print(hauteur_leddar_corrigee*100,0); dataFile.print(";");
         dataFile.print(leddar._validity_flag); dataFile.print(";");
 
         dataFile.print(GPS_pitot._vx_gps, 0); dataFile.print(";");

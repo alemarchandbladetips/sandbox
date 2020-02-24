@@ -34,9 +34,9 @@ void bte_leddar::read_leddar(void)
                 DataLeddar[1] = DataLeddarRaw[1];
                 *ptr_buffer_uint16 = DataLeddar[0];
                 *(ptr_buffer_uint16+1) = DataLeddar[1];
-                _hauteur = (buffer_uint16/10.0);
+                _hauteur = (buffer_uint16/1000.0);
 
-                if( (_hauteur<50) || (_hauteur>3000) )
+                if( (_hauteur<0.5) || (_hauteur>30.0) )
                 {
                 	counter = 0;
                 } else

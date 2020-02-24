@@ -50,6 +50,7 @@ float v_pitot_buffer[100];
 float vh_pitot_mean;
 float vh_pitot_buffer[100];
 const int16_t Ndata = 100;
+uint8_t first_GPS_data = 0;
 
 /******* leddar **************/
 
@@ -205,6 +206,11 @@ void loop()
   thrust = remote._thrust;
   leddar.read_leddar();
   GPS_pitot.read_GPS_pitot();
+
+  if(GPS_pitot._x_gps != 0.0)
+  {
+    first_GPS_data = 1;
+  }
   
   dt = micros() - temps;
   
@@ -387,10 +393,21 @@ void loop()
       Commande_dauphin=0;
       flap_state = 1;
       thrust = 0.0;
+
+      if(remote._switch_F==2)
+      {
+        pitch_des = 0;
+      } else if(remote._switch_F==1)
+      {
+        pitch_des = -10;
+      } else
+      {
+        pitch_des = -20;
+      }
       
       if(hauteur_leddar_corrigee > hauteur_cabrage) // phase pré-cabrage
       {
-        pitch_des = -20;
+        //pitch_des = -20;
         pitch_des_f = pitch_des;
         
       } else //cabrage final
@@ -422,7 +439,7 @@ void loop()
       K_Roll = 0.013; KD_Roll = 0.0006;
       //K_Yaw = 0.0; KD_Yaw = 0.0;
       K_Yaw = 0.01; KD_Yaw = 0.001;
-      KP_Moteur = 0.02; KI_Moteur = 0.002; Offset_gaz_reg = 0.0;
+      KP_Moteur = 0.05; KI_Moteur = 0.08; Offset_gaz_reg = 0.0;
       //elevation_trim = 0.0;
 
       Commande_I_flaps = 0;
@@ -452,21 +469,21 @@ void loop()
 //      {
 //        slope_des = -45;
 //      }
-
-//      if(remote._switch_D == 2)
-//      {
-//        KP_Moteur = 0.2; KI_Moteur = 0.002; Offset_gaz_reg = 0.0;
-//      } else if(remote._switch_D == 1)
-//      {
-//        KP_Moteur = 0.4; KI_Moteur = 0.004; Offset_gaz_reg = 0.0;
-//      } else
-//      {
-//        KP_Moteur = 0.8; KI_Moteur = 0.008; Offset_gaz_reg = 0.0;
-//      }
+//
+      if(remote._switch_D == 2)
+      {
+        vitesse_des = 11.0;
+      } else if(remote._switch_D == 1)
+      {
+        vitesse_des = 10.0; 
+      } else
+      {
+        vitesse_des = 9.0;
+      }
 
       if(hauteur_leddar_corrigee<2000.0 && leddar._validity_flag==1 )
       {
-        slope_des = -30;
+        slope_des = -20;
       } else
       {
         slope_des = -45;
@@ -555,7 +572,7 @@ void loop()
 //////// Régulation de vitesse
       
       Commande_I_Moteur += -KI_Moteur * (v_pitot_mean - vitesse_des);
-      Commande_I_Moteur = constrain(Commande_I_Moteur, 0, 0.7); // sat = 200
+      Commande_I_Moteur = constrain(Commande_I_Moteur, 0, 1); // sat = 200
     
       Commande_KP_Moteur = -KP_Moteur * (v_pitot_mean - vitesse_des);
       Commande_KP_Moteur = constrain(Commande_KP_Moteur, -0.5, 0.5);
@@ -597,7 +614,7 @@ void loop()
     
     // Sécurité, coupure des moteurs sur le switch ou si la carte SD n'est pas présente, ou perte de signal télécommande
 //    /*
-    if(  !OK_SDCARD || remote._perte_connection || remote._rudder < 0.0 )
+    if(  !OK_SDCARD || remote._perte_connection || remote._rudder < 0.0 || first_GPS_data==0 )
     {
       Motor_Prop.power_off();
     } else

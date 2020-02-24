@@ -24,6 +24,7 @@ class bte_leddar
   uint16_t Hauteur_med_leddar;
   uint16_t buffer_uint16;
   uint8_t *ptr_buffer_uint16;
+  uint32_t counter;
   
 };
 

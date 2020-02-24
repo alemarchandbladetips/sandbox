@@ -420,9 +420,9 @@ void loop()
       // paramètres mode dauphin
       K_Pitch = 0; KD_Pitch = 0; KI_Pitch = 0;
       K_Roll = 0.013; KD_Roll = 0.0006;
-      K_Yaw = 0.0; KD_Yaw = 0.0;
-      K_Yaw = 0.01*2*remote._knob; KD_Yaw = 0.001;
-      KP_Moteur = 0.1; KI_Moteur = 0.00075; Offset_gaz_reg = 0.0;
+      //K_Yaw = 0.0; KD_Yaw = 0.0;
+      K_Yaw = 0.01; KD_Yaw = 0.001;
+      KP_Moteur = 0.2; KI_Moteur = 0.002; Offset_gaz_reg = 0.0;
       //elevation_trim = 0.0;
 
       Commande_I_flaps = 0;
@@ -438,7 +438,6 @@ void loop()
       BNO_roll_f = (1-alpha_roll)*BNO_roll_f + alpha_roll*BNO_roll;
       BNO_roll = BNO_roll_f;
 
-      
       err_yaw_f = (1-alpha_roll)*err_yaw_f + alpha_roll*bte_ang_180(BNO_lacet - yaw_des);
 
       vitesse_des_f = (1-alpha_vitesse)*vitesse_des_f + alpha_vitesse*vitesse_des;
@@ -454,21 +453,31 @@ void loop()
         slope_des = -45;
       }
 
+      vitesse_des = 9.0;
 
       if(remote._switch_D == 2)
       {
-        vitesse_des = 9.0;
+        KP_Moteur = 0.2; KI_Moteur = 0.002; Offset_gaz_reg = 0.0;
       } else if(remote._switch_D == 1)
       {
-        vitesse_des = 8.0;
+        KP_Moteur = 0.4; KI_Moteur = 0.004; Offset_gaz_reg = 0.0;
       } else
       {
-        vitesse_des = 7.0;
+        KP_Moteur = 0.8; KI_Moteur = 0.008; Offset_gaz_reg = 0.0;
       }
+
+      if(remote._knob > 0.5)
+      {
+        vitesse_des = 11.0;
+      } else
+      {
+        vitesse_des = 9.0;
+      }
+      
 
       flaps_amplitude = 0.5;
 
-      KI_slope = 0.005;
+      KI_slope = 0.003;
 
       slope_des_f = (1 - alpha_slope) * slope_des_f + alpha_slope * slope_des; 
 

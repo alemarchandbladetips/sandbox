@@ -113,7 +113,7 @@ float flaps_amplitude_plus, flaps_amplitude_moins;
 float alpha_dauphin = 0.015; // filtrage au passage en mode dauphin
 // states
 float Commande_dauphin = 0;
-int8_t arrondi_almost_ready,arrondi_ready,flap_state_mem,flap_state = 1;
+int8_t arrondi_almost_ready,arrondi_ready,flap_state_mem,flap_state = 1, leddar_track = 0;
 float filtre_dauphin=0;
 
 // asservissement de la pente de descente
@@ -298,6 +298,7 @@ void loop()
       Commande_dauphin = 0.0;
       Commande_I_flaps = 0;
       Commande_I_Moteur = 0;
+      leddar_track = 0;
 
       // mise à 0 des valeurs utilisées pour le dauphin
       filtre_dauphin=0;
@@ -342,6 +343,7 @@ void loop()
       Commande_I_slope = 0;
       Commande_I_yaw = 0;
       flap_state = 1;
+      leddar_track = 0;
       slope_des_f = slope_aero_f;
       BNO_roll_f = BNO_roll;
       vitesse_des_f = GPS_pitot._speed_pitot;
@@ -394,6 +396,7 @@ void loop()
       Commande_dauphin=0;
       flap_state = 1;
       thrust = 0.0;
+      leddar_track = 0;
 
       if(remote._switch_F==2)
       {
@@ -444,7 +447,6 @@ void loop()
 
       Commande_I_flaps = 0;
       remote._elevator = 0;
-      //Commande_I_Moteur = 0;
       
       
 //////// paramètres du mode dauphin
@@ -482,6 +484,11 @@ void loop()
       }
 
       if(hauteur_leddar_corrigee<20.0 && leddar._validity_flag==1 )
+      {
+        leddar_track = 1;
+      }
+      
+      if(leddar_track == 1)
       {
         slope_des = -20;
       } else

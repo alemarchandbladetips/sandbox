@@ -52,6 +52,8 @@ float vh_pitot_buffer[100];
 const int16_t Ndata = 100;
 uint8_t first_GPS_data = 0;
 
+float altitude_stabilisation = 60.0;
+
 /******* leddar **************/
 
 bte_leddar leddar = bte_leddar(&Serial2);
@@ -89,6 +91,7 @@ float RollOffs = 0, PitchOffs = 0, YawOffs = 0; //en deg
 /******* Variables et paramètres des régulation **************/
 
 const float dt_flt = 0.01;
+uint8_t regulation_state;
 
 //// régulation d'attitude et vitesse
 // params
@@ -218,7 +221,7 @@ void loop()
   
   if ( dt > 10000){
     
-    //        Serial.print(dt);Serial.print(" ");
+            Serial.print(GPS_pitot._z_gps);Serial.println(" ");
     temps += dt;
     
 /********Info de BNO55***************/
@@ -283,6 +286,8 @@ void loop()
      
     if (remote._switch_C == 2) 
     {/***Mode 1: normal, pas de moteur couple, KD sur le roll seulement.***/
+
+      regulation_state = 0;
       
       // timer qui sera utilisé pour passer en mode couple
       time_switch = millis();
@@ -327,6 +332,8 @@ void loop()
 
     else if (remote._switch_C == 1) 
     { 
+
+      regulation_state = 1;
       
       // timer pour passer en mode 4
       time_switch = millis(); // sert quand on passe au mode appontage
@@ -349,14 +356,38 @@ void loop()
       vitesse_des_f = GPS_pitot._speed_pitot;
 
       // consignes de pitch et de vitesse
+
       pitch_des = 4;
       vitesse_des = 10.0;
+
+      if(remote._switch_F==2)
+      {
+        altitude_stabilisation = 60.0;
+      } else if(remote._switch_F==1)
+      {
+        altitude_stabilisation = 50.0;
+      } else
+      {
+        altitude_stabilisation = 40.0;
+      }
+      
+      if(GPS_pitot._z_gps < (altitude_stabilisation-2.0) * 100.0)
+      {
+        vitesse_des = 12.0;
+        pitch_des = 30;
+        Offset_gaz_reg = 0.3;
+      } else if (GPS_pitot._z_gps > (altitude_stabilisation+2.0) * 100.0)
+      {
+        pitch_des = 0;
+      }
+      
+      
       
       Commande_I_Moteur += -KI_Moteur * (GPS_pitot._speed_pitot - vitesse_des) * dt_flt;
-      Commande_I_Moteur = constrain(Commande_I_Moteur, 0, 0.3); // sat = 200
+      Commande_I_Moteur = constrain(Commande_I_Moteur, 0, 0.7); // sat = 200
     
       Commande_KP_Moteur = -KP_Moteur * (GPS_pitot._speed_pitot - vitesse_des);
-      Commande_KP_Moteur = constrain(Commande_KP_Moteur, -0.2, 0.5);
+      Commande_KP_Moteur = constrain(Commande_KP_Moteur, -0.5, 0.5);
     
       thrust = Offset_gaz_reg + Commande_KP_Moteur + Commande_I_Moteur;
     
@@ -368,7 +399,7 @@ void loop()
       pitch_des_f = (1 - alpha_stab) * pitch_des_f + alpha_stab * pitch_des; //
 
       // Intégrateur des flaps pour régulation du pitch
-      Commande_I_flaps += -KI_Pitch * (BNO_pitch - pitch_des_f) * 360.0 * dt_flt; // += addition de la valeur précédente
+      Commande_I_flaps += -KI_Pitch * (BNO_pitch - pitch_des_f) * dt_flt / 360.0; // += addition de la valeur précédente
       Commande_I_flaps = constrain(Commande_I_flaps, -0.4, 0.4);
 
       kR = 0.0;
@@ -386,9 +417,11 @@ void loop()
     else if (arrondi_ready == 1) 
     { 
 
+      regulation_state = 3;
+      
       // paramètres mode stabilisé
       K_Pitch = 1.5; KD_Pitch = 0.2; KI_Pitch = 15;
-      K_Roll = 2.5; KD_Roll = 0.2;
+      K_Roll = 4.5; KD_Roll = 0.2;
       K_Yaw = 0; KD_Yaw = 0;
       KP_Moteur = 0; KI_Moteur = 0; Offset_gaz_reg = 0.0;
 
@@ -398,33 +431,25 @@ void loop()
       thrust = 0.0;
       leddar_track = 0;
 
-      if(remote._switch_F==2)
-      {
-        pitch_des = 0;
-      } else if(remote._switch_F==1)
-      {
-        pitch_des = -10;
-      } else
-      {
-        pitch_des = -20;
-      }
+      BNO_roll_f = (1-alpha_roll)*BNO_roll_f + alpha_roll*BNO_roll;
+      BNO_roll = BNO_roll_f;
       
       if(hauteur_leddar_corrigee > hauteur_cabrage) // phase pré-cabrage
       {
-        //pitch_des = -20;
+        pitch_des = -15;
         pitch_des_f = pitch_des;
         
       } else //cabrage final
       {
         pitch_des = 40.0;
         pitch_des_f = pitch_des;
-        
+        regulation_state = 4;
       }
 
       pitch_des_f = (1 - alpha_stab) * pitch_des_f + alpha_stab * pitch_des; //
 
       // Intégrateur des flaps pour régulation du pitch
-      Commande_I_flaps += -KI_Pitch * (BNO_pitch - pitch_des_f) * dt_flt * 360.0; // += addition de la valeur précédente
+      Commande_I_flaps += -KI_Pitch * (BNO_pitch - pitch_des_f) * dt_flt / 360.0; // += addition de la valeur précédente
       Commande_I_flaps = constrain(Commande_I_flaps, -0.4, 0.4);
 
     }
@@ -437,6 +462,8 @@ void loop()
     ////////////////////////////////////////////
 
     else {
+
+      regulation_state = 2;
 
       // paramètres mode dauphin
       K_Pitch = 0; KD_Pitch = 0; KI_Pitch = 0;
@@ -472,16 +499,16 @@ void loop()
 //        slope_des = -45;
 //      }
 //
-      if(remote._switch_D == 2)
-      {
-        vitesse_des = 11.0;
-      } else if(remote._switch_D == 1)
-      {
-        vitesse_des = 10.0; 
-      } else
-      {
-        vitesse_des = 9.0;
-      }
+//      if(remote._switch_D == 2)
+//      {
+//        vitesse_des = 11.0;
+//      } else if(remote._switch_D == 1)
+//      {
+//        vitesse_des = 10.0; 
+//      } else
+//      {
+//        vitesse_des = 9.0;
+//      }
 
       if(hauteur_leddar_corrigee<20.0 && leddar._validity_flag==1 )
       {
@@ -511,17 +538,17 @@ void loop()
       pitch_des = constrain(pitch_des,-40,30);
       pitch_des_f = pitch_des;
 
-      Commande_I_yaw += KI_yaw * err_yaw_f * dt_flt * 360.0; // += addition de la valeur précédente
+      Commande_I_yaw += KI_yaw * err_yaw_f * dt_flt / 360.0; // += addition de la valeur précédente
       Commande_I_yaw = constrain(Commande_I_yaw, -0.1, 0.1);
 
       flaps_amplitude_plus = flaps_amplitude;
       flaps_amplitude_moins = flaps_amplitude;
       
       // hauteur du min du dernier dauphin
-      hauteur_switch = 10.0; // en m 
+      hauteur_switch = 12.0; // en m 
 
       // hauteur de cabrage final
-      hauteur_cabrage = 2.5; // en m
+      hauteur_cabrage = 2.0; // en m
       
       
 //////// filtrage de la consigne et du créneau des flaps
@@ -601,16 +628,16 @@ void loop()
     
     // Commande correspondant au roll, télécommande + P roll + D roll + P yaw + D yaw
     Commande_Roll = K_Roll_remote * remote._aileron 
-                    + K_Roll * BNO_roll * 360.0 
-                    + KD_Roll * BNO_wx  * 360.0
-                    + K_Yaw * err_yaw_f * 360.0
-                    + KD_Yaw * BNO_wz  * 360.0
+                    + K_Roll * BNO_roll / 360.0 
+                    + KD_Roll * BNO_wx  / 360.0
+                    + K_Yaw * err_yaw_f / 360.0
+                    + KD_Yaw * BNO_wz  / 360.0
                     + Commande_I_yaw 
                     + aileron_trim; //
     
     // Commande correspondant au pitch
-    Commande_P_flaps = - K_Pitch * (BNO_pitch - pitch_des_f)  * 360.0;
-    Commande_D_flaps = - KD_Pitch * BNO_wy  * 360.0;
+    Commande_P_flaps = - K_Pitch * (BNO_pitch - pitch_des_f)  / 360.0;
+    Commande_D_flaps = - KD_Pitch * BNO_wy  / 360.0;
     Commande_Pitch = - K_Pitch_remote * remote._elevator 
                       + Commande_dauphin  
                       + Commande_P_flaps 
@@ -702,7 +729,9 @@ void loop()
 
         dataFile.print(slope_des_f*10,0); dataFile.print(";");
         dataFile.print(slope_aero_f*10,0); dataFile.print(";");
-        dataFile.print(kR*100,0); dataFile.print(";");
+        dataFile.print(slope_ground*10,0); dataFile.print(";");
+
+        dataFile.print(regulation_state); dataFile.print(";");
 
         dataFile.println(" "); // gaffe à la dernière ligne
         

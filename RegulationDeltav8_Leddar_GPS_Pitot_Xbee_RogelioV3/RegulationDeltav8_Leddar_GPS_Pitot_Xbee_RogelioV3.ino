@@ -117,6 +117,7 @@ float alpha_dauphin = 0.015; // filtrage au passage en mode dauphin
 // states
 float Commande_dauphin = 0;
 int8_t arrondi_almost_ready,arrondi_ready,flap_state_mem,flap_state = 1, leddar_track = 0;
+int8_t first_dive = 1;
 float filtre_dauphin=0;
 
 // asservissement de la pente de descente
@@ -354,34 +355,33 @@ void loop()
       slope_des_f = slope_aero_f;
       BNO_roll_f = BNO_roll;
       vitesse_des_f = GPS_pitot._speed_pitot;
+      first_dive = 1;
 
       // consignes de pitch et de vitesse
 
       pitch_des = 4;
       vitesse_des = 10.0;
 
-      if(remote._switch_F==2)
-      {
-        altitude_stabilisation = 60.0;
-      } else if(remote._switch_F==1)
-      {
-        altitude_stabilisation = 50.0;
-      } else
-      {
-        altitude_stabilisation = 40.0;
-      }
+//      if(remote._switch_F==2)
+//      {
+//        altitude_stabilisation = 60.0;
+//      } else if(remote._switch_F==1)
+//      {
+//        altitude_stabilisation = 50.0;
+//      } else
+//      {
+//        altitude_stabilisation = 40.0;
+//      }
       
-      if(GPS_pitot._z_gps < (altitude_stabilisation-2.0) * 100.0)
-      {
-        vitesse_des = 12.0;
-        pitch_des = 30;
-        Offset_gaz_reg = 0.3;
-      } else if (GPS_pitot._z_gps > (altitude_stabilisation+2.0) * 100.0)
-      {
-        pitch_des = 0;
-      }
-      
-      
+//      if(GPS_pitot._z_gps < (altitude_stabilisation-2.0) * 100.0)
+//      {
+//        vitesse_des = 12.0;
+//        pitch_des = 30;
+//        Offset_gaz_reg = 0.3;
+//      } else if (GPS_pitot._z_gps > (altitude_stabilisation+2.0) * 100.0)
+//      {
+//        pitch_des = 0;
+//      }
       
       Commande_I_Moteur += -KI_Moteur * (GPS_pitot._speed_pitot - vitesse_des) * dt_flt;
       Commande_I_Moteur = constrain(Commande_I_Moteur, 0, 0.7); // sat = 200
@@ -450,7 +450,7 @@ void loop()
 
       // Intégrateur des flaps pour régulation du pitch
       Commande_I_flaps += -KI_Pitch * (BNO_pitch - pitch_des_f) * dt_flt / 360.0; // += addition de la valeur précédente
-      Commande_I_flaps = constrain(Commande_I_flaps, -0.4, 0.4);
+      Commande_I_flaps = constrain(Commande_I_flaps, -0.5, 0.5);
 
     }
 
@@ -527,6 +527,11 @@ void loop()
 
       flaps_amplitude = 0.5;
 
+      if(first_dive == 1)
+      {
+        flaps_amplitude = 0.3;
+      }
+
       KI_slope = 0.3;
 
       slope_des_f = (1 - alpha_slope) * slope_des_f + alpha_slope * slope_des; 
@@ -545,7 +550,7 @@ void loop()
       flaps_amplitude_moins = flaps_amplitude;
       
       // hauteur du min du dernier dauphin
-      hauteur_switch = 12.0; // en m 
+      hauteur_switch = 10.0; // en m 
 
       // hauteur de cabrage final
       hauteur_cabrage = 2.0; // en m
@@ -567,18 +572,21 @@ void loop()
           arrondi_ready = 1;
           flap_state=0;
           pitch_des_f = BNO_pitch;
+          Commande_I_flaps = 0.4;
         }
         
       } else if (BNO_pitch < (pitch_des_f - hyst_width))
       {
         flap_state=1;
         flap_state_mem = 1;
+        first_dive = 0;
         
       } else
       {
         if(flap_state_mem == -1 && flap_state==-1)
         {
           flap_state=1;
+          first_dive = 0;
         }
         if(flap_state_mem == 1 && flap_state==1)
         {

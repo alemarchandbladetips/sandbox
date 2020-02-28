@@ -213,16 +213,24 @@ void loop()
   leddar.read_leddar();
   GPS_pitot.read_GPS_pitot();
 
-  if(GPS_pitot._x_gps != 0.0)
+  if(GPS_pitot._x_gps != 0.0 && first_GPS_data != 1)
   {
     first_GPS_data = 1;
+    Servo_R.set_normalized_pwm(0.5);
+    Servo_L.set_normalized_pwm(0.5);
+    delay(500);
+    Servo_R.set_normalized_pwm(-0.5);
+    Servo_L.set_normalized_pwm(-0.5);
+    delay(500);
+    Servo_R.set_normalized_pwm(0);
+    Servo_L.set_normalized_pwm(0);
   }
   
   dt = micros() - temps;
   
   if ( dt > 10000){
     
-            Serial.print(GPS_pitot._z_gps);Serial.println(" ");
+           // Serial.print(GPS_pitot._z_gps);Serial.println(" ");
     temps += dt;
     
 /********Info de BNO55***************/
@@ -341,10 +349,10 @@ void loop()
       timer_mode = millis() - time_switch;  // timer_mode = 0 tt le temps.
 
       // paramètres mode stabilisé
-      K_Pitch = 1.5; KD_Pitch = 0.2; KI_Pitch = 15.0;
+      K_Pitch = 1; KD_Pitch = 0.4; KI_Pitch = 15.0;
       K_Roll = 2.5; KD_Roll = 0.2;
       K_Yaw = 3.6; KD_Yaw = 0.36;
-      KP_Moteur = 0.3; KI_Moteur = 0.2; Offset_gaz_reg = 0.0;
+      KP_Moteur = 0.1; KI_Moteur = 0.2; Offset_gaz_reg = 0.0;
 
       // mise à 0 des commandes inutilisées
       Commande_dauphin = 0;
@@ -417,13 +425,17 @@ void loop()
     else if (arrondi_ready == 1) 
     { 
 
+      timer_mode = millis() - time_switch;  // timer_mode = 0 tt le temps.
+
       regulation_state = 3;
       
       // paramètres mode stabilisé
-      K_Pitch = 1.5; KD_Pitch = 0.2; KI_Pitch = 15;
+      K_Pitch = 1.25; KD_Pitch = 0.4; KI_Pitch = 15;
       K_Roll = 4.5; KD_Roll = 0.2;
       K_Yaw = 0; KD_Yaw = 0;
       KP_Moteur = 0; KI_Moteur = 0; Offset_gaz_reg = 0.0;
+
+      
 
       // mise à 0 des commandes inutilisées et du gaz
       Commande_dauphin=0;
@@ -434,16 +446,26 @@ void loop()
       BNO_roll_f = (1-alpha_roll)*BNO_roll_f + alpha_roll*BNO_roll;
       BNO_roll = BNO_roll_f;
       
-      if(hauteur_leddar_corrigee > hauteur_cabrage) // phase pré-cabrage
+      if(hauteur_leddar_corrigee < hauteur_cabrage) // phase pré-cabrage
       {
-        pitch_des = -15;
+        if(remote._switch_F==2)
+        {
+          pitch_des = 1000.0;
+        } else if(remote._switch_F==1)
+        {
+          pitch_des = 60.0;
+        } else
+        {
+          pitch_des = 60.0;
+        }
+        
         pitch_des_f = pitch_des;
+        regulation_state = 4;
         
       } else //cabrage final
       {
-        pitch_des = 40.0;
+        pitch_des = -15;
         pitch_des_f = pitch_des;
-        regulation_state = 4;
       }
 
       pitch_des_f = (1 - alpha_stab) * pitch_des_f + alpha_stab * pitch_des; //
@@ -462,6 +484,8 @@ void loop()
     ////////////////////////////////////////////
 
     else {
+
+      timer_mode = millis() - time_switch;  // timer_mode = 0 tt le temps.
 
       regulation_state = 2;
 
@@ -487,28 +511,6 @@ void loop()
       err_yaw_f = (1-alpha_roll)*err_yaw_f + alpha_roll*bte_ang_180(BNO_lacet - yaw_des);
 
       vitesse_des_f = (1-alpha_vitesse)*vitesse_des_f + alpha_vitesse*vitesse_des;
-
-//      if(remote._switch_F==2)
-//      {
-//        slope_des = -10;
-//      } else if(remote._switch_F==1)
-//      {
-//        slope_des = -30;
-//      } else
-//      {
-//        slope_des = -45;
-//      }
-//
-//      if(remote._switch_D == 2)
-//      {
-//        vitesse_des = 11.0;
-//      } else if(remote._switch_D == 1)
-//      {
-//        vitesse_des = 10.0; 
-//      } else
-//      {
-//        vitesse_des = 9.0;
-//      }
 
       if(hauteur_leddar_corrigee<20.0 && leddar._validity_flag==1 )
       {
@@ -567,7 +569,7 @@ void loop()
       {
         flap_state=-1;
         flap_state_mem = -1;
-        if( BNO_pitch > (pitch_des_f + 10) && arrondi_almost_ready==1 ) // conditions réunies pour faire l'arrondi
+        if( BNO_pitch > (pitch_des_f + 10) && arrondi_almost_ready==1 && BNO_wy > 0.0 ) // conditions réunies pour faire l'arrondi
         {
           arrondi_ready = 1;
           flap_state=0;
@@ -741,6 +743,8 @@ void loop()
 
         dataFile.print(regulation_state); dataFile.print(";");
 
+        dataFile.print(remote._switch_F+10*remote._switch_D+100*remote._switch_C); dataFile.print(";");
+
         dataFile.println(" "); // gaffe à la dernière ligne
         
         
@@ -756,7 +760,7 @@ void loop()
     Switch_C_previous = remote._switch_C;
 
   }
-
+  Serial.println(v_pitot_mean);
 }
 
 void checkExist(void)

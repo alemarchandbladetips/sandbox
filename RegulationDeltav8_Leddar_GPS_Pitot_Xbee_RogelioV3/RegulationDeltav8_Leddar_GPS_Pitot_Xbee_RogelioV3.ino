@@ -369,27 +369,6 @@ void loop()
 
       pitch_des = 4;
       vitesse_des = 10.0;
-
-//      if(remote._switch_F==2)
-//      {
-//        altitude_stabilisation = 60.0;
-//      } else if(remote._switch_F==1)
-//      {
-//        altitude_stabilisation = 50.0;
-//      } else
-//      {
-//        altitude_stabilisation = 40.0;
-//      }
-      
-//      if(GPS_pitot._z_gps < (altitude_stabilisation-2.0) * 100.0)
-//      {
-//        vitesse_des = 12.0;
-//        pitch_des = 30;
-//        Offset_gaz_reg = 0.3;
-//      } else if (GPS_pitot._z_gps > (altitude_stabilisation+2.0) * 100.0)
-//      {
-//        pitch_des = 0;
-//      }
       
       Commande_I_Moteur += -KI_Moteur * (GPS_pitot._speed_pitot - vitesse_des) * dt_flt;
       Commande_I_Moteur = constrain(Commande_I_Moteur, 0, 0.7); // sat = 200
@@ -448,17 +427,17 @@ void loop()
       
       if(hauteur_leddar_corrigee < hauteur_cabrage) // phase pré-cabrage
       {
-        if(remote._switch_F==2)
+        if(remote._switch_D==2)
         {
           pitch_des = 1000.0;
-        } else if(remote._switch_F==1)
+        } else if(remote._switch_D==1)
         {
           pitch_des = 60.0;
         } else
         {
-          pitch_des = 60.0;
+          pitch_des = 20.0;
         }
-        
+
         pitch_des_f = pitch_des;
         regulation_state = 4;
         
@@ -525,7 +504,7 @@ void loop()
         slope_des = -45;
       }
 
-      vitesse_des = 9.0;
+      vitesse_des = 10.0;
 
       flaps_amplitude = 0.5;
 
@@ -541,8 +520,8 @@ void loop()
       Commande_I_slope += KI_slope * (slope_des_f - slope_aero_f) * dt_flt; 
       Commande_I_slope = constrain(Commande_I_slope, -20, 20);
 
-      pitch_des = slope_des + 15 + Commande_I_slope;
-      pitch_des = constrain(pitch_des,-40,30);
+      pitch_des = slope_des + 12 + Commande_I_slope;
+      pitch_des = constrain(pitch_des,-45,30);
       pitch_des_f = pitch_des;
 
       Commande_I_yaw += KI_yaw * err_yaw_f * dt_flt / 360.0; // += addition de la valeur précédente
@@ -552,7 +531,7 @@ void loop()
       flaps_amplitude_moins = flaps_amplitude;
       
       // hauteur du min du dernier dauphin
-      hauteur_switch = 10.0; // en m 
+      hauteur_switch = 9.0; // en m 
 
       // hauteur de cabrage final
       hauteur_cabrage = 2.0; // en m
@@ -683,7 +662,7 @@ void loop()
 
     // Saturation des pwm normalisés.
     pwm_norm_R = constrain(pwm_norm_R,-0.8,1);
-    pwm_norm_L = constrain((1+kR)*pwm_norm_L,-1,0.8);
+    pwm_norm_L = constrain(pwm_norm_L,-1,0.8);
     
     Servo_R.set_normalized_pwm(pwm_norm_R);
     Servo_L.set_normalized_pwm(pwm_norm_L);

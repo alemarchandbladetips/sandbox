@@ -49,10 +49,13 @@ float v_pitot_mean;
 float v_pitot_buffer[100];
 float vh_pitot_mean;
 float vh_pitot_buffer[100];
-float v_wind_mean;
+float v_wind_mean, v_wind_mean_memory;
 float v_wind_buffer[100];
 const int16_t Ndata = 100;
 uint8_t first_GPS_data = 0;
+
+float slope_ground_mean;
+float slope_ground_buffer[100];
 
 float altitude_stabilisation = 60.0;
 
@@ -285,6 +288,9 @@ void loop()
     
     slope_ground = atan2f(GPS_pitot._vz_gps,sqrtf(GPS_pitot._vx_gps*GPS_pitot._vx_gps + GPS_pitot._vy_gps*GPS_pitot._vy_gps))*RAD2DEG;
 
+    bte_HistoriqueVal(slope_ground, slope_ground_buffer, Ndata);
+    bte_Mean(slope_ground_buffer, &slope_ground_mean, Ndata, Ndata-1);
+
 /***************** Paramètres de régulation par defaut*********************/
     // peuvent être modifiés dans les différents modes, par défaut, juste le D sur le roll
     
@@ -370,6 +376,7 @@ void loop()
       BNO_roll_f = BNO_roll;
       vitesse_des_f = GPS_pitot._speed_pitot;
       first_dive = 1;
+      v_wind_mean_memory = v_wind_mean;
 
       // consignes de pitch et de vitesse
 
@@ -532,10 +539,12 @@ void loop()
 
       slope_des_f = (1 - alpha_slope) * slope_des_f + alpha_slope * slope_des; 
 
-      Commande_I_slope += KI_slope * (slope_des_f - slope_aero_f) * dt_flt; 
+      //Commande_I_slope += KI_slope * (slope_des_f - slope_aero_f) * dt_flt; 
+      Commande_I_slope += KI_slope * (slope_des_f - slope_ground_mean) * dt_flt; 
       Commande_I_slope = constrain(Commande_I_slope, -20, 20);
 
-      pitch_des = slope_des + 12 + Commande_I_slope;
+      //pitch_des = slope_des + 12 + Commande_I_slope;
+      pitch_des = slope_des + 12 + 5*v_wind_mean_memory + Commande_I_slope;
       pitch_des = constrain(pitch_des,-45,30);
       pitch_des_f = pitch_des;
 
@@ -733,7 +742,7 @@ void loop()
 
         dataFile.print(slope_des_f*10,0); dataFile.print(";");
         dataFile.print(slope_aero_f*10,0); dataFile.print(";");
-        dataFile.print(slope_ground*10,0); dataFile.print(";");
+        dataFile.print(slope_ground_mean*10,0); dataFile.print(";");
 
         dataFile.print(regulation_state); dataFile.print(";");
 

@@ -351,7 +351,7 @@ void loop()
     
     // mode utilisé pour la phase de stabilisation avant le dauphin
 
-    else if (remote._switch_C == 1 || remote._switch_C == 2 && stability_achieved == 0) 
+    else if (remote._switch_C == 1 || (remote._switch_C == 0 && stability_achieved == 0) ) 
     { 
 
       regulation_state = 1;
@@ -361,7 +361,7 @@ void loop()
       timer_mode = millis() - time_switch;  // timer_mode = 0 tt le temps.
 
       // paramètres mode stabilisé
-      K_Pitch = 0.5; KD_Pitch = 0.4; KI_Pitch = 15.0;
+      K_Pitch = 1.0; KD_Pitch = 0.4; KI_Pitch = 15.0;
       K_Roll = 2.5; KD_Roll = 0.2;
       K_Yaw = 3.6; KD_Yaw = 0.36;
       KP_Moteur = 0.1; KI_Moteur = 0.2; Offset_gaz_reg = 0.0;
@@ -539,12 +539,12 @@ void loop()
 
       slope_des_f = (1 - alpha_slope) * slope_des_f + alpha_slope * slope_des; 
 
-      //Commande_I_slope += KI_slope * (slope_des_f - slope_aero_f) * dt_flt; 
-      Commande_I_slope += KI_slope * (slope_des_f - slope_ground_mean) * dt_flt; 
+      Commande_I_slope += KI_slope * (slope_des_f - slope_aero_f) * dt_flt; 
+      //Commande_I_slope += KI_slope * (slope_des_f - slope_ground_mean) * dt_flt; 
       Commande_I_slope = constrain(Commande_I_slope, -20, 20);
 
-      //pitch_des = slope_des + 12 + Commande_I_slope;
-      pitch_des = slope_des + 12 + 5*v_wind_mean_memory + Commande_I_slope;
+      pitch_des = slope_des + 12 + Commande_I_slope;
+      //pitch_des = slope_des + 12 + 5*v_wind_mean_memory + Commande_I_slope;
       pitch_des = constrain(pitch_des,-45,30);
       pitch_des_f = pitch_des;
 

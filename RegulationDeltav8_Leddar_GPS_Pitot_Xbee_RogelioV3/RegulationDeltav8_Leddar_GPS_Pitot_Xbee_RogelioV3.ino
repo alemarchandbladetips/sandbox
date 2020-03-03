@@ -49,6 +49,8 @@ float v_pitot_mean;
 float v_pitot_buffer[100];
 float vh_pitot_mean;
 float vh_pitot_buffer[100];
+float v_wind_mean;
+float v_wind_buffer[100];
 const int16_t Ndata = 100;
 uint8_t first_GPS_data = 0;
 
@@ -139,7 +141,9 @@ float alpha_vitesse = 0.004;
 float vitesse_des_f;
 
 float err_yaw_f;
-float kR;
+
+uint32_t stability_counter;
+uint8_t stability_achieved;
 
 //autres
 uint32_t temps, temps2, dt, time_idx;
@@ -272,6 +276,9 @@ void loop()
 
     bte_HistoriqueVal(GPS_pitot._speed_pitot*cosf(BNO_pitch*DEG2RAD), vh_pitot_buffer, Ndata);
     bte_Mean(vh_pitot_buffer, &vh_pitot_mean, Ndata, Ndata-1);
+
+    bte_HistoriqueVal(GPS_pitot._speed_pitot - sqrtf(GPS_pitot._vx_gps*GPS_pitot._vx_gps + GPS_pitot._vy_gps*GPS_pitot._vy_gps +GPS_pitot._vz_gps*GPS_pitot._vz_gps)/100.0, v_wind_buffer, Ndata);
+    bte_Mean(v_wind_buffer, &v_wind_mean, Ndata, Ndata-1);
     
     slope_aero = atan2f(GPS_pitot._vz_gps/100.0,GPS_pitot._speed_pitot*cosf(BNO_pitch*DEG2RAD))*RAD2DEG;
     slope_aero_f = atan2f(GPS_pitot._vz_gps/100.0,vh_pitot_mean)*RAD2DEG;
@@ -313,6 +320,7 @@ void loop()
       Commande_I_flaps = 0;
       Commande_I_Moteur = 0;
       leddar_track = 0;
+      stability_achieved = 0;
 
       // mise à 0 des valeurs utilisées pour le dauphin
       filtre_dauphin=0;
@@ -323,8 +331,6 @@ void loop()
       yaw_des = BNO_lacet;
       pitch_des_f = BNO_pitch; 
 
-
-      kR = 0.0;
     }
 
 
@@ -339,7 +345,7 @@ void loop()
     
     // mode utilisé pour la phase de stabilisation avant le dauphin
 
-    else if (remote._switch_C == 1) 
+    else if (remote._switch_C == 1 || remote._switch_C == 2 && stability_achieved == 0) 
     { 
 
       regulation_state = 1;
@@ -349,7 +355,7 @@ void loop()
       timer_mode = millis() - time_switch;  // timer_mode = 0 tt le temps.
 
       // paramètres mode stabilisé
-      K_Pitch = 1; KD_Pitch = 0.4; KI_Pitch = 15.0;
+      K_Pitch = 0.5; KD_Pitch = 0.4; KI_Pitch = 15.0;
       K_Roll = 2.5; KD_Roll = 0.2;
       K_Yaw = 3.6; KD_Yaw = 0.36;
       KP_Moteur = 0.1; KI_Moteur = 0.2; Offset_gaz_reg = 0.0;
@@ -389,10 +395,21 @@ void loop()
       Commande_I_flaps += -KI_Pitch * (BNO_pitch - pitch_des_f) * dt_flt / 360.0; // += addition de la valeur précédente
       Commande_I_flaps = constrain(Commande_I_flaps, -0.4, 0.4);
 
-      kR = 0.0;
+      if( abs(GPS_pitot._speed_pitot - vitesse_des) < 0.5 && abs((BNO_pitch - pitch_des)) < 5.0)
+      {
+        stability_counter++;
+      } else
+      {
+        stability_counter = 0;
+      }
+
+      if(stability_counter >1*100)
+      {
+        stability_achieved = 1;
+      }
+      
     
     }
-
 
 
 
@@ -413,8 +430,6 @@ void loop()
       K_Roll = 4.5; KD_Roll = 0.2;
       K_Yaw = 0; KD_Yaw = 0;
       KP_Moteur = 0; KI_Moteur = 0; Offset_gaz_reg = 0.0;
-
-      
 
       // mise à 0 des commandes inutilisées et du gaz
       Commande_dauphin=0;
@@ -462,7 +477,7 @@ void loop()
     //  SWITCH C HAUT    /!\    T W E R K    /!\
     ////////////////////////////////////////////
 
-    else {
+    else if (stability_achieved == 1) {
 
       timer_mode = millis() - time_switch;  // timer_mode = 0 tt le temps.
 
@@ -699,7 +714,7 @@ void loop()
         dataFile.print(GPS_pitot._y_gps, 0); dataFile.print(";");
         dataFile.print(GPS_pitot._z_gps, 0); dataFile.print(";");
         
-        dataFile.print(leddar._hauteur*100,0); dataFile.print(";");
+        dataFile.print(v_wind_mean*100,0); dataFile.print(";");
         dataFile.print(hauteur_leddar_corrigee*100,0); dataFile.print(";");
         dataFile.print(leddar._validity_flag); dataFile.print(";");
 

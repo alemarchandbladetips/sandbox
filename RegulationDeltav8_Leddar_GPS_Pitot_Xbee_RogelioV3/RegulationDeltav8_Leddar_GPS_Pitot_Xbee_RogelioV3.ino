@@ -119,6 +119,7 @@ float Commande_I_Moteur, Commande_KP_Moteur;
 float flaps_amplitude, hyst_width, hauteur_switch, hauteur_cabrage;
 float flaps_amplitude_plus, flaps_amplitude_moins;
 float alpha_dauphin = 0.015; // filtrage au passage en mode dauphin
+float thrust_anti_decrochage, vitesse_anti_decrochage;
 // states
 float Commande_dauphin = 0;
 int8_t arrondi_almost_ready,arrondi_ready,flap_state_mem,flap_state = 1, leddar_track = 0;
@@ -402,7 +403,7 @@ void loop()
       Commande_I_flaps += -KI_Pitch * (BNO_pitch - pitch_des_f) * dt_flt / 360.0; // += addition de la valeur précédente
       Commande_I_flaps = constrain(Commande_I_flaps, -0.4, 0.4);
 
-      if( abs(GPS_pitot._speed_pitot - vitesse_des) < 0.5 && abs((BNO_pitch - pitch_des)) < 5.0)
+      if( abs(GPS_pitot._speed_pitot - vitesse_des) < 1 && abs((BNO_pitch - pitch_des)) < 10.0)
       {
         stability_counter++;
       } else
@@ -410,11 +411,11 @@ void loop()
         stability_counter = 0;
       }
 
-      if(stability_counter >1*100)
+      if(stability_counter >1*50)
       {
         stability_achieved = 1;
       }
-      
+      stability_achieved = 1;
     
     }
 
@@ -433,7 +434,7 @@ void loop()
       regulation_state = 3;
       
       // paramètres mode stabilisé
-      K_Pitch = 1.25; KD_Pitch = 0.4; KI_Pitch = 15;
+      K_Pitch = 1; KD_Pitch = 0.4; KI_Pitch = 15;
       K_Roll = 4.5; KD_Roll = 0.2;
       K_Yaw = 0; KD_Yaw = 0;
       KP_Moteur = 0; KI_Moteur = 0; Offset_gaz_reg = 0.0;
@@ -447,25 +448,44 @@ void loop()
       BNO_roll_f = (1-alpha_roll)*BNO_roll_f + alpha_roll*BNO_roll;
       BNO_roll = BNO_roll_f;
       
-      if(hauteur_leddar_corrigee < hauteur_cabrage) // phase pré-cabrage
+      if(hauteur_leddar_corrigee < hauteur_cabrage && leddar._validity_flag==1) // phase pré-cabrage
       {
-        if(remote._switch_D==2)
-        {
-          pitch_des = 1000.0;
-        } else if(remote._switch_D==1)
-        {
-          pitch_des = 60.0;
-        } else
-        {
-          pitch_des = 20.0;
-        }
-
+        
+        pitch_des = 1000.0;
         pitch_des_f = pitch_des;
         regulation_state = 4;
         
       } else //cabrage final
       {
-        pitch_des = -15;
+        
+        vitesse_anti_decrochage = 10.0;
+        if(remote._switch_F==2)
+        {
+          pitch_des = 5;
+        } else if(remote._switch_F==1)
+        {
+          pitch_des = 0.0;
+        } else
+        {
+          pitch_des = -7.5;
+        }
+        
+        if(remote._switch_D==2)
+        {
+          thrust_anti_decrochage = 0.5;
+        } else if(remote._switch_D==1)
+        {
+          thrust_anti_decrochage = 0.45;
+        } else
+        {
+          thrust_anti_decrochage = 0.4;
+        }
+
+        if(GPS_pitot._speed_pitot < vitesse_anti_decrochage)
+        {
+          thrust = thrust_anti_decrochage;
+        }
+        
         pitch_des_f = pitch_des;
       }
 
@@ -484,7 +504,8 @@ void loop()
     //  SWITCH C HAUT    /!\    T W E R K    /!\
     ////////////////////////////////////////////
 
-    else if (stability_achieved == 1) {
+    else 
+    {
 
       timer_mode = millis() - time_switch;  // timer_mode = 0 tt le temps.
 
@@ -539,12 +560,12 @@ void loop()
 
       slope_des_f = (1 - alpha_slope) * slope_des_f + alpha_slope * slope_des; 
 
-      Commande_I_slope += KI_slope * (slope_des_f - slope_aero_f) * dt_flt; 
-      //Commande_I_slope += KI_slope * (slope_des_f - slope_ground_mean) * dt_flt; 
+      //Commande_I_slope += KI_slope * (slope_des_f - slope_aero_f) * dt_flt; 
+      Commande_I_slope += KI_slope * (slope_des_f - slope_ground_mean) * dt_flt; 
       Commande_I_slope = constrain(Commande_I_slope, -20, 20);
 
-      pitch_des = slope_des + 12 + Commande_I_slope;
-      //pitch_des = slope_des + 12 + 5*v_wind_mean_memory + Commande_I_slope;
+      //pitch_des = slope_des + 12 + Commande_I_slope;
+      pitch_des = slope_des + 12 + 5*v_wind_mean_memory + Commande_I_slope;
       pitch_des = constrain(pitch_des,-45,30);
       pitch_des_f = pitch_des;
 

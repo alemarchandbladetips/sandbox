@@ -91,7 +91,7 @@ const int H = 50;
 float WZ[H];
 
 //Offsets
-float RollOffs = 0, PitchOffs = 0, YawOffs = 0; //en deg
+float RollOffs = 0, PitchOffs = 0, YawOffs = 90; //en deg
 
 /******* Variables et paramètres des régulation **************/
 
@@ -131,10 +131,15 @@ float filtre_dauphin=0;
 float slope_aero, slope_ground, slope_aero_f = 0;
 float alpha_slope = 0.008;
 //consigne
-float slope_des, slope_des_f = 0;
+float slope_des, slope_des_f_delay, slope_des_f = 0;
+float slope_des_f_buffer[100];
 // states
 float Commande_I_slope, KI_slope;
 
+// Asservissement de position
+float gps_target[2] = {0,0};
+float yaw_to_target, yaw_to_target_lock, distance_to_target;
+uint8_t declanchement = 0;
 
 /******* debug **************/
 
@@ -159,7 +164,23 @@ void setup()
   
   Serial.begin(115200);
 
-  /******* Initialisation BNO **************/
+  /******* Initialisation Servo et Moteurs ************/
+  
+  Servo_R.set_range(750,2050,1400);
+  Servo_R.set_normalized_pwm(0);
+  Servo_R.power_on();
+  
+  Servo_L.set_range(850,2150,1500);
+  Servo_L.set_normalized_pwm(0);
+  Servo_L.power_on();
+
+  Motor_Prop.set_range(1000,2000);
+  Motor_Prop.power_off(); // should already be off (normally)...
+  Motor_Prop.set_normalized_pwm(0);
+
+  remote.set_connection_lost_time_millis(1000);
+
+    /******* Initialisation BNO **************/
   
   if ( !bno.begin() )
   {
@@ -167,6 +188,12 @@ void setup()
     Serial.print("Ooops, no BNO055 detected ... Check your wiring or I2C ADDR!");
     while (1);
   }
+  Servo_R.set_normalized_pwm(0.3);
+  delay(500);
+  Servo_R.set_normalized_pwm(-0.3);
+  delay(500);
+  Servo_R.set_normalized_pwm(0);
+    
   temps = micros();
   while ( (micros() - temps) < 1000000 ) {};
   bno.setExtCrystalUse(true);
@@ -184,24 +211,13 @@ void setup()
     Serial.println("card initialized.");
     filename = (char*) malloc( strlen("log") + strlen(Num) + strlen(".txt") + 1) ;
     checkExist(); //vérifie existence du fichier et l'écriture commence à partir du numéro de fichier que n'existe pas
+    Servo_L.set_normalized_pwm(0.3);
+    delay(500);
+    Servo_L.set_normalized_pwm(-0.3);
+    delay(500);
+    Servo_L.set_normalized_pwm(0);
 
   }
-
-  /******* Initialisation Servo et Moteurs ************/
-  
-  Servo_R.set_range(750,2050,1400);
-  Servo_R.set_normalized_pwm(0);
-  Servo_R.power_on();
-  
-  Servo_L.set_range(850,2150,1500);
-  Servo_L.set_normalized_pwm(0);
-  Servo_L.power_on();
-
-  Motor_Prop.set_range(1000,2000);
-  Motor_Prop.power_off(); // should already be off (normally)...
-  Motor_Prop.set_normalized_pwm(0);
-
-  remote.set_connection_lost_time_millis(1000);
 
   /*****************************************/
 
@@ -224,11 +240,11 @@ void loop()
   if(GPS_pitot._x_gps != 0.0 && first_GPS_data != 1)
   {
     first_GPS_data = 1;
-    Servo_R.set_normalized_pwm(0.5);
-    Servo_L.set_normalized_pwm(0.5);
+    Servo_R.set_normalized_pwm(0.3);
+    Servo_L.set_normalized_pwm(0.3);
     delay(500);
-    Servo_R.set_normalized_pwm(-0.5);
-    Servo_L.set_normalized_pwm(-0.5);
+    Servo_R.set_normalized_pwm(-0.3);
+    Servo_L.set_normalized_pwm(-0.3);
     delay(500);
     Servo_R.set_normalized_pwm(0);
     Servo_L.set_normalized_pwm(0);
@@ -292,6 +308,19 @@ void loop()
     bte_HistoriqueVal(slope_ground, slope_ground_buffer, Ndata);
     bte_Mean(slope_ground_buffer, &slope_ground_mean, Ndata, Ndata-1);
 
+    bte_HistoriqueVal(slope_des_f, slope_des_f_buffer, Ndata);
+    slope_des_f_delay = slope_des_f_buffer[0];
+
+/***************** Estimation de la distance à la cible et heading  *********************/
+
+    distance_to_target = sqrtf( (GPS_pitot._x_gps/100 - gps_target[0])*(GPS_pitot._x_gps/100 - gps_target[0]) + (GPS_pitot._y_gps/100 - gps_target[1])*(GPS_pitot._y_gps/100 - gps_target[1]));
+    yaw_to_target = atan2f((GPS_pitot._y_gps/100 - gps_target[1]),-(GPS_pitot._x_gps/100 - gps_target[0]))*RAD2DEG;
+
+    Serial.print(distance_to_target);Serial.print(" ");
+    Serial.print(yaw_to_target);Serial.print(" ");
+    Serial.print(BNO_lacet);Serial.println(" ");
+
+
 /***************** Paramètres de régulation par defaut*********************/
     // peuvent être modifiés dans les différents modes, par défaut, juste le D sur le roll
     
@@ -328,11 +357,13 @@ void loop()
       Commande_I_Moteur = 0;
       leddar_track = 0;
       stability_achieved = 0;
+      slope_des_f = slope_aero_f;
 
       // mise à 0 des valeurs utilisées pour le dauphin
       filtre_dauphin=0;
       arrondi_ready = 0;
       arrondi_almost_ready = 0;
+      declanchement = 0;
       
       // mise à jour des consignes avec les valeurs courantes de la BNO
       yaw_des = BNO_lacet;
@@ -394,9 +425,14 @@ void loop()
     
       thrust = constrain(thrust, 0, 1);
 
-      err_yaw_f = bte_ang_180(BNO_lacet - yaw_des);
+      yaw_des = yaw_to_target;
+      err_yaw_f = (1-alpha_roll)*err_yaw_f + alpha_roll*bte_ang_180(BNO_lacet - yaw_des);
 
-      
+      if(distance_to_target<50)
+      {
+        err_yaw_f = 0;
+      }
+
       pitch_des_f = (1 - alpha_stab) * pitch_des_f + alpha_stab * pitch_des; //
 
       // Intégrateur des flaps pour régulation du pitch
@@ -416,6 +452,11 @@ void loop()
         stability_achieved = 1;
       }
       stability_achieved = 1;
+
+      if(distance_to_target < ((GPS_pitot._z_gps/100.0) * 1.71 - 12.0 - v_wind_mean*(GPS_pitot._z_gps/100.0)*0.09 ) ) // 0.09 = cos(5)
+      {
+        declanchement = 1;
+      }
     
     }
 
@@ -459,27 +500,8 @@ void loop()
       {
         
         vitesse_anti_decrochage = 10.0;
-        if(remote._switch_F==2)
-        {
-          pitch_des = 5;
-        } else if(remote._switch_F==1)
-        {
-          pitch_des = 0.0;
-        } else
-        {
-          pitch_des = -7.5;
-        }
-        
-        if(remote._switch_D==2)
-        {
-          thrust_anti_decrochage = 0.5;
-        } else if(remote._switch_D==1)
-        {
-          thrust_anti_decrochage = 0.45;
-        } else
-        {
-          thrust_anti_decrochage = 0.4;
-        }
+        pitch_des = -15.0;
+        thrust_anti_decrochage = 0.45;
 
         if(GPS_pitot._speed_pitot < vitesse_anti_decrochage)
         {
@@ -530,8 +552,6 @@ void loop()
       BNO_roll_f = (1-alpha_roll)*BNO_roll_f + alpha_roll*BNO_roll;
       BNO_roll = BNO_roll_f;
 
-      err_yaw_f = (1-alpha_roll)*err_yaw_f + alpha_roll*bte_ang_180(BNO_lacet - yaw_des);
-
       vitesse_des_f = (1-alpha_vitesse)*vitesse_des_f + alpha_vitesse*vitesse_des;
 
       if(hauteur_leddar_corrigee<20.0 && leddar._validity_flag==1 )
@@ -542,9 +562,12 @@ void loop()
       if(leddar_track == 1)
       {
         slope_des = -20;
+        yaw_des = yaw_to_target_lock;
       } else
       {
-        slope_des = -45;
+        slope_des = -45-5*v_wind_mean_memory;
+        yaw_to_target_lock = yaw_to_target;
+        yaw_des = yaw_to_target;
       }
 
       vitesse_des = 10.0;
@@ -561,14 +584,15 @@ void loop()
       slope_des_f = (1 - alpha_slope) * slope_des_f + alpha_slope * slope_des; 
 
       //Commande_I_slope += KI_slope * (slope_des_f - slope_aero_f) * dt_flt; 
-      Commande_I_slope += KI_slope * (slope_des_f - slope_ground_mean) * dt_flt; 
+      Commande_I_slope += KI_slope * (slope_des_f_delay - slope_ground_mean) * dt_flt; 
       Commande_I_slope = constrain(Commande_I_slope, -20, 20);
 
       //pitch_des = slope_des + 12 + Commande_I_slope;
       pitch_des = slope_des + 12 + 5*v_wind_mean_memory + Commande_I_slope;
-      pitch_des = constrain(pitch_des,-45,30);
+      pitch_des = constrain(pitch_des,-50,30);
       pitch_des_f = pitch_des;
 
+      err_yaw_f = (1-alpha_roll)*err_yaw_f + alpha_roll*bte_ang_180(BNO_lacet - yaw_des);
       Commande_I_yaw += KI_yaw * err_yaw_f * dt_flt / 360.0; // += addition de la valeur précédente
       Commande_I_yaw = constrain(Commande_I_yaw, -0.1, 0.1);
 
@@ -753,7 +777,7 @@ void loop()
         dataFile.print(GPS_pitot._vz_gps, 0); dataFile.print(";");
         dataFile.print(GPS_pitot._speed_pitot * 100.0, 0); dataFile.print(";");
 
-        dataFile.print(pwm_norm_R*1000.0,0); dataFile.print(";"); 
+        dataFile.print(pwm_norm_R*1000.0,0); dataFile.print(";");
         dataFile.print(pwm_norm_L*1000.0,0); dataFile.print(";");
         dataFile.print(pwm_norm_prop*1000.0,0); dataFile.print(";");
 
@@ -761,16 +785,15 @@ void loop()
         dataFile.print(Commande_Roll*1000, 0); dataFile.print(";");
         dataFile.print(Commande_Pitch*1000, 0); dataFile.print(";");
 
-        dataFile.print(slope_des_f*10,0); dataFile.print(";");
+        dataFile.print(slope_des_f_delay*10,0); dataFile.print(";");
         dataFile.print(slope_aero_f*10,0); dataFile.print(";");
         dataFile.print(slope_ground_mean*10,0); dataFile.print(";");
 
         dataFile.print(regulation_state); dataFile.print(";");
 
-        dataFile.print(remote._switch_F+10*remote._switch_D+100*remote._switch_C); dataFile.print(";");
+        dataFile.print(remote._switch_F+10*remote._switch_D+100*remote._switch_C + declanchement*1000); dataFile.print(";");
 
         dataFile.println(" "); // gaffe à la dernière ligne
-        
         
         if ((millis() - temps2 > 300.0 * 1000) || (remote._switch_C != Switch_C_previous) ){
           dataFile.close();
@@ -784,7 +807,6 @@ void loop()
     Switch_C_previous = remote._switch_C;
 
   }
-  Serial.println(v_pitot_mean);
 }
 
 void checkExist(void)

@@ -107,7 +107,7 @@ float KP_Moteur = 0, KI_Moteur = 0, Offset_gaz_reg = 0;
 float alpha_stab = 0.025; // filtrage au passage en mode stabilisé
 
 //consignes
-float pitch_des = 0, pitch_des_f = 0, yaw_des = 0, vitesse_des = 10;
+float pitch_des = 0, pitch_des_f = 0, yaw_des = 0, vitesse_des = 10, yaw_des_f = 0;
 
 // states
 float Commande_Roll;
@@ -367,17 +367,18 @@ void loop()
       
       // mise à jour des consignes avec les valeurs courantes de la BNO
       yaw_des = BNO_lacet;
-      pitch_des_f = BNO_pitch; 
-
+      yaw_des_f = BNO_lacet;     
+      pitch_des_f = BNO_pitch;
+      
       if(remote._switch_F==2)
       {
-        aileron_trim = 1;
-      } else if (remote._switch_F==2)
+        elevation_trim = 1;
+      } else if (remote._switch_F==1)
       {
-        aileron_trim = 0.5;
+        elevation_trim = 0.5;
       } else
       {
-        aileron_trim = 0;
+        elevation_trim = 0;
       }
 
     }
@@ -437,7 +438,9 @@ void loop()
       thrust = constrain(thrust, 0, 1);
 
       yaw_des = yaw_to_target;
-      err_yaw_f = (1-alpha_roll)*err_yaw_f + alpha_roll*bte_ang_180(BNO_lacet - yaw_des);
+      yaw_des_f = (1-alpha_roll)*yaw_des_f + alpha_roll*yaw_des;
+      
+      err_yaw_f = bte_ang_180(BNO_lacet - yaw_des_f);
 
       if(distance_to_target<50 || abs(bte_ang_180(BNO_lacet - yaw_des))>90 )
       {
@@ -603,7 +606,8 @@ void loop()
       pitch_des = constrain(pitch_des,-50,30);
       pitch_des_f = pitch_des;
 
-      err_yaw_f = (1-alpha_roll)*err_yaw_f + alpha_roll*bte_ang_180(BNO_lacet - yaw_des);
+      yaw_des_f = (1-alpha_roll)*yaw_des_f + alpha_roll*yaw_des;
+      err_yaw_f = (1-alpha_roll)*err_yaw_f + alpha_roll*bte_ang_180(BNO_lacet - yaw_des_f);
       Commande_I_yaw += KI_yaw * err_yaw_f * dt_flt / 360.0; // += addition de la valeur précédente
       Commande_I_yaw = constrain(Commande_I_yaw, -0.1, 0.1);
 

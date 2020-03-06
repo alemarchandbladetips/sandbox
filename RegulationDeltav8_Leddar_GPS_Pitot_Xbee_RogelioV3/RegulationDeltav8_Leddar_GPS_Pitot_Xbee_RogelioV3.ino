@@ -369,17 +369,6 @@ void loop()
       yaw_des = BNO_lacet;
       yaw_des_f = BNO_lacet;     
       pitch_des_f = BNO_pitch;
-      
-      if(remote._switch_F==2)
-      {
-        elevation_trim = 1;
-      } else if (remote._switch_F==1)
-      {
-        elevation_trim = 0.5;
-      } else
-      {
-        elevation_trim = 0;
-      }
 
     }
 

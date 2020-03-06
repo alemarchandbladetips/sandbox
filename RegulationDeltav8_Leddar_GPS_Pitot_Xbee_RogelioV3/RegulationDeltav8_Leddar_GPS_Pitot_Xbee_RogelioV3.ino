@@ -91,7 +91,7 @@ const int H = 50;
 float WZ[H];
 
 //Offsets
-float RollOffs = 0, PitchOffs = 0, YawOffs = 90; //en deg
+float RollOffs = 0, PitchOffs = 0, YawOffs = -90; //en deg
 
 /******* Variables et paramètres des régulation **************/
 
@@ -314,10 +314,10 @@ void loop()
 /***************** Estimation de la distance à la cible et heading  *********************/
 
     distance_to_target = sqrtf( (GPS_pitot._x_gps/100 - gps_target[0])*(GPS_pitot._x_gps/100 - gps_target[0]) + (GPS_pitot._y_gps/100 - gps_target[1])*(GPS_pitot._y_gps/100 - gps_target[1]));
-    yaw_to_target = atan2f((GPS_pitot._y_gps/100 - gps_target[1]),-(GPS_pitot._x_gps/100 - gps_target[0]))*RAD2DEG;
+    yaw_to_target = atan2f((GPS_pitot._x_gps/100 - gps_target[0]),-(GPS_pitot._y_gps/100 - gps_target[1]))*RAD2DEG;
 
     Serial.print(distance_to_target);Serial.print(" ");
-    Serial.print(yaw_to_target);Serial.print(" ");
+    Serial.print(bte_ang_180(yaw_to_target));Serial.print(" ");
     Serial.print(BNO_lacet);Serial.println(" ");
 
 
@@ -411,8 +411,17 @@ void loop()
       v_wind_mean_memory = v_wind_mean;
 
       // consignes de pitch et de vitesse
-
-      pitch_des = 4;
+      if(remote._switch_F==2)
+      {
+        pitch_des = 1000;
+      } else if (remote._switch_F==2)
+      {
+        pitch_des = 80;
+      } else
+      {
+        pitch_des = 4;
+      }
+      
       vitesse_des = 10.0;
       
       Commande_I_Moteur += -KI_Moteur * (GPS_pitot._speed_pitot - vitesse_des) * dt_flt;

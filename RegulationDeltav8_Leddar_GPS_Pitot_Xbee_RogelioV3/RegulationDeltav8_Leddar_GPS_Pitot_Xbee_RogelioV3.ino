@@ -428,7 +428,7 @@ void loop()
       yaw_des = yaw_to_target;
       err_yaw_f = (1-alpha_roll)*err_yaw_f + alpha_roll*bte_ang_180(BNO_lacet - yaw_des);
 
-      if(distance_to_target<50)
+      if(distance_to_target<50 || abs(bte_ang_180(BNO_lacet - yaw_des))>90 )
       {
         err_yaw_f = 0;
       }

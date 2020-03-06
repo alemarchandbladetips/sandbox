@@ -369,6 +369,17 @@ void loop()
       yaw_des = BNO_lacet;
       pitch_des_f = BNO_pitch; 
 
+      if(remote._switch_F==2)
+      {
+        aileron_trim = 1;
+      } else if (remote._switch_F==2)
+      {
+        aileron_trim = 0.5;
+      } else
+      {
+        aileron_trim = 0;
+      }
+
     }
 
 
@@ -411,16 +422,7 @@ void loop()
       v_wind_mean_memory = v_wind_mean;
 
       // consignes de pitch et de vitesse
-      if(remote._switch_F==2)
-      {
-        pitch_des = 1000;
-      } else if (remote._switch_F==2)
-      {
-        pitch_des = 80;
-      } else
-      {
-        pitch_des = 4;
-      }
+      pitch_des = 4;
       
       vitesse_des = 10.0;
       

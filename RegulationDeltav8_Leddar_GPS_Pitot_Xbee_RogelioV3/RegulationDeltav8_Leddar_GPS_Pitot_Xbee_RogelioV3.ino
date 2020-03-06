@@ -383,7 +383,7 @@ void loop()
     
     // mode utilisé pour la phase de stabilisation avant le dauphin
 
-    else if (remote._switch_C == 1 || (remote._switch_C == 0 && stability_achieved == 0) ) 
+    else if (remote._switch_C == 1 )//|| (remote._switch_C == 0 && stability_achieved == 0) ) 
     { 
 
       regulation_state = 1;

@@ -53,6 +53,8 @@ float v_wind_mean, v_wind_mean_memory;
 float v_wind_buffer[100];
 const int16_t Ndata = 100;
 uint8_t first_GPS_data = 0;
+float heading;
+float v_horizontal_gps;
 
 float slope_ground_mean;
 float slope_ground_buffer[100];
@@ -107,7 +109,7 @@ float KP_Moteur = 0, KI_Moteur = 0, Offset_gaz_reg = 0;
 float alpha_stab = 0.025; // filtrage au passage en mode stabilisé
 
 //consignes
-float pitch_des = 0, pitch_des_f = 0, yaw_des = 0, vitesse_des = 10, yaw_des_f = 0;
+float pitch_des = 0, pitch_des_f = 0, yaw_des = 0, vitesse_des = 10;
 
 // states
 float Commande_Roll;
@@ -138,7 +140,7 @@ float Commande_I_slope, KI_slope;
 
 // Asservissement de position
 float gps_target[2] = {0,0};
-float yaw_to_target, yaw_to_target_lock, distance_to_target;
+float heading_to_target, heading_to_target_lock, distance_to_target;
 uint8_t declanchement = 0;
 
 /******* debug **************/
@@ -297,13 +299,14 @@ void loop()
     bte_HistoriqueVal(GPS_pitot._speed_pitot*cosf(BNO_pitch*DEG2RAD), vh_pitot_buffer, Ndata);
     bte_Mean(vh_pitot_buffer, &vh_pitot_mean, Ndata, Ndata-1);
 
-    bte_HistoriqueVal(GPS_pitot._speed_pitot - sqrtf(GPS_pitot._vx_gps*GPS_pitot._vx_gps + GPS_pitot._vy_gps*GPS_pitot._vy_gps +GPS_pitot._vz_gps*GPS_pitot._vz_gps)/100.0, v_wind_buffer, Ndata);
+    bte_HistoriqueVal(GPS_pitot._speed_pitot - sqrtf(GPS_pitot._vx_gps*GPS_pitot._vx_gps + GPS_pitot._vy_gps*GPS_pitot._vy_gps +GPS_pitot._vz_gps*GPS_pitot._vz_gps), v_wind_buffer, Ndata);
     bte_Mean(v_wind_buffer, &v_wind_mean, Ndata, Ndata-1);
     
-    slope_aero = atan2f(GPS_pitot._vz_gps/100.0,GPS_pitot._speed_pitot*cosf(BNO_pitch*DEG2RAD))*RAD2DEG;
-    slope_aero_f = atan2f(GPS_pitot._vz_gps/100.0,vh_pitot_mean)*RAD2DEG;
-    
-    slope_ground = atan2f(GPS_pitot._vz_gps,sqrtf(GPS_pitot._vx_gps*GPS_pitot._vx_gps + GPS_pitot._vy_gps*GPS_pitot._vy_gps))*RAD2DEG;
+    slope_aero = atan2f(GPS_pitot._vz_gps,GPS_pitot._speed_pitot*cosf(BNO_pitch*DEG2RAD))*RAD2DEG;
+    slope_aero_f = atan2f(GPS_pitot._vz_gps,vh_pitot_mean)*RAD2DEG;
+
+    v_horizontal_gps = sqrtf(GPS_pitot._vx_gps*GPS_pitot._vx_gps + GPS_pitot._vy_gps*GPS_pitot._vy_gps);
+    slope_ground = atan2f(GPS_pitot._vz_gps,v_horizontal_gps)*RAD2DEG;
 
     bte_HistoriqueVal(slope_ground, slope_ground_buffer, Ndata);
     bte_Mean(slope_ground_buffer, &slope_ground_mean, Ndata, Ndata-1);
@@ -313,11 +316,14 @@ void loop()
 
 /***************** Estimation de la distance à la cible et heading  *********************/
 
-    distance_to_target = sqrtf( (GPS_pitot._x_gps/100 - gps_target[0])*(GPS_pitot._x_gps/100 - gps_target[0]) + (GPS_pitot._y_gps/100 - gps_target[1])*(GPS_pitot._y_gps/100 - gps_target[1]));
-    yaw_to_target = atan2f((GPS_pitot._x_gps/100 - gps_target[0]),-(GPS_pitot._y_gps/100 - gps_target[1]))*RAD2DEG;
+    distance_to_target = sqrtf( (GPS_pitot._x_gps - gps_target[0])*(GPS_pitot._x_gps - gps_target[0]) + (GPS_pitot._y_gps - gps_target[1])*(GPS_pitot._y_gps - gps_target[1]));
+    heading_to_target = atan2f((GPS_pitot._x_gps - gps_target[0]),-(GPS_pitot._y_gps - gps_target[1]))*RAD2DEG;
+    heading = atan2f(-GPS_pitot._vx_gps,GPS_pitot._vy_gps)*RAD2DEG;
 
+    Serial.print(GPS_pitot._z_gps);Serial.print(" ");
+    Serial.print(((GPS_pitot._z_gps) * 1.71 - 12.0));Serial.print(" ");
     Serial.print(distance_to_target);Serial.print(" ");
-    Serial.print(bte_ang_180(yaw_to_target));Serial.print(" ");
+    Serial.print(bte_ang_180(heading_to_target));Serial.print(" ");
     Serial.print(BNO_lacet);Serial.println(" ");
 
 
@@ -366,8 +372,7 @@ void loop()
       declanchement = 0;
       
       // mise à jour des consignes avec les valeurs courantes de la BNO
-      yaw_des = BNO_lacet;
-      yaw_des_f = BNO_lacet;     
+      yaw_des = BNO_lacet;     
       pitch_des_f = BNO_pitch;
 
     }
@@ -384,7 +389,7 @@ void loop()
     
     // mode utilisé pour la phase de stabilisation avant le dauphin
 
-    else if (remote._switch_C == 1 )//|| (remote._switch_C == 0 && stability_achieved == 0) ) 
+    else if (remote._switch_C == 1 || (remote._switch_C == 0 && declanchement == 0) ) 
     { 
 
       regulation_state = 1;
@@ -426,12 +431,13 @@ void loop()
     
       thrust = constrain(thrust, 0, 1);
 
-      yaw_des = yaw_to_target;
-      yaw_des_f = (1-alpha_roll)*yaw_des_f + alpha_roll*yaw_des;
+      yaw_des = heading_to_target;
       
-      err_yaw_f = bte_ang_180(BNO_lacet - yaw_des_f);
+      err_yaw_f = bte_ang_180(heading - yaw_des);
 
-      if(distance_to_target<50 || abs(bte_ang_180(BNO_lacet - yaw_des))>90 )
+      err_yaw_f = constrain(err_yaw_f,-30,30);
+
+      if(distance_to_target<50.0 || abs(bte_ang_180(BNO_lacet - yaw_des))>90.0 )
       {
         err_yaw_f = 0;
       }
@@ -456,7 +462,7 @@ void loop()
       }
       stability_achieved = 1;
 
-      if(distance_to_target < ((GPS_pitot._z_gps/100.0) * 1.71 - 12.0 - v_wind_mean*(GPS_pitot._z_gps/100.0)*0.09 ) ) // 0.09 = cos(5)
+      if( (distance_to_target-1.0*v_horizontal_gps) < ((GPS_pitot._z_gps) * 1.71 - 12.0 - v_wind_mean*(GPS_pitot._z_gps)*0.09) ) // 0.09 = cos(5)
       {
         declanchement = 1;
       }
@@ -565,12 +571,12 @@ void loop()
       if(leddar_track == 1)
       {
         slope_des = -20;
-        yaw_des = yaw_to_target_lock;
+        yaw_des = heading_to_target_lock;
       } else
       {
         slope_des = -45-5*v_wind_mean_memory;
-        yaw_to_target_lock = yaw_to_target;
-        yaw_des = yaw_to_target;
+        heading_to_target_lock = heading_to_target;
+        yaw_des = heading_to_target;
       }
 
       vitesse_des = 10.0;
@@ -595,8 +601,7 @@ void loop()
       pitch_des = constrain(pitch_des,-50,30);
       pitch_des_f = pitch_des;
 
-      yaw_des_f = (1-alpha_roll)*yaw_des_f + alpha_roll*yaw_des;
-      err_yaw_f = (1-alpha_roll)*err_yaw_f + alpha_roll*bte_ang_180(BNO_lacet - yaw_des_f);
+      err_yaw_f = (1-alpha_roll)*err_yaw_f + alpha_roll*bte_ang_180(heading - yaw_des);
       Commande_I_yaw += KI_yaw * err_yaw_f * dt_flt / 360.0; // += addition de la valeur précédente
       Commande_I_yaw = constrain(Commande_I_yaw, -0.1, 0.1);
 
@@ -768,17 +773,17 @@ void loop()
         dataFile.print(BNO_roll * 10, 0); dataFile.print(";");
         dataFile.print(BNO_linear_acc_norm * 100, 0); dataFile.print(";");
 
-        dataFile.print(GPS_pitot._x_gps, 0); dataFile.print(";");
-        dataFile.print(GPS_pitot._y_gps, 0); dataFile.print(";");
-        dataFile.print(GPS_pitot._z_gps, 0); dataFile.print(";");
+        dataFile.print(GPS_pitot._x_gps*100.0, 0); dataFile.print(";");
+        dataFile.print(GPS_pitot._y_gps*100.0, 0); dataFile.print(";");
+        dataFile.print(GPS_pitot._z_gps*100.0, 0); dataFile.print(";");
         
         dataFile.print(v_wind_mean*100,0); dataFile.print(";");
         dataFile.print(hauteur_leddar_corrigee*100,0); dataFile.print(";");
-        dataFile.print(leddar._validity_flag); dataFile.print(";");
+        dataFile.print(yaw_des*10.0,0); dataFile.print(";");
 
-        dataFile.print(GPS_pitot._vx_gps, 0); dataFile.print(";");
-        dataFile.print(GPS_pitot._vy_gps, 0); dataFile.print(";");
-        dataFile.print(GPS_pitot._vz_gps, 0); dataFile.print(";");
+        dataFile.print(GPS_pitot._vx_gps*100.0, 0); dataFile.print(";");
+        dataFile.print(GPS_pitot._vy_gps*100.0, 0); dataFile.print(";");
+        dataFile.print(GPS_pitot._vz_gps*100.0, 0); dataFile.print(";");
         dataFile.print(GPS_pitot._speed_pitot * 100.0, 0); dataFile.print(";");
 
         dataFile.print(pwm_norm_R*1000.0,0); dataFile.print(";");
@@ -786,8 +791,8 @@ void loop()
         dataFile.print(pwm_norm_prop*1000.0,0); dataFile.print(";");
 
         dataFile.print(pitch_des_f * 10, 0); dataFile.print(";");
-        dataFile.print(Commande_Roll*1000, 0); dataFile.print(";");
-        dataFile.print(Commande_Pitch*1000, 0); dataFile.print(";");
+        dataFile.print(distance_to_target*1000, 0); dataFile.print(";");
+        dataFile.print(err_yaw_f*1000, 0); dataFile.print(";");
 
         dataFile.print(slope_des_f_delay*10,0); dataFile.print(";");
         dataFile.print(slope_aero_f*10,0); dataFile.print(";");

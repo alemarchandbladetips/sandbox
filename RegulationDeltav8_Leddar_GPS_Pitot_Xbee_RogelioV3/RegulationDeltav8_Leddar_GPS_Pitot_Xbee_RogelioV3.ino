@@ -481,7 +481,7 @@ void loop()
 
       timer_mode = millis() - time_switch;  // timer_mode = 0 tt le temps.
 
-      regulation_state = 3;
+      regulation_state = 4;
       
       // paramètres mode stabilisé
       K_Pitch = 1; KD_Pitch = 0.4; KI_Pitch = 15;
@@ -503,7 +503,7 @@ void loop()
         
         pitch_des = 1000.0;
         pitch_des_f = pitch_des;
-        regulation_state = 4;
+        regulation_state = 5;
         
       } else //cabrage final
       {
@@ -572,6 +572,7 @@ void loop()
       {
         slope_des = -20;
         yaw_des = heading_to_target_lock;
+        regulation_state = 3;
       } else
       {
         slope_des = -45-5*v_wind_mean_memory;

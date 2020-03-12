@@ -401,8 +401,30 @@ void loop()
       // paramètres mode stabilisé
       K_Pitch = 1.0; KD_Pitch = 0.4; KI_Pitch = 15.0;
       K_Roll = 2.5; KD_Roll = 0.2;
-      K_Yaw = 3.6; KD_Yaw = 0.36;
+      K_Yaw = 3.6; KD_Yaw = 0.75;
       KP_Moteur = 0.1; KI_Moteur = 0.2; Offset_gaz_reg = 0.0;
+
+//      if(remote._switch_F==2)
+//      {
+//        K_Yaw = 7.2;
+//      } else if(remote._switch_F==1)
+//      {
+//        K_Yaw = 4.9;
+//      } else
+//      {
+//        K_Yaw = 3.6;
+//      }
+//
+//      if(remote._switch_D==2)
+//      {
+//        KD_Yaw = 0.72;
+//      } else if(remote._switch_D==1)
+//      {
+//        KD_Yaw = 0.49;
+//      } else
+//      {
+//        KD_Yaw = 0.36;
+//      }
 
       // mise à 0 des commandes inutilisées
       Commande_dauphin = 0;
@@ -498,10 +520,10 @@ void loop()
       BNO_roll_f = (1-alpha_roll)*BNO_roll_f + alpha_roll*BNO_roll;
       BNO_roll = BNO_roll_f;
       
-      if(hauteur_leddar_corrigee < hauteur_cabrage && leddar._validity_flag==1) // phase pré-cabrage
+      if(hauteur_leddar_corrigee < hauteur_cabrage ) // phase pré-cabrage
       {
         
-        pitch_des = 1000.0;
+        pitch_des = 60.0;
         pitch_des_f = pitch_des;
         regulation_state = 5;
         
@@ -545,7 +567,7 @@ void loop()
       // paramètres mode dauphin
       K_Pitch = 0; KD_Pitch = 0; KI_Pitch = 0;
       K_Roll = 4.5; KD_Roll = 0.2;
-      K_Yaw = 3.6; KD_Yaw = 0.36; KI_yaw = 0.0;
+      K_Yaw = 3.6; KD_Yaw = 0.75; KI_yaw = 0.0;
       KP_Moteur = 0.1; KI_Moteur = 0.2; Offset_gaz_reg = 0.0;
       //elevation_trim = 0.0;
 
@@ -602,7 +624,7 @@ void loop()
       pitch_des = constrain(pitch_des,-50,30);
       pitch_des_f = pitch_des;
 
-      err_yaw_f = (1-alpha_roll)*err_yaw_f + alpha_roll*bte_ang_180(heading - yaw_des);
+      err_yaw_f = bte_ang_180(heading - yaw_des);//(1-alpha_roll)*err_yaw_f + alpha_roll*bte_ang_180(heading - yaw_des);
       Commande_I_yaw += KI_yaw * err_yaw_f * dt_flt / 360.0; // += addition de la valeur précédente
       Commande_I_yaw = constrain(Commande_I_yaw, -0.1, 0.1);
 

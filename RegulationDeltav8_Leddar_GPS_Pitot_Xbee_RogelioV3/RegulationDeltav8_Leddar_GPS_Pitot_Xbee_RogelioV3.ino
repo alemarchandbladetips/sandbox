@@ -118,13 +118,13 @@ float Commande_I_Moteur, Commande_KP_Moteur;
 
 ///// mode dauphin
 // params
-float flaps_amplitude, hyst_width, hauteur_switch, hauteur_cabrage;
+float flaps_amplitude, hyst_width, hauteur_switch, hauteur_cabrage, hauteur_palier;
 float flaps_amplitude_plus, flaps_amplitude_moins;
 float alpha_dauphin = 0.015; // filtrage au passage en mode dauphin
 float thrust_anti_decrochage, vitesse_anti_decrochage;
 // states
 float Commande_dauphin = 0;
-int8_t arrondi_almost_ready,arrondi_ready,flap_state_mem,flap_state = 1, leddar_track = 0;
+int8_t arrondi_almost_ready,arrondi_ready,flap_state_mem,flap_state = 1, leddar_track = 0, arrondi_final, palier;
 int8_t first_dive = 1;
 float filtre_dauphin=0;
 
@@ -364,6 +364,8 @@ void loop()
       leddar_track = 0;
       stability_achieved = 0;
       slope_des_f = slope_aero_f;
+      arrondi_final = 0;
+      palier = 0;
 
       // mise à 0 des valeurs utilisées pour le dauphin
       filtre_dauphin=0;
@@ -389,7 +391,7 @@ void loop()
     
     // mode utilisé pour la phase de stabilisation avant le dauphin
 
-    else if (remote._switch_C == 1 || (remote._switch_C == 0 && declanchement == 0) ) 
+    else if (remote._switch_C == 1 )//|| (remote._switch_C == 0 && declanchement == 0) ) 
     { 
 
       regulation_state = 1;
@@ -403,28 +405,6 @@ void loop()
       K_Roll = 2.5; KD_Roll = 0.2;
       K_Yaw = 3.6; KD_Yaw = 0.75;
       KP_Moteur = 0.1; KI_Moteur = 0.2; Offset_gaz_reg = 0.0;
-
-//      if(remote._switch_F==2)
-//      {
-//        K_Yaw = 7.2;
-//      } else if(remote._switch_F==1)
-//      {
-//        K_Yaw = 4.9;
-//      } else
-//      {
-//        K_Yaw = 3.6;
-//      }
-//
-//      if(remote._switch_D==2)
-//      {
-//        KD_Yaw = 0.72;
-//      } else if(remote._switch_D==1)
-//      {
-//        KD_Yaw = 0.49;
-//      } else
-//      {
-//        KD_Yaw = 0.36;
-//      }
 
       // mise à 0 des commandes inutilisées
       Commande_dauphin = 0;
@@ -511,6 +491,7 @@ void loop()
       K_Yaw = 0; KD_Yaw = 0;
       KP_Moteur = 0; KI_Moteur = 0; Offset_gaz_reg = 0.0;
 
+
       // mise à 0 des commandes inutilisées et du gaz
       Commande_dauphin=0;
       flap_state = 1;
@@ -519,15 +500,59 @@ void loop()
 
       BNO_roll_f = (1-alpha_roll)*BNO_roll_f + alpha_roll*BNO_roll;
       BNO_roll = BNO_roll_f;
-      
-      if(hauteur_leddar_corrigee < hauteur_cabrage ) // phase pré-cabrage
+
+      if(hauteur_leddar_corrigee < hauteur_cabrage && leddar._validity_flag==1 ) // phase pré-cabrage
+      {
+        arrondi_final = 1;
+
+        if(remote._switch_D==2)
+        {
+          hauteur_palier = 5;
+        } else if(remote._switch_D==1)
+        {
+          hauteur_palier = 4;
+        } else
+        {
+          hauteur_palier = 3;
+        }
+      }
+
+      if(hauteur_leddar_corrigee < hauteur_palier && leddar._validity_flag==1 ) // phase pré-cabrage
+      {
+        palier = 1;
+      }
+  
+      if( arrondi_final ) //cabrage final
       {
         
-        pitch_des = 60.0;
+        pitch_des = 80.0;
         pitch_des_f = pitch_des;
         regulation_state = 5;
+        thrust = 0.0;
         
-      } else //cabrage final
+      } else if ( palier )// phase pré-cabrage
+      {
+        if(remote._switch_F==2)
+        {
+          pitch_des = 10.0;
+        } else if(remote._switch_F==1)
+        {
+          pitch_des = 5.0;
+        } else
+        {
+          pitch_des = 0.0;
+        }
+
+        vitesse_anti_decrochage = 10.0;
+        pitch_des = -15.0;
+        thrust_anti_decrochage = 0.45;
+
+        if(GPS_pitot._speed_pitot < vitesse_anti_decrochage)
+        {
+          thrust = thrust_anti_decrochage;
+        }
+        
+      } else
       {
         
         vitesse_anti_decrochage = 10.0;
@@ -567,8 +592,11 @@ void loop()
       // paramètres mode dauphin
       K_Pitch = 0; KD_Pitch = 0; KI_Pitch = 0;
       K_Roll = 4.5; KD_Roll = 0.2;
-      K_Yaw = 3.6; KD_Yaw = 0.75; KI_yaw = 0.0;
+      K_Yaw = 1.6; KD_Yaw = 0.75; KI_yaw = 0.0;
       KP_Moteur = 0.1; KI_Moteur = 0.2; Offset_gaz_reg = 0.0;
+
+      
+
       //elevation_trim = 0.0;
 
       Commande_I_flaps = 0;

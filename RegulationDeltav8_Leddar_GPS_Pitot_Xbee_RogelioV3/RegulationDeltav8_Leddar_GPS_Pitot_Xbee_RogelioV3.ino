@@ -88,10 +88,6 @@ float BNO_wx, BNO_wy, BNO_wz;
 float BNO_roll, BNO_pitch, BNO_lacet;
 float BNO_linear_acc_norm;
 
-//constantes
-const int H = 50;
-float WZ[H];
-
 //Offsets
 float RollOffs = 0, PitchOffs = 0, YawOffs = -90; //en deg
 
@@ -158,7 +154,7 @@ uint8_t stability_achieved;
 
 //autres
 uint32_t temps, temps2, dt, time_idx;
-uint32_t temps_tmp, dt1, dt2, dt3, dt4;
+uint32_t dt1, dt2, dt3, dt4;
 
 void setup()
 {
@@ -190,6 +186,7 @@ void setup()
     Serial.print("Ooops, no BNO055 detected ... Check your wiring or I2C ADDR!");
     while (1);
   }
+  // battement de l'aile droite pour valider le démarage de la BNO
   Servo_R.set_normalized_pwm(0.3);
   delay(500);
   Servo_R.set_normalized_pwm(-0.3);
@@ -213,6 +210,7 @@ void setup()
     Serial.println("card initialized.");
     filename = (char*) malloc( strlen("log") + strlen(Num) + strlen(".txt") + 1) ;
     checkExist(); //vérifie existence du fichier et l'écriture commence à partir du numéro de fichier que n'existe pas
+    // Battement de l'aile gauche pour valider le démarage de la carte SD
     Servo_L.set_normalized_pwm(0.3);
     delay(500);
     Servo_L.set_normalized_pwm(-0.3);
@@ -225,6 +223,7 @@ void setup()
 
   temps = micros();
   time_idx = 0;
+  // Offset de montage de la centrale inertielle
   PitchOffs = 2.0;
   
 }
@@ -233,14 +232,20 @@ void setup()
 void loop()
   {
 
+  // mise à jour des valeurs de la télécommande
   remote.update_controller();
   knob2 = constrain((0.3- remote._rudder) / 0.6, 0, 1);
   thrust = remote._thrust;
+
+  // mise à jour des valeurs leddar
   leddar.read_leddar();
+
+  // mise à jour des valeurs GPS et pitot
   GPS_pitot.read_GPS_pitot();
 
   if(GPS_pitot._x_gps != 0.0 && first_GPS_data != 1)
   {
+    // Battement des 2 ailes pour valider la prise de référence du GPS
     first_GPS_data = 1;
     Servo_R.set_normalized_pwm(0.3);
     Servo_L.set_normalized_pwm(0.3);
@@ -254,36 +259,34 @@ void loop()
   
   dt = micros() - temps;
   
-  if ( dt > 10000){
-    
-           // Serial.print(GPS_pitot._z_gps);Serial.println(" ");
+  if ( dt > 10000) // boucle principale cadencée à 100 Hz
+  {
     temps += dt;
     
 /********Info de BNO55***************/
-    
-    temps_tmp = micros();
-    
+
+    // Lectures des infos gyro
     imu::Vector<3> gyro_speed = bno.getVector(Adafruit_BNO055::VECTOR_GYROSCOPE);
-    
-    bte_HistoriqueVal(gyro_speed.z()*RAD2DEG, WZ,H);
-    bte_Mean(WZ, &BNO_wz, 20, H - 1);
+
+    // transformation en DPS
     BNO_wz = gyro_speed.z() * RAD2DEG;
     BNO_wy = gyro_speed.y() * RAD2DEG;
     BNO_wx = gyro_speed.x() * RAD2DEG;
 
+    // lecture de l'acc linéaire (pour log)
     imu::Vector<3> linear_acc = bno.getVector(Adafruit_BNO055::VECTOR_LINEARACCEL);
-
     BNO_linear_acc_norm = sqrtf(linear_acc.x()*linear_acc.x() + linear_acc.y()*linear_acc.y() + linear_acc.z()*linear_acc.z())/9.81;
 
+    // lecture du vecteur gravité pour la projection de la mesure leddar (distance leddar -> altitude)
     imu::Vector<3> gravity_vector = bno.getVector(Adafruit_BNO055::VECTOR_GRAVITY);
 
     float produit_scalaire = (gravity_vector.x()*leddar_mounting_vector[0] + gravity_vector.y()*leddar_mounting_vector[1] + gravity_vector.z()*leddar_mounting_vector[2])/ 9.81 ;
-    
     if(produit_scalaire > 0.2)
     {
       hauteur_leddar_corrigee = leddar._hauteur*produit_scalaire;
     }
 
+    // lecture des angles d'Euler (deg)+ application des offset 
     imu::Vector<3> eulAng = bno.getVector(Adafruit_BNO055::VECTOR_EULER);
     
     BNO_roll = bte_ang_180(-eulAng.z() - RollOffs);
@@ -293,43 +296,51 @@ void loop()
 
 /***************** Estimation des angles de descente, vitesse pitot filtrée...  *********************/
 
+    // filtrage moyen de la vitesse pitot sur 1s, utilisé pour la régulation de vitesse en mode dauphin
     bte_HistoriqueVal(GPS_pitot._speed_pitot, v_pitot_buffer, Ndata);
     bte_Mean(v_pitot_buffer, &v_pitot_mean, Ndata, Ndata-1);
 
+    // vitesse pitot projeté sur le plan horizontal et filtré
     bte_HistoriqueVal(GPS_pitot._speed_pitot*cosf(BNO_pitch*DEG2RAD), vh_pitot_buffer, Ndata);
     bte_Mean(vh_pitot_buffer, &vh_pitot_mean, Ndata, Ndata-1);
 
+    // estimation de la vitesse du vent dans l'axe de l'attérissage. utilisé a la fin du mode stabilisé pour choisir la pente de descente et adapter le point de déclanchement du dauphin
     bte_HistoriqueVal(GPS_pitot._speed_pitot - sqrtf(GPS_pitot._vx_gps*GPS_pitot._vx_gps + GPS_pitot._vy_gps*GPS_pitot._vy_gps +GPS_pitot._vz_gps*GPS_pitot._vz_gps), v_wind_buffer, Ndata);
     bte_Mean(v_wind_buffer, &v_wind_mean, Ndata, Ndata-1);
-    
+
+    // calcul de la pente aéro
     slope_aero = atan2f(GPS_pitot._vz_gps,GPS_pitot._speed_pitot*cosf(BNO_pitch*DEG2RAD))*RAD2DEG;
     slope_aero_f = atan2f(GPS_pitot._vz_gps,vh_pitot_mean)*RAD2DEG;
 
+    // calcul de la pente réelle + filtrage
     v_horizontal_gps = sqrtf(GPS_pitot._vx_gps*GPS_pitot._vx_gps + GPS_pitot._vy_gps*GPS_pitot._vy_gps);
     slope_ground = atan2f(GPS_pitot._vz_gps,v_horizontal_gps)*RAD2DEG;
-
     bte_HistoriqueVal(slope_ground, slope_ground_buffer, Ndata);
     bte_Mean(slope_ground_buffer, &slope_ground_mean, Ndata, Ndata-1);
 
+    // retard de la pente désirée pour coller au retard du GPS.
     bte_HistoriqueVal(slope_des_f, slope_des_f_buffer, Ndata);
     slope_des_f_delay = slope_des_f_buffer[0];
 
 /***************** Estimation de la distance à la cible et heading  *********************/
 
+    // distance à la cible
     distance_to_target = sqrtf( (GPS_pitot._x_gps - gps_target[0])*(GPS_pitot._x_gps - gps_target[0]) + (GPS_pitot._y_gps - gps_target[1])*(GPS_pitot._y_gps - gps_target[1]));
+    // Cap menant à la cible
     heading_to_target = atan2f((GPS_pitot._x_gps - gps_target[0]),-(GPS_pitot._y_gps - gps_target[1]))*RAD2DEG;
     heading = atan2f(-GPS_pitot._vx_gps,GPS_pitot._vy_gps)*RAD2DEG;
 
 /***************** Paramètres de régulation par defaut*********************/
-    // peuvent être modifiés dans les différents modes, par défaut, juste le D sur le roll
     
+    // peuvent être modifiés dans les différents modes, par défaut, juste le D sur le roll
     K_Pitch = 0; KD_Pitch = 0; KI_Pitch = 0;
     K_Roll = 0; KD_Roll = 0.2;
     K_Yaw = 0; KD_Yaw = 0;
     KP_Moteur = 0; KP_Moteur = 0; Offset_gaz_reg = 0;
-   
 
 /***************** Modes de régulation *********************/
+
+
  
     //////////////////////////////////////// 
     // SWITCH C BAS ( 2  //  MODE MANUEL) //
@@ -576,7 +587,7 @@ void loop()
     
     
     ////////////////////////////////////////////
-    //  SWITCH C HAUT    /!\    T W E R K    /!\
+    //  SWITCH C HAUT    /!\     DAUPHIN     /!\
     ////////////////////////////////////////////
 
     else 
@@ -747,7 +758,7 @@ void loop()
                     + K_Yaw * err_yaw_f / 360.0
                     + KD_Yaw * BNO_wz  / 360.0
                     + Commande_I_yaw 
-                    + aileron_trim; //
+                    + aileron_trim; 
     
     // Commande correspondant au pitch
     Commande_P_flaps = - K_Pitch * (BNO_pitch - pitch_des_f)  / 360.0;
@@ -766,13 +777,9 @@ void loop()
     
     pwm_norm_prop = thrust; 
 
-    
-
-/////////////////////////////////////////////////////////////////
-    
-    
+/***************** Coupure moteur de sécurité *********************/
+       
     // Sécurité, coupure des moteurs sur le switch ou si la carte SD n'est pas présente, ou perte de signal télécommande
-//    /*
     if(  !OK_SDCARD || remote._perte_connection || remote._rudder < 0.0 || first_GPS_data==0 )
     {
       Motor_Prop.power_off();
@@ -780,8 +787,6 @@ void loop()
     {
       Motor_Prop.power_on();
     }
-
-    
 
 /*************Ecriture PWMs Servo et Moteurs*****************/
 
@@ -795,10 +800,11 @@ void loop()
     Motor_Prop.set_normalized_pwm(pwm_norm_prop);
 
 /*********** Log sur la carte SD ***********/
-
-    
-    if (OK_SDCARD) {
-        if (!Open) {
+ 
+    if (OK_SDCARD) 
+    {
+        if (!Open) 
+        {
           strcpy(filename, "log");
           sprintf(Num, "%lu", nb_file);
           strcat(filename, Num); strcat(filename, ".txt");
@@ -809,60 +815,57 @@ void loop()
           Open = true;
           Closed = false;
           temps2 = millis();
-        }
-        
-      else if (Open && !Closed) {
-        temps_log = millis();
-        dataFile.print(temps_log); dataFile.print(";");
-        
-        dataFile.print(BNO_lacet * 10, 0); dataFile.print(";");
-        dataFile.print(BNO_pitch * 10, 0); dataFile.print(";");
-        dataFile.print(BNO_roll * 10, 0); dataFile.print(";");
-        dataFile.print(BNO_linear_acc_norm * 100, 0); dataFile.print(";");
-
-        dataFile.print(GPS_pitot._x_gps*100.0, 0); dataFile.print(";");
-        dataFile.print(GPS_pitot._y_gps*100.0, 0); dataFile.print(";");
-        dataFile.print(GPS_pitot._z_gps*100.0, 0); dataFile.print(";");
-        
-        dataFile.print(v_wind_mean*100,0); dataFile.print(";");
-        dataFile.print(hauteur_leddar_corrigee*100,0); dataFile.print(";");
-        dataFile.print(yaw_des*10.0,0); dataFile.print(";");
-
-        dataFile.print(GPS_pitot._vx_gps*100.0, 0); dataFile.print(";");
-        dataFile.print(GPS_pitot._vy_gps*100.0, 0); dataFile.print(";");
-        dataFile.print(GPS_pitot._vz_gps*100.0, 0); dataFile.print(";");
-        dataFile.print(GPS_pitot._speed_pitot * 100.0, 0); dataFile.print(";");
-
-        dataFile.print(pwm_norm_R*1000.0,0); dataFile.print(";");
-        dataFile.print(pwm_norm_L*1000.0,0); dataFile.print(";");
-        dataFile.print(pwm_norm_prop*1000.0,0); dataFile.print(";");
-
-        dataFile.print(pitch_des_f * 10, 0); dataFile.print(";");
-        dataFile.print(distance_to_target*1000, 0); dataFile.print(";");
-        dataFile.print(err_yaw_f*1000, 0); dataFile.print(";");
-
-        dataFile.print(slope_des_f_delay*10,0); dataFile.print(";");
-        dataFile.print(slope_aero_f*10,0); dataFile.print(";");
-        dataFile.print(slope_ground_mean*10,0); dataFile.print(";");
-
-        dataFile.print(regulation_state); dataFile.print(";");
-
-        dataFile.print(remote._switch_F+10*remote._switch_D+100*remote._switch_C + declanchement*1000); dataFile.print(";");
-
-        dataFile.println(" "); // gaffe à la dernière ligne
-        
-        if ((millis() - temps2 > 300.0 * 1000) || (remote._switch_C != Switch_C_previous) ){
-          dataFile.close();
-          Closed = true;
-          Open = false;
-        }
-      
-      }
+       } else if (Open && !Closed) 
+       {
+          temps_log = millis();
+          dataFile.print(temps_log); dataFile.print(";");
+          
+          dataFile.print(BNO_lacet * 10, 0); dataFile.print(";");
+          dataFile.print(BNO_pitch * 10, 0); dataFile.print(";");
+          dataFile.print(BNO_roll * 10, 0); dataFile.print(";");
+          dataFile.print(BNO_linear_acc_norm * 100, 0); dataFile.print(";");
+  
+          dataFile.print(GPS_pitot._x_gps*100.0, 0); dataFile.print(";");
+          dataFile.print(GPS_pitot._y_gps*100.0, 0); dataFile.print(";");
+          dataFile.print(GPS_pitot._z_gps*100.0, 0); dataFile.print(";");
+          
+          dataFile.print(v_wind_mean*100,0); dataFile.print(";");
+          dataFile.print(hauteur_leddar_corrigee*100,0); dataFile.print(";");
+          dataFile.print(yaw_des*10.0,0); dataFile.print(";");
+  
+          dataFile.print(GPS_pitot._vx_gps*100.0, 0); dataFile.print(";");
+          dataFile.print(GPS_pitot._vy_gps*100.0, 0); dataFile.print(";");
+          dataFile.print(GPS_pitot._vz_gps*100.0, 0); dataFile.print(";");
+          dataFile.print(GPS_pitot._speed_pitot * 100.0, 0); dataFile.print(";");
+  
+          dataFile.print(pwm_norm_R*1000.0,0); dataFile.print(";");
+          dataFile.print(pwm_norm_L*1000.0,0); dataFile.print(";");
+          dataFile.print(pwm_norm_prop*1000.0,0); dataFile.print(";");
+  
+          dataFile.print(pitch_des_f * 10, 0); dataFile.print(";");
+          dataFile.print(distance_to_target*1000, 0); dataFile.print(";");
+          dataFile.print(err_yaw_f*1000, 0); dataFile.print(";");
+  
+          dataFile.print(slope_des_f_delay*10,0); dataFile.print(";");
+          dataFile.print(slope_aero_f*10,0); dataFile.print(";");
+          dataFile.print(slope_ground_mean*10,0); dataFile.print(";");
+  
+          dataFile.print(regulation_state); dataFile.print(";");
+  
+          dataFile.print(remote._switch_F+10*remote._switch_D+100*remote._switch_C + declanchement*1000); dataFile.print(";");
+  
+          dataFile.println(" "); // gaffe à la dernière ligne
+          
+          if ((millis() - temps2 > 300.0 * 1000) || (remote._switch_C != Switch_C_previous) )
+          {
+            dataFile.close();
+            Closed = true;
+            Open = false;
+          }
+       }
     }
-    
     Switch_C_previous = remote._switch_C;
-
-  }
+  } // fin de boucle à 100 hz
 }
 
 void checkExist(void)

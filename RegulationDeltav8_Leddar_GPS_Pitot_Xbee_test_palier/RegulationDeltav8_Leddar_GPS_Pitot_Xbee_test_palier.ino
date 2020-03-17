@@ -320,6 +320,13 @@ void loop()
     heading_to_target = atan2f((GPS_pitot._x_gps - gps_target[0]),-(GPS_pitot._y_gps - gps_target[1]))*RAD2DEG;
     heading = atan2f(-GPS_pitot._vx_gps,GPS_pitot._vy_gps)*RAD2DEG;
 
+    Serial.print(GPS_pitot._z_gps);Serial.print(" ");
+    Serial.print(((GPS_pitot._z_gps) * 1.71 - 12.0));Serial.print(" ");
+    Serial.print(distance_to_target);Serial.print(" ");
+    Serial.print(bte_ang_180(heading_to_target));Serial.print(" ");
+    Serial.print(BNO_lacet);Serial.println(" ");
+
+
 /***************** Paramètres de régulation par defaut*********************/
     // peuvent être modifiés dans les différents modes, par défaut, juste le D sur le roll
     
@@ -367,8 +374,7 @@ void loop()
       declanchement = 0;
       
       // mise à jour des consignes avec les valeurs courantes de la BNO
-      yaw_des = BNO_lacet; 
-      heading_to_target_lock = BNO_lacet;
+      yaw_des = BNO_lacet;     
       pitch_des_f = BNO_pitch;
 
     }
@@ -385,7 +391,7 @@ void loop()
     
     // mode utilisé pour la phase de stabilisation avant le dauphin
 
-    else if (remote._switch_C == 1 || (remote._switch_C == 0 && declanchement == 0) ) 
+    else if (remote._switch_C == 1 )//|| (remote._switch_C == 0 && declanchement == 0) ) 
     { 
 
       regulation_state = 1;
@@ -412,10 +418,6 @@ void loop()
       first_dive = 1;
       v_wind_mean_memory = v_wind_mean;
 
-
-      heading_to_target_lock = (1-alpha_roll)*heading_to_target_lock + alpha_roll*BNO_lacet;
-
-
       // consignes de pitch et de vitesse
       pitch_des = 4;
       
@@ -430,17 +432,10 @@ void loop()
       thrust = Offset_gaz_reg + Commande_KP_Moteur + Commande_I_Moteur;
     
       thrust = constrain(thrust, 0, 1);
-
-      yaw_des = heading_to_target;
       
       err_yaw_f = bte_ang_180(heading - yaw_des);
 
       err_yaw_f = constrain(err_yaw_f,-30,30);
-
-      if(distance_to_target<50.0 || abs(bte_ang_180(BNO_lacet - yaw_des))>90.0 )
-      {
-        err_yaw_f = 0;
-      }
 
       pitch_des_f = (1 - alpha_stab) * pitch_des_f + alpha_stab * pitch_des; //
 
@@ -463,7 +458,7 @@ void loop()
       stability_achieved = 1;
 
       //if( (distance_to_target-1.0*v_horizontal_gps) < ((GPS_pitot._z_gps) * 1.71 - 12.0 - v_wind_mean*(GPS_pitot._z_gps)*0.09 +20.0) ) // 0.09 = cos(5)
-      if( (distance_to_target-1.0*v_horizontal_gps) < ((GPS_pitot._z_gps) * 1.71 - 12.0 + 20.0) ) // 0.09 = cos(5)
+      if( (distance_to_target-1.0*v_horizontal_gps) < ((GPS_pitot._z_gps) * 1.71 - 12.0 + 50.0) ) // 0.09 = cos(5)
       {
         declanchement = 1;
       }
@@ -477,7 +472,7 @@ void loop()
     //            MODE ARRONDI FINAL             //
     ///////////////////////////////////////////////
 
-    else if (arrondi_ready == 1) 
+    else if (remote._switch_C == 0) 
     { 
 
       timer_mode = millis() - time_switch;  // timer_mode = 0 tt le temps.
@@ -487,8 +482,9 @@ void loop()
       // paramètres mode stabilisé
       K_Pitch = 1; KD_Pitch = 0.4; KI_Pitch = 15;
       K_Roll = 4.5; KD_Roll = 0.2;
-      K_Yaw = 4.0; KD_Yaw = 0.2;
+      K_Yaw = 3.6; KD_Yaw = 0.75;
       KP_Moteur = 0; KI_Moteur = 0; Offset_gaz_reg = 0.0;
+
 
       // mise à 0 des commandes inutilisées et du gaz
       Commande_dauphin=0;
@@ -499,72 +495,42 @@ void loop()
       BNO_roll_f = (1-alpha_roll)*BNO_roll_f + alpha_roll*BNO_roll;
       BNO_roll = BNO_roll_f;
 
-      if(hauteur_leddar_corrigee < hauteur_cabrage && leddar._validity_flag==1 ) // phase pré-cabrage
+      if(remote._switch_D==2)
       {
-        arrondi_final = 1;
-      }
-
-      hauteur_palier = 7;
-      if(hauteur_leddar_corrigee < hauteur_palier && leddar._validity_flag==1 ) // phase pré-cabrage
+        vitesse_anti_decrochage = 10.0;
+      } else if(remote._switch_D==1)
       {
-        palier = 1;
-      }
-  
-      if( arrondi_final ) //cabrage final
-      {
-        
-        pitch_des = 80.0;
-        pitch_des_f = pitch_des;
-        regulation_state = 5;
-        thrust = 0.0;
-        
-      } else if ( palier )// phase pré-cabrage
-      {
-        if(timer_mode<50000)
-        {
-          pitch_des = 0.0;
-        } else
-        {
-          if(remote._switch_F==2)
-          {
-            pitch_des = -25.0;
-          } else if(remote._switch_F==1)
-          {
-            pitch_des = -20.0;
-          } else
-          {
-            pitch_des = -15.0;
-          }
-          
-        }
-        
         vitesse_anti_decrochage = 9.5;
-        pitch_des_f = pitch_des;
-
-        thrust_anti_decrochage = 0.45;
-
-        if(GPS_pitot._speed_pitot < vitesse_anti_decrochage)
-        {
-          thrust = thrust_anti_decrochage;
-        }
-        
       } else
       {
-        
-        vitesse_anti_decrochage = 10.0;
-        pitch_des = -15.0;
-        thrust_anti_decrochage = 0.45;
-
-        if(GPS_pitot._speed_pitot < vitesse_anti_decrochage)
-        {
-          thrust = thrust_anti_decrochage;
-        }
-        
-        pitch_des_f = pitch_des;
+        vitesse_anti_decrochage = 9.0;
       }
 
+      if(remote._switch_F==2)
+      {
+        thrust_anti_decrochage = 0.45;
+      } else if(remote._switch_F==1)
+      {
+        thrust_anti_decrochage = 0.4;
+      } else
+      {
+        thrust_anti_decrochage = 0.35;
+      }
+
+      pitch_des = 0;
+      pitch_des_f = pitch_des;
+
+      err_yaw_f = bte_ang_180(heading - yaw_des);
+      
+      pitch_des_f = pitch_des;
+      thrust_anti_decrochage = 0.45;
+
+      if(GPS_pitot._speed_pitot < vitesse_anti_decrochage)
+      {
+        thrust = thrust_anti_decrochage;
+      } 
+
       pitch_des_f = (1 - alpha_stab) * pitch_des_f + alpha_stab * pitch_des; //
-      err_yaw_f = bte_ang_180(BNO_lacet - yaw_des);
 
       // Intégrateur des flaps pour régulation du pitch
       Commande_I_flaps += -KI_Pitch * (BNO_pitch - pitch_des_f) * dt_flt / 360.0; // += addition de la valeur précédente
@@ -582,7 +548,6 @@ void loop()
     else 
     {
 
-      time_switch = millis();
       timer_mode = millis() - time_switch;  // timer_mode = 0 tt le temps.
 
       regulation_state = 2;
@@ -590,13 +555,16 @@ void loop()
       // paramètres mode dauphin
       K_Pitch = 0; KD_Pitch = 0; KI_Pitch = 0;
       K_Roll = 4.5; KD_Roll = 0.2;
-      K_Yaw = 4.0; KD_Yaw = 0.75; KI_yaw = 0.0;
+      K_Yaw = 1.6; KD_Yaw = 0.75; KI_yaw = 0.0;
       KP_Moteur = 0.1; KI_Moteur = 0.2; Offset_gaz_reg = 0.0;
+
+      
 
       //elevation_trim = 0.0;
 
       Commande_I_flaps = 0;
       remote._elevator = 0;
+      
       
 //////// paramètres du mode dauphin
       // consigne de pitch et largeur de l'hystéresis
@@ -615,16 +583,15 @@ void loop()
       
       if(leddar_track == 1)
       {
-        slope_des = -20; 
+        slope_des = -20;
+        yaw_des = heading_to_target_lock;
         regulation_state = 3;
       } else
       {
         slope_des = -45-5*v_wind_mean_memory;
-        //heading_to_target_lock = heading_to_target;
-        //yaw_des = heading_to_target;
+        heading_to_target_lock = heading_to_target;
+        yaw_des = heading_to_target;
       }
-
-      yaw_des = heading_to_target_lock;
 
       vitesse_des = 10.0;
 
@@ -648,7 +615,7 @@ void loop()
       pitch_des = constrain(pitch_des,-50,30);
       pitch_des_f = pitch_des;
 
-      err_yaw_f = bte_ang_180(BNO_lacet - yaw_des);//(1-alpha_roll)*err_yaw_f + alpha_roll*bte_ang_180(heading - yaw_des);
+      err_yaw_f = bte_ang_180(heading - yaw_des);//(1-alpha_roll)*err_yaw_f + alpha_roll*bte_ang_180(heading - yaw_des);
       Commande_I_yaw += KI_yaw * err_yaw_f * dt_flt / 360.0; // += addition de la valeur précédente
       Commande_I_yaw = constrain(Commande_I_yaw, -0.1, 0.1);
 
@@ -656,7 +623,7 @@ void loop()
       flaps_amplitude_moins = flaps_amplitude;
       
       // hauteur du min du dernier dauphin
-      hauteur_switch = 11.0; // en m 
+      hauteur_switch = 9.0; // en m 
 
       // hauteur de cabrage final
       hauteur_cabrage = 1.5; // en m

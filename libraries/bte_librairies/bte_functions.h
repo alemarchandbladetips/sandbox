@@ -22,8 +22,11 @@ uint16_t bte_medianFilter16(uint16_t val, uint16_t XX[], uint8_t Elem);
 // fonction signe
 float bte_signo(float val);
 
-// modulo 180
+// modulo -180/180
 float bte_ang_180(float a1);
+
+//modulo 0/360
+float bte_ang_360(float a1);
 
 // modulo pi
 float bte_ang_pi(float a1);

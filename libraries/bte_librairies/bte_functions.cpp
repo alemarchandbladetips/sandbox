@@ -101,6 +101,20 @@ float bte_ang_180(float a1)
     return temp;
 }
 
+float bte_ang_360(float a1)
+{
+    float temp = fmodf(a1,360.0);
+    if(temp > 360)
+    { 
+      temp -= 360.0;
+    }
+    else if (temp < 0)
+    {
+       temp += 360.0;
+    }
+    return temp;
+}
+
 float bte_ang_pi(float a1)
 {
     float temp = fmodf(a1,2*PI);

@@ -425,8 +425,7 @@ void loop()
 
 //////// Déclanchement de la phase dauphin
 
-      //if( (distance_to_target-1.0*v_horizontal_gps) < ((GPS_pitot._z_gps) * 1.71 - 12.0 - v_wind_mean*(GPS_pitot._z_gps)*0.09 +20.0) ) // 0.09 = cos(5)
-      if( (distance_to_target-1.0*v_horizontal_gps) < ((GPS_pitot._z_gps) * 1.71 - 12.0 + 20.0) ) // 0.09 = cos(5)
+      if( (distance_to_target-1.0*v_horizontal_gps) < ((GPS_pitot._z_gps) * 1.25 + 55.0 - 0.67*(0.15*alti + 3)*GPS_pitot._z_gps*v_wind_mean )
       {
         declanchement = 1;
       }

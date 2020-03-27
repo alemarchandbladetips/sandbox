@@ -144,7 +144,7 @@ float roll_des;
 float heading_start;
 uint8_t survey_state;
 float max_v_wind, min_v_wind, max_heading, min_heading;
-float KI_vz;
+float KI_vz, KP_vz, offset_pitch_vz, Commande_I_vz;
 
 /******* debug **************/
 
@@ -312,7 +312,7 @@ void loop()
     bte_Mean(vh_pitot_buffer, &vh_pitot_mean, Ndata, Ndata-1);
 
     // estimation de la vitesse du vent dans l'axe de l'attérissage. utilisé a la fin du mode stabilisé pour choisir la pente de descente et adapter le point de déclanchement du dauphin
-    v_wind = GPS_pitot._speed_pitot - sqrtf(GPS_pitot._vx_gps*GPS_pitot._vx_gps + GPS_pitot._vy_gps*GPS_pitot._vy_gps +GPS_pitot._vz_gps*GPS_pitot._vz_gps);
+    v_wind = vh_pitot_mean - sqrtf(GPS_pitot._vx_gps*GPS_pitot._vx_gps + GPS_pitot._vy_gps*GPS_pitot._vy_gps +GPS_pitot._vz_gps*GPS_pitot._vz_gps);
     bte_HistoriqueVal(v_wind, v_wind_buffer, Ndata);
     bte_Mean(v_wind_buffer, &v_wind_mean, Ndata, Ndata-1);
 
@@ -437,6 +437,8 @@ void loop()
       min_v_wind = 0;
       min_heading = 0;
       max_heading = 0;
+      Commande_I_vz = 0;
+      survey_state = 0;
 
       // consignes de pitch et de vitesse
       pitch_des = 4;
@@ -453,7 +455,7 @@ void loop()
     
       thrust = constrain(thrust, 0, 1);
       
-      err_yaw_f = bte_ang_180(heading - yaw_des);
+      err_yaw_f = bte_ang_180(BNO_lacet - yaw_des);
 
       err_yaw_f = constrain(err_yaw_f,-30,30);
 
@@ -482,17 +484,21 @@ void loop()
       K_Roll = 2.5; KD_Roll = 0.2;
       K_Yaw = 3.6; KD_Yaw = 0.75;
       KP_Moteur = 0.1; KI_Moteur = 0.2; Offset_gaz_reg = 0.0;
+      KP_vz = 0; KI_vz = 0; offset_pitch_vz = 5;
+      K_Yaw = 0; KD_Yaw = 0;
 
-      if (remote._switch_F==2)
-      {
-        KI_vz = 100.0;
-      } else if(remote._switch_F==1)
-      {
-        KI_vz = 50.0;
-      } else
-      {
-        KI_vz = 10.0;
-      }
+//      if (remote._switch_D==2)
+//      {
+//        offset_pitch_vz = 18;
+//      } else if(remote._switch_D==1)
+//      {
+//        offset_pitch_vz = 15;
+//      } else
+//      {
+//        offset_pitch_vz = 12.5;
+//      }
+
+      offset_pitch_vz = 18;
 
       // mise à 0 des commandes inutilisées
       Commande_dauphin = 0;
@@ -501,21 +507,13 @@ void loop()
       BNO_roll_f = BNO_roll;
 
       // consignes de pitch et de vitesse
-      pitch_des += -KI_vz * GPS_pitot._vz_gps * dt_flt;
+      Commande_I_vz += -KI_vz * GPS_pitot._vz_gps * dt_flt;
+      pitch_des = -KP_vz*GPS_pitot._vz_gps + Commande_I_vz + offset_pitch_vz;
       vitesse_des = 10.0;
 
-      if (remote._switch_F==2)
-      {
-        roll_des = 15.0;
-      } else if(remote._switch_F==1)
-      {
-        roll_des = 10.0;
-      } else
-      {
-        roll_des = 5.0;
-      }
+      roll_des = 10.0;
 
-      if(survey_state == 0 && bte_ang_360(heading-heading_start)>180)
+      if(survey_state == 0 && bte_ang_360(heading-heading_start)>180 && bte_ang_360(heading-heading_start)<270)
       { // 1/2 tour effectué
         survey_state = 1;
         K_Yaw = 0; KD_Yaw = 0;
@@ -523,7 +521,7 @@ void loop()
       { // 1 tour effectué
         survey_state = 2;
         K_Yaw = 0; KD_Yaw = 0;
-      } else if (survey_state == 2)
+      } /*else if (survey_state == 2)
       { // Calcul de la direction du vent et de la cible GPS pour le début du virage
         K_Yaw = 0; KD_Yaw = 0;
         max_heading = bte_ang_180(bte_ang_180(bte_ang_180(min_heading+180)-max_heading)/2+max_heading);
@@ -533,7 +531,7 @@ void loop()
         gps_target[1] = 300.0*sinf(min_heading*PI/180.0);//+20.0*sinf((min_heading+90.0)*PI/180.0);
         survey_state = 3;
       } 
-      /*else if (survey_state == 3)
+      else if (survey_state == 3)
       { // on rejoint le point de virage
         yaw_des = heading_to_target;
         vitesse_des = 15.0;
@@ -567,14 +565,16 @@ void loop()
         }
       }
       
-      Commande_I_Moteur += -KI_Moteur * (GPS_pitot._speed_pitot - vitesse_des) * dt_flt;
-      Commande_I_Moteur = constrain(Commande_I_Moteur, 0, 0.7); // sat = 200
+//      Commande_I_Moteur += -KI_Moteur * (GPS_pitot._speed_pitot - vitesse_des) * dt_flt;
+//      Commande_I_Moteur = constrain(Commande_I_Moteur, 0, 0.7); // sat = 200
+//    
+//      Commande_KP_Moteur = -KP_Moteur * (GPS_pitot._speed_pitot - vitesse_des);
+//      Commande_KP_Moteur = constrain(Commande_KP_Moteur, -0.5, 0.5);
     
-      Commande_KP_Moteur = -KP_Moteur * (GPS_pitot._speed_pitot - vitesse_des);
-      Commande_KP_Moteur = constrain(Commande_KP_Moteur, -0.5, 0.5);
-    
-      thrust = Offset_gaz_reg + Commande_KP_Moteur + Commande_I_Moteur;
-    
+//      thrust = Offset_gaz_reg + Commande_KP_Moteur + Commande_I_Moteur;
+
+      //thrust = 1.2*Commande_I_Moteur;
+      
       thrust = constrain(thrust, 0, 1);
       
       err_yaw_f = bte_ang_180(heading - yaw_des);
@@ -694,7 +694,7 @@ void loop()
           dataFile.print(err_yaw_f*1000, 0); dataFile.print(";");
   
           dataFile.print(max_v_wind*100,0); dataFile.print(";");
-          dataFile.print(max_v_wind*100,0); dataFile.print(";");
+          dataFile.print(min_v_wind*100,0); dataFile.print(";");
           dataFile.print(max_heading*100,0); dataFile.print(";");
           dataFile.print(min_heading*100,0); dataFile.print(";");
   
@@ -702,8 +702,8 @@ void loop()
   
           dataFile.print(remote._switch_F+10*remote._switch_D+100*remote._switch_C + declanchement*1000); dataFile.print(";");
 
-          dataFile.print(gps_target*100,0); dataFile.print(";");
-          dataFile.print(gps_target*100,0); dataFile.print(";");
+          dataFile.print(gps_target[0]*100,0); dataFile.print(";");
+          dataFile.print(gps_target[1]*100,0); dataFile.print(";");
   
           dataFile.println(" "); // gaffe à la dernière ligne
           

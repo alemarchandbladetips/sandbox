@@ -804,7 +804,7 @@ void loop()
           dataFile.print(err_yaw_f*1000, 0); dataFile.print(";");
   
           dataFile.print(slope_des_f_delay*10,0); dataFile.print(";");
-          dataFile.print(slope_aero_f*10,0); dataFile.print(";");
+          dataFile.print(distance_des*1000,0); dataFile.print(";");
           dataFile.print(slope_ground_mean*10,0); dataFile.print(";");
   
           dataFile.print(regulation_state); dataFile.print(";");

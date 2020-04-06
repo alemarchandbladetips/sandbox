@@ -29,7 +29,7 @@
 #define HAUTEUR_CABRAGE 1.5
 
 float distance_des, alti_, K_traj;
-
+float longitudinal_distance, lateral_distance;
 
 /******* Servos et moteur **************/
 
@@ -151,7 +151,7 @@ float Commande_I_slope, KI_slope;
 
 // Asservissement de position
 float gps_target[2] = {0,0};
-float heading_to_target, yaw_to_target_lock, distance_to_target;
+float heading_to_target, heading_to_target_lock, yaw_to_target_lock, distance_to_target;
 uint8_t declanchement = 0;
 
 /******* debug **************/
@@ -340,9 +340,13 @@ void loop()
 
     // distance à la cible
     distance_to_target = sqrtf( (GPS_pitot._x_gps - gps_target[0])*(GPS_pitot._x_gps - gps_target[0]) + (GPS_pitot._y_gps - gps_target[1])*(GPS_pitot._y_gps - gps_target[1]));
+    
     // Cap menant à la cible
     heading_to_target = atan2f((GPS_pitot._x_gps - gps_target[0]),-(GPS_pitot._y_gps - gps_target[1]))*RAD2DEG;
     heading = atan2f(-GPS_pitot._vx_gps,GPS_pitot._vy_gps)*RAD2DEG;
+
+    longitudinal_distance = distance_to_target*cos(heading_to_target-heading_to_target_lock);
+    lateral_distance = distance_to_target*sin(heading_to_target-heading_to_target_lock);
 
 /***************** Paramètres de régulation par defaut*********************/
     
@@ -432,6 +436,7 @@ void loop()
       BNO_roll_f = BNO_roll;
       first_dive = 1;
       v_wind_mean_memory = v_wind_mean;
+      heading_to_target_lock = heading_to_target;
 
       // consignes de pitch et de vitesse
       pitch_des = 4;
@@ -813,10 +818,13 @@ void loop()
           dataFile.print(slope_des_f_delay*10,0); dataFile.print(";");
           dataFile.print(distance_des*1000,0); dataFile.print(";");
           dataFile.print(slope_ground_mean*10,0); dataFile.print(";");
-  
+
           dataFile.print(regulation_state); dataFile.print(";");
   
           dataFile.print(remote._switch_F+10*remote._switch_D+100*remote._switch_C + declanchement*1000); dataFile.print(";");
+
+          dataFile.print(longitudinal_distance*1000,0); dataFile.print(";");
+          dataFile.print(lateral_distance*1000,0); dataFile.print(";");
   
           dataFile.println(" "); // gaffe à la dernière ligne
           

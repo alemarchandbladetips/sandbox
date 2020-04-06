@@ -25,6 +25,8 @@
 #define TEMPS_BONZAI 3.0
 #define HAUTEUR_DAUPHIN2_2 16.0
 #define HAUTEUR_DAUPHIN2 20.0
+#define HAUTEUR_PALIER 7.0
+#define HAUTEUR_CABRAGE 1.5
 
 float distance_des, alti_, K_traj;
 
@@ -494,8 +496,7 @@ void loop()
       K_Roll = 4.5; KD_Roll = 0.2;
       K_Yaw = 4.0; KD_Yaw = 0.2;
       KP_Moteur = 0; KI_Moteur = 0; Offset_gaz_reg = 0.0;
-      // hauteur de cabrage final
-      hauteur_cabrage = 1.5; // en m
+
 
       // mise à 0 des commandes inutilisées et du gaz
       Commande_dauphin=0;
@@ -506,13 +507,12 @@ void loop()
       BNO_roll_f = (1-alpha_roll)*BNO_roll_f + alpha_roll*BNO_roll;
       BNO_roll = BNO_roll_f;
 
-      if(hauteur_leddar_corrigee < hauteur_cabrage && leddar._validity_flag==1 ) // phase pré-cabrage
+      if(hauteur_leddar_corrigee < HAUTEUR_CABRAGE && leddar._validity_flag==1 ) // phase pré-cabrage
       {
         arrondi_final = 1;
       }
 
-      hauteur_palier = 7;
-      if(hauteur_leddar_corrigee < hauteur_palier && leddar._validity_flag==1 ) // phase pré-cabrage
+      if(hauteur_leddar_corrigee < HAUTEUR_PALIER && leddar._validity_flag==1 ) // phase pré-cabrage
       {
         palier = 1;
       }
@@ -527,23 +527,7 @@ void loop()
         
       } else if ( palier )// phase pré-cabrage
       {
-        if(timer_mode<50000)
-        {
-          pitch_des = 0.0;
-        } else
-        {
-          if(remote._switch_F==2)
-          {
-            pitch_des = -25.0;
-          } else if(remote._switch_F==1)
-          {
-            pitch_des = -20.0;
-          } else
-          {
-            pitch_des = -15.0;
-          }
-          
-        }
+        pitch_des = 0.0;
         
         vitesse_anti_decrochage = 9.5;
         pitch_des_f = pitch_des;
@@ -599,8 +583,6 @@ void loop()
       KP_Moteur = 0.1; KI_Moteur = 0.2; Offset_gaz_reg = 0.0;
       KI_slope = 0.3;
       K_traj = 0.0;
-      // hauteur du min du dernier dauphin
-      hauteur_switch = 11.0; // en m 
 
       // mises à 0 
       Commande_I_flaps = 0;
@@ -613,7 +595,7 @@ void loop()
 //////// Asservissement de la pente pendant le dauphin
 
       // détection du leddar < 20m
-      if(hauteur_leddar_corrigee<20.0 && leddar._validity_flag==1 )
+      if(hauteur_leddar_corrigee<HAUTEUR_DAUPHIN2 && leddar._validity_flag==1 )
       {
         leddar_track = 1;
       }
@@ -654,7 +636,7 @@ void loop()
 
 //////// pré-déclanchement de l'arrondi, l'arrondi sera fait à la prochaine oscillation
 
-      if(hauteur_leddar_corrigee<hauteur_switch && leddar._validity_flag==1 )
+      if(hauteur_leddar_corrigee<HAUTEUR_BONZAI && leddar._validity_flag==1 )
       {
         arrondi_almost_ready = 1;
       }

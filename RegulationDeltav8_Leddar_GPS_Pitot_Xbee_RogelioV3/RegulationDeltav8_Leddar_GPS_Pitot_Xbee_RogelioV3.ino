@@ -26,7 +26,7 @@
 #define HAUTEUR_DAUPHIN2_2 16.0
 #define HAUTEUR_DAUPHIN2 20.0
 
-float distance_des, alti_;
+float distance_des, alti_, K_traj;
 
 
 /******* Servos et moteur **************/
@@ -191,17 +191,7 @@ void setup()
   remote.set_connection_lost_time_millis(1000);
 
     /******* Initialisation BNO **************/
-
-  for (i = 0;i<20;i++)
-  {
-    distance_des = distance_from_alti(i*5.0,6.0);
-    Serial.print(i*5.0);Serial.print(" ");
-    Serial.println(distance_des);
-    delay(10);
-  }
-
-  while(1);
-  
+    
   if ( !bno.begin() )
   {
     /* There was a problem detecting the BNO055 ... check your connections */
@@ -450,9 +440,10 @@ void loop()
 
 //////// Déclanchement de la phase dauphin
 
-      distance_des = distance_from_alti(GPS_pitot._z_gps,v_wind_mean_memory);
+      // +10 et +5 pour prendre en compte le début de la courbe
+      distance_des = distance_from_alti(GPS_pitot._z_gps+10.0,v_wind_mean_memory);
 
-      if( distance_to_target < distance_des )
+      if( distance_to_target < distance_des+5.0 )
       {
         declanchement = 1;
       }
@@ -599,7 +590,7 @@ void loop()
     {
 
       time_switch = millis();
-      timer_mode = millis() - time_switch;  // timer_mode = 0 tt le temps.
+      //timer_mode = millis() - time_switch;  // timer_mode = 0 tt le temps.
       
       // paramètres mode dauphin
       K_Pitch = 0; KD_Pitch = 0; KI_Pitch = 0;
@@ -607,6 +598,7 @@ void loop()
       K_Yaw = 4.0; KD_Yaw = 0.75; KI_yaw = 0.0;
       KP_Moteur = 0.1; KI_Moteur = 0.2; Offset_gaz_reg = 0.0;
       KI_slope = 0.3;
+      K_traj = 0.0;
       // hauteur du min du dernier dauphin
       hauteur_switch = 11.0; // en m 
 
@@ -620,30 +612,35 @@ void loop()
       
 //////// Asservissement de la pente pendant le dauphin
 
-    if (leddar._validity_flag==1 )
-    {
-      alti_ = hauteur_leddar_corrigee;
-    } else
-    {
-      alti_ = GPS_pitot._z_gps;
-    }
-    distance_des = distance_from_alti(alti_,v_wind_mean_memory);
-
       // détection du leddar < 20m
       if(hauteur_leddar_corrigee<20.0 && leddar._validity_flag==1 )
       {
         leddar_track = 1;
       }
 
+      if (leddar._validity_flag==1 && leddar_track==1)
+      {
+        alti_ = hauteur_leddar_corrigee;
+      } else
+      {
+        alti_ = GPS_pitot._z_gps;
+      }
+      distance_des = distance_from_alti(alti_,v_wind_mean_memory);
+
       // Dauphin 1 et Dauphin 2
       if(leddar_track == 1)
       {
-        slope_des = -20; 
+        slope_des = -atan2(VITESSE_DES_DAUPHIN*sin(PENTE_AERO_DAUPHIN2),VITESSE_DES_DAUPHIN*cos(PENTE_AERO_DAUPHIN2)-v_wind_mean_memory)*RAD2DEG; 
         regulation_state = 3;
       } else
       {
-        slope_des = -45-5*v_wind_mean_memory;
+        slope_des = -atan2(VITESSE_DES_DAUPHIN*sin(PENTE_AERO_DAUPHIN1),VITESSE_DES_DAUPHIN*cos(PENTE_AERO_DAUPHIN1)-v_wind_mean_memory)*RAD2DEG;
         regulation_state = 2;
+      }
+
+      if(time_switch>4000)
+      {
+        slope_des += -K_traj*(distance_des-distance_to_target);
       }
 
       slope_des_f = (1 - alpha_slope) * slope_des_f + alpha_slope * slope_des; 
@@ -651,7 +648,7 @@ void loop()
       Commande_I_slope += KI_slope * (slope_des_f_delay - slope_ground_mean) * dt_flt; 
       Commande_I_slope = constrain(Commande_I_slope, -20, 20);
       
-      pitch_des = slope_des + 12 + 5*v_wind_mean_memory + Commande_I_slope;
+      pitch_des = slope_des + 12 + Commande_I_slope;
       pitch_des = constrain(pitch_des,-50,30);
       pitch_des_f = pitch_des;
 

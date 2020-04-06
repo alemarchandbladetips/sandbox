@@ -15,6 +15,20 @@
 #include "bte_GPS_pitot.h"
 #include "bte_leddar.h"
 
+/******* constantes fonction distance/altitude **************/
+
+#define VITESSE_DES_DAUPHIN 10.0
+#define PENTE_AERO_DAUPHIN1 45.0*DEG2RAD
+#define PENTE_AERO_DAUPHIN2 20.0*DEG2RAD
+#define HAUTEUR_BONZAI 11.0
+#define LONGUEUR_BONZAI 42.0
+#define TEMPS_BONZAI 3.0
+#define HAUTEUR_DAUPHIN2_2 16.0
+#define HAUTEUR_DAUPHIN2 20.0
+
+float distance_des, alti_;
+
+
 /******* Servos et moteur **************/
 
 #define PIN_SERVO_R 2
@@ -151,7 +165,7 @@ uint32_t stability_counter;
 uint8_t stability_achieved;
 
 //autres
-uint32_t temps, temps2, dt, time_idx;
+uint32_t temps, temps2, dt, time_idx, i;
 uint32_t dt1, dt2, dt3, dt4;
 
 void setup()
@@ -177,6 +191,16 @@ void setup()
   remote.set_connection_lost_time_millis(1000);
 
     /******* Initialisation BNO **************/
+
+  for (i = 0;i<20;i++)
+  {
+    distance_des = distance_from_alti(i*5.0,6.0);
+    Serial.print(i*5.0);Serial.print(" ");
+    Serial.println(distance_des);
+    delay(10);
+  }
+
+  while(1);
   
   if ( !bno.begin() )
   {
@@ -378,6 +402,7 @@ void loop()
       yaw_des = BNO_lacet; 
       yaw_to_target_lock = BNO_lacet;
       pitch_des_f = BNO_pitch;
+      v_wind_mean_memory = v_wind_mean;
 
     }
 
@@ -425,7 +450,9 @@ void loop()
 
 //////// Déclanchement de la phase dauphin
 
-      if( (distance_to_target-1.0*v_horizontal_gps) < ((GPS_pitot._z_gps) * 1.25 + 55.0 - 0.67*(0.15*GPS_pitot._z_gps + 3)*GPS_pitot._z_gps*v_wind_mean) )
+      distance_des = distance_from_alti(GPS_pitot._z_gps,v_wind_mean_memory);
+
+      if( distance_to_target < distance_des )
       {
         declanchement = 1;
       }
@@ -588,10 +615,19 @@ void loop()
       remote._elevator = 0; // désactivation de la télécommande
 
       // Consignes constantes
-      vitesse_des = 10.0;
+      vitesse_des = VITESSE_DES_DAUPHIN;
       yaw_des = yaw_to_target_lock;
       
 //////// Asservissement de la pente pendant le dauphin
+
+    if (leddar._validity_flag==1 )
+    {
+      alti_ = hauteur_leddar_corrigee;
+    } else
+    {
+      alti_ = GPS_pitot._z_gps;
+    }
+    distance_des = distance_from_alti(alti_,v_wind_mean_memory);
 
       // détection du leddar < 20m
       if(hauteur_leddar_corrigee<20.0 && leddar._validity_flag==1 )
@@ -808,6 +844,38 @@ void loop()
     }
     Switch_C_previous = remote._switch_C;
   } // fin de boucle à 100 hz
+}
+
+float distance_from_alti(float alti, float wind_speed)
+{
+
+  float pente_dauphin1, pente_dauphin2, pente_dauphin2_1, pente_dauphin2_2;
+
+  pente_dauphin1 = atan2(VITESSE_DES_DAUPHIN*sin(PENTE_AERO_DAUPHIN1),VITESSE_DES_DAUPHIN*cos(PENTE_AERO_DAUPHIN1)-wind_speed);
+  pente_dauphin2 = atan2(VITESSE_DES_DAUPHIN*sin(PENTE_AERO_DAUPHIN2),VITESSE_DES_DAUPHIN*cos(PENTE_AERO_DAUPHIN2)-wind_speed);
+  pente_dauphin2_1 = pente_dauphin2 + 4.0/5.0*(pente_dauphin1-pente_dauphin2);
+  pente_dauphin2_2 = pente_dauphin2 + 1.0/5.0*(pente_dauphin1-pente_dauphin2);
+
+//  Serial.print(pente_dauphin1*RAD2DEG);Serial.print(" ");
+//  Serial.print(pente_dauphin2*RAD2DEG);Serial.print(" ");
+//  Serial.print(pente_dauphin2_1*RAD2DEG);Serial.print(" ");
+//  Serial.print(pente_dauphin2_2*RAD2DEG);Serial.println(" ");
+    
+  if (alti < HAUTEUR_BONZAI)
+  {
+    distance_des = (LONGUEUR_BONZAI-TEMPS_BONZAI*wind_speed)*(alti/HAUTEUR_BONZAI);
+  } else if (alti < HAUTEUR_DAUPHIN2_2)
+  {
+    distance_des = (alti-HAUTEUR_BONZAI)/tan(pente_dauphin2_2) + (LONGUEUR_BONZAI-TEMPS_BONZAI*wind_speed);
+  } else if (alti < HAUTEUR_DAUPHIN2)
+  {
+    distance_des = (alti-HAUTEUR_DAUPHIN2_2)/tan(pente_dauphin2_1) + (HAUTEUR_DAUPHIN2_2-HAUTEUR_BONZAI)/tan(pente_dauphin2_2) + (LONGUEUR_BONZAI-TEMPS_BONZAI*wind_speed);
+  } else
+  {
+    distance_des = (alti-HAUTEUR_DAUPHIN2)/tan(pente_dauphin1) + (HAUTEUR_DAUPHIN2-HAUTEUR_DAUPHIN2_2)/tan(pente_dauphin2_1) + (HAUTEUR_DAUPHIN2_2-HAUTEUR_BONZAI)/tan(pente_dauphin2_2) + (LONGUEUR_BONZAI-TEMPS_BONZAI*wind_speed);
+  }
+
+  return distance_des;
 }
 
 void checkExist(void)

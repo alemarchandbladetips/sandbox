@@ -116,12 +116,12 @@ uint8_t regulation_state;
 // params
 float K_Pitch_remote = 0.3, K_Pitch = 0, KD_Pitch = 0, KI_Pitch = 0;
 float K_Roll_remote = -0.3, K_Roll = 0, KD_Roll = 0.2;
-float K_Yaw = 0, KD_Yaw = 0, KI_yaw = 0;
+float K_Yaw = 0, KD_Yaw = 0, KI_Yaw = 0;
 float KP_Moteur = 0, KI_Moteur = 0, Offset_gaz_reg = 0;
 float alpha_stab = 0.025; // filtrage au passage en mode stabilisé
 
 //consignes
-float pitch_des = 0, pitch_des_f = 0, yaw_des = 0, vitesse_des = 10;
+float pitch_des = 0, pitch_des_f = 0, yaw_des = 0, vitesse_des = 10, roll_des = 0.0;
 
 // states
 float Commande_Roll;
@@ -379,6 +379,7 @@ void loop()
       Commande_dauphin = 0.0;
       Commande_I_flaps = 0;
       Commande_I_Moteur = 0;
+      Commande_I_yaw = 0;
       leddar_track = 0;
       stability_achieved = 0;
       slope_des_f = slope_aero_f;
@@ -418,7 +419,7 @@ void loop()
       // paramètres mode stabilisé
       K_Pitch = 1.0; KD_Pitch = 0.4; KI_Pitch = 15.0;
       K_Roll = 2.5; KD_Roll = 0.2;
-      K_Yaw = 3.6; KD_Yaw = 0.75;
+      K_Yaw = 1.44; KD_Yaw = 0.3, KI_Yaw = 0.0;
       KP_Moteur = 0.1; KI_Moteur = 0.2; Offset_gaz_reg = 0.0;
 
       // mise à 0 des commandes inutilisées
@@ -474,6 +475,8 @@ void loop()
 
       err_yaw_f = bte_ang_180(heading - yaw_des);
       err_yaw_f = constrain(err_yaw_f,-30,30);
+      Commande_I_yaw += KI_Yaw * err_yaw_f * dt_flt / 360.0;
+      Commande_I_yaw = constrain(Commande_I_yaw, -15,15);
     
     }
 
@@ -494,7 +497,7 @@ void loop()
       // paramètres mode stabilisé
       K_Pitch = 1; KD_Pitch = 0.4; KI_Pitch = 15;
       K_Roll = 4.5; KD_Roll = 0.2;
-      K_Yaw = 4.0; KD_Yaw = 0.2;
+      K_Yaw = 0.9; KD_Yaw = 0.05; KI_Yaw = 0.0;
       KP_Moteur = 0; KI_Moteur = 0; Offset_gaz_reg = 0.0;
 
 
@@ -555,7 +558,10 @@ void loop()
       }
 
       pitch_des_f = (1 - alpha_stab) * pitch_des_f + alpha_stab * pitch_des; //
+
       err_yaw_f = bte_ang_180(BNO_lacet - yaw_des);
+      Commande_I_yaw += KI_Yaw * err_yaw_f * dt_flt / 360.0;
+      Commande_I_yaw = constrain(Commande_I_yaw, -15,15);
 
       // Intégrateur des flaps pour régulation du pitch
       Commande_I_flaps += -KI_Pitch * (BNO_pitch - pitch_des_f) * dt_flt / 360.0; // += addition de la valeur précédente
@@ -579,7 +585,7 @@ void loop()
       // paramètres mode dauphin
       K_Pitch = 0; KD_Pitch = 0; KI_Pitch = 0;
       K_Roll = 4.5; KD_Roll = 0.2;
-      K_Yaw = 4.0; KD_Yaw = 0.75; KI_yaw = 0.0;
+      K_Yaw = 0.9; KD_Yaw = 0.17; KI_Yaw = 0.0;
       KP_Moteur = 0.1; KI_Moteur = 0.2; Offset_gaz_reg = 0.0;
       KI_slope = 0.3;
       K_traj = 0.0;
@@ -689,8 +695,8 @@ void loop()
 //////// Calcul de l'erreure pour la régulation du yaw
 
       err_yaw_f = bte_ang_180(BNO_lacet - yaw_des);
-      Commande_I_yaw += KI_yaw * err_yaw_f * dt_flt / 360.0;
-      Commande_I_yaw = constrain(Commande_I_yaw, -0.1, 0.1);
+      Commande_I_yaw += KI_Yaw * err_yaw_f * dt_flt / 360.0;
+      Commande_I_yaw = constrain(Commande_I_yaw, -15,15);
 
 //////// Filtrage du roll pour la régulation
 
@@ -705,14 +711,15 @@ void loop()
 
     
 /*****************Commande générale avec les paramètres définis pour les différents modes *********************/
+
+    roll_des = - K_Yaw * err_yaw_f / 360.0
+               - KD_Yaw * BNO_wz  / 360.0
+               - Commande_I_yaw;
     
     // Commande correspondant au roll, télécommande + P roll + D roll + P yaw + D yaw
     Commande_Roll = K_Roll_remote * remote._aileron 
-                    + K_Roll * BNO_roll / 360.0 
-                    + KD_Roll * BNO_wx  / 360.0
-                    + K_Yaw * err_yaw_f / 360.0
-                    + KD_Yaw * BNO_wz  / 360.0
-                    + Commande_I_yaw 
+                    + K_Roll * (BNO_roll-roll_des) / 360.0 
+                    + KD_Roll * BNO_wx  / 360.0 
                     + aileron_trim; 
                     
     Commande_Roll = constrain(Commande_Roll,-0.2,0.2);

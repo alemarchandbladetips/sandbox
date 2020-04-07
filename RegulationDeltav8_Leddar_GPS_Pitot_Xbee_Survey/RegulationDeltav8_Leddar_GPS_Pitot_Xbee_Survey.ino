@@ -491,9 +491,7 @@ void loop()
       Commande_I_yaw = 0;
       BNO_roll_f = BNO_roll;
 
-      // consignes de pitch et de vitesse
-      Commande_I_vz += -KI_vz * GPS_pitot._vz_gps * dt_flt;
-      pitch_des = -KP_vz*GPS_pitot._vz_gps + Commande_I_vz + offset_pitch_vz;
+      
       vitesse_des = 10.0;
       
       switch (survey_state)
@@ -608,11 +606,13 @@ void loop()
       err_yaw_f = bte_ang_180(heading - yaw_des);
       err_yaw_f = constrain(err_yaw_f,-30,30);
 
-      
-      pitch_des_f = (1 - alpha_stab) * pitch_des_f + alpha_stab * pitch_des; //
+      // consignes de pitch et de vitesse
+      Commande_I_vz += -KI_vz * GPS_pitot._vz_gps * dt_flt;
+      Commande_I_vz = constrain(Commande_I_vz,-10,10);
+      pitch_des = -KP_vz*GPS_pitot._vz_gps + Commande_I_vz + offset_pitch_vz;
 
       // Intégrateur des flaps pour régulation du pitch
-      Commande_I_flaps += -KI_Pitch * (BNO_pitch - pitch_des_f) * dt_flt / 360.0; // += addition de la valeur précédente
+      Commande_I_flaps += -KI_Pitch * (BNO_pitch - pitch_des) * dt_flt / 360.0; // += addition de la valeur précédente
       Commande_I_flaps = constrain(Commande_I_flaps, -0.4, 0.4);
       
     }

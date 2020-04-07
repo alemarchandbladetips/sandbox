@@ -522,7 +522,7 @@ void loop()
           K_Yaw = 0; KD_Yaw = 0;
           if (bte_ang_360(heading-heading_start)<90)
           {
-            // target à 300m dos au vent + 20m sur la droite pour pouvoir faire le virage
+            // target à 250m dos au vent + 20m sur la droite pour pouvoir faire le virage
             gps_target[0] = 250.0*cosf(heading_wind*PI/180.0)+20.0*cosf((heading_wind+90.0)*PI/180.0);
             gps_target[1] = 250.0*sinf(heading_wind*PI/180.0)+20.0*sinf((heading_wind+90.0)*PI/180.0);
             survey_state = 3;

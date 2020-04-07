@@ -624,11 +624,11 @@ void loop()
       // Dauphin 1 et Dauphin 2
       if(leddar_track == 1)
       {
-        slope_des = -atan2(VITESSE_DES_DAUPHIN*sin(PENTE_AERO_DAUPHIN2),VITESSE_DES_DAUPHIN*cos(PENTE_AERO_DAUPHIN2)-v_wind_mean_memory)*RAD2DEG; 
+        slope_des = -penteGPS_from_aero(PENTE_AERO_DAUPHIN2,VITESSE_DES_DAUPHIN,v_wind_mean_memory);
         regulation_state = 3;
       } else
       {
-        slope_des = -atan2(VITESSE_DES_DAUPHIN*sin(PENTE_AERO_DAUPHIN1),VITESSE_DES_DAUPHIN*cos(PENTE_AERO_DAUPHIN1)-v_wind_mean_memory)*RAD2DEG;
+        slope_des = -penteGPS_from_aero(PENTE_AERO_DAUPHIN1,VITESSE_DES_DAUPHIN,v_wind_mean_memory);
         regulation_state = 2;
       }
 
@@ -841,13 +841,18 @@ void loop()
   } // fin de boucle à 100 hz
 }
 
+float penteGPS_from_aero(float pente_aero, float vitesse_aero, float vitesse_vent)
+{
+  return atan2(vitesse_aero*sin(pente_aero),vitesse_aero*cos(pente_aero)-vitesse_vent);
+}
+
 float distance_from_alti(float alti, float wind_speed)
 {
 
   float pente_dauphin1, pente_dauphin2, pente_dauphin2_1, pente_dauphin2_2;
 
-  pente_dauphin1 = atan2(VITESSE_DES_DAUPHIN*sin(PENTE_AERO_DAUPHIN1),VITESSE_DES_DAUPHIN*cos(PENTE_AERO_DAUPHIN1)-wind_speed);
-  pente_dauphin2 = atan2(VITESSE_DES_DAUPHIN*sin(PENTE_AERO_DAUPHIN2),VITESSE_DES_DAUPHIN*cos(PENTE_AERO_DAUPHIN2)-wind_speed);
+  pente_dauphin1 = penteGPS_from_aero(PENTE_AERO_DAUPHIN1,VITESSE_DES_DAUPHIN,wind_speed);
+  pente_dauphin2 = penteGPS_from_aero(PENTE_AERO_DAUPHIN2,VITESSE_DES_DAUPHIN,wind_speed);
   pente_dauphin2_1 = pente_dauphin2 + 4.0/5.0*(pente_dauphin1-pente_dauphin2);
   pente_dauphin2_2 = pente_dauphin2 + 1.0/5.0*(pente_dauphin1-pente_dauphin2);
     

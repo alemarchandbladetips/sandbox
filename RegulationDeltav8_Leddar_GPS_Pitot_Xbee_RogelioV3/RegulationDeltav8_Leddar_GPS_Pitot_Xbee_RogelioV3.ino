@@ -65,7 +65,7 @@ float v_pitot_mean;
 float v_pitot_buffer[100];
 float vh_pitot_mean;
 float vh_pitot_buffer[100];
-float v_wind_mean, v_wind_mean_memory;
+float v_wind, v_wind_mean, v_wind_mean_memory;
 float v_wind_buffer[100];
 const int16_t Ndata = 100;
 uint8_t first_GPS_data = 0;
@@ -319,7 +319,8 @@ void loop()
     bte_Mean(vh_pitot_buffer, &vh_pitot_mean, Ndata, Ndata-1);
 
     // estimation de la vitesse du vent dans l'axe de l'attérissage. utilisé a la fin du mode stabilisé pour choisir la pente de descente et adapter le point de déclanchement du dauphin
-    bte_HistoriqueVal(GPS_pitot._speed_pitot - sqrtf(GPS_pitot._vx_gps*GPS_pitot._vx_gps + GPS_pitot._vy_gps*GPS_pitot._vy_gps +GPS_pitot._vz_gps*GPS_pitot._vz_gps), v_wind_buffer, Ndata);
+    v_wind = v_pitot_buffer[Ndata-31] - sqrtf(GPS_pitot._vx_gps*GPS_pitot._vx_gps + GPS_pitot._vy_gps*GPS_pitot._vy_gps +GPS_pitot._vz_gps*GPS_pitot._vz_gps);
+    bte_HistoriqueVal(v_wind, v_wind_buffer, Ndata);
     bte_Mean(v_wind_buffer, &v_wind_mean, Ndata, Ndata-1);
 
     // calcul de la pente aéro
@@ -633,7 +634,7 @@ void loop()
 
       if(time_switch>4000)
       {
-        slope_des += -K_traj*(distance_des-distance_to_target);
+        slope_des += -K_traj*(distance_des-longitudinal_distance);
       }
 
       slope_des_f = (1 - alpha_slope) * slope_des_f + alpha_slope * slope_des; 
@@ -849,11 +850,6 @@ float distance_from_alti(float alti, float wind_speed)
   pente_dauphin2 = atan2(VITESSE_DES_DAUPHIN*sin(PENTE_AERO_DAUPHIN2),VITESSE_DES_DAUPHIN*cos(PENTE_AERO_DAUPHIN2)-wind_speed);
   pente_dauphin2_1 = pente_dauphin2 + 4.0/5.0*(pente_dauphin1-pente_dauphin2);
   pente_dauphin2_2 = pente_dauphin2 + 1.0/5.0*(pente_dauphin1-pente_dauphin2);
-
-//  Serial.print(pente_dauphin1*RAD2DEG);Serial.print(" ");
-//  Serial.print(pente_dauphin2*RAD2DEG);Serial.print(" ");
-//  Serial.print(pente_dauphin2_1*RAD2DEG);Serial.print(" ");
-//  Serial.print(pente_dauphin2_2*RAD2DEG);Serial.println(" ");
     
   if (alti < HAUTEUR_BONZAI)
   {

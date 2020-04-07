@@ -312,7 +312,7 @@ void loop()
     bte_Mean(vh_pitot_buffer, &vh_pitot_mean, Ndata, Ndata-1);
 
     // estimation de la vitesse du vent dans l'axe de l'attérissage. utilisé a la fin du mode stabilisé pour choisir la pente de descente et adapter le point de déclanchement du dauphin
-    v_wind = vh_pitot_mean - sqrtf(GPS_pitot._vx_gps*GPS_pitot._vx_gps + GPS_pitot._vy_gps*GPS_pitot._vy_gps +GPS_pitot._vz_gps*GPS_pitot._vz_gps);
+    v_wind = v_pitot_buffer[Ndata-31] - sqrtf(GPS_pitot._vx_gps*GPS_pitot._vx_gps + GPS_pitot._vy_gps*GPS_pitot._vy_gps +GPS_pitot._vz_gps*GPS_pitot._vz_gps);
     bte_HistoriqueVal(v_wind, v_wind_buffer, Ndata);
     bte_Mean(v_wind_buffer, &v_wind_mean, Ndata, Ndata-1);
 

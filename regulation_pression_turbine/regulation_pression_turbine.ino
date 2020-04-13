@@ -19,13 +19,14 @@ float d_pression, d_pression_f, pression, pression_prev;
 
 uint32_t pwm_servo;
 Servo my_servo;
-uint32_t pwm_0 = 1100;
-const uint32_t max_servo = 1300, min_servo = 1000;
-const int pin_servo = 16;
+
+uint32_t pwm_0 = 1040;
+const uint32_t max_servo = 2000, min_servo = 1000;
+const int pin_servo = 14;
 
 float p_0 = 991.0;
 
-float step_p = 4.0;
+float step_p = 2.0;
 float step_p_close = 20.0;
 
 uint32_t temps_us, dt_us, counter, i;
@@ -72,9 +73,13 @@ void setup() {
   pression_prev = bmp.pressure/100.0;
   p_0 = bmp.pressure/100.0;
 
-  Kp = 35.0;
-  Ki = 25.0;
-  Kd = 2.5;
+//  Kp = 35.0;
+//  Ki = 25.0;
+//  Kd = 2.5;
+
+  Kp = 40.0;
+  Ki = 300;
+  Kd = 50;
 
   pression_des = p_0;
   //Commande_I = 50/Ki;
@@ -101,11 +106,13 @@ void loop() {
     d_pression_f = (1-alpha_d)*d_pression_f + alpha_d*d_pression;
     
 
-    if(counter<600)
+    pression_des = p_0 + step_p;
+
+    if(counter<400)
     {
       pression_des = p_0;
       pwm_servo = min_servo;
-    } else if (counter == 600)
+    } else if (counter == 400)
     {
       p_0 = pression;
     } else if(counter<800)
@@ -113,31 +120,29 @@ void loop() {
       pression_des = p_0 + step_p;
       Commande_I += (pression_des-pression)*DT_S;
   
-      Commande_I = constrain(Commande_I,0,300/Ki);
+      Commande_I = constrain(Commande_I,0,1000/Ki);
   
       pwm_servo = (uint32_t)(Kp*(pression_des-pression) 
                             + Ki * Commande_I
                             + (float)pwm_0 );
     } else
     {
-      Commande_I = 0;
-      counter = 0;  
+      //Commande_I = 0;
+      step_p += 2.0;
+      counter = 401;  
     }
 
-   
-
-   
-
-    //pwm_servo = constrain(pwm_servo,min_servo,max_servo);
+    pwm_servo = constrain(pwm_servo,min_servo,max_servo);
     my_servo.writeMicroseconds(pwm_servo);
+    //my_servo.writeMicroseconds(pwm_0);
   
     pression_prev = pression;
 
     //Serial.print(Kp*(pression_des-pression));Serial.print(" ");
     //Serial.print(Ki*Commande_I);Serial.print(" ");
-    //Serial.print((pwm_servo));Serial.print(" ");
-    Serial.print(pression_des);Serial.print(" ");
-    Serial.print(pression);Serial.print(" ");
+    Serial.print(((float)pwm_servo-(float)pwm_0)/100.0);Serial.print(" ");
+    Serial.print(pression_des-p_0);Serial.print(" ");
+    Serial.print(pression-p_0);Serial.print(" ");
     //Serial.print(pwm_servo);Serial.print(" ");
 
     Serial.println(" ");

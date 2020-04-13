@@ -28,7 +28,7 @@
 #define HAUTEUR_PALIER 7.0
 #define HAUTEUR_CABRAGE 1.5
 
-float distance_des, alti_, K_traj;
+float distance_des, alti_, K_traj, K_traj_lat;
 float longitudinal_distance, lateral_distance;
 
 /******* Servos et moteur **************/
@@ -525,13 +525,14 @@ void loop()
       K_Roll = 4.5; KD_Roll = 0.2;
       K_Yaw = 0.9; KD_Yaw = 0.05; KI_Yaw = 0.0;
       KP_Moteur = 0; KI_Moteur = 0; Offset_gaz_reg = 0.0;
-
+      K_traj_lat = 0.0;
 
       // mise à 0 des commandes inutilisées et du gaz
       Commande_dauphin=0;
       flap_state = 1;
       thrust = 0.0;
       leddar_track = 0;
+      yaw_des = yaw_to_target_lock;
 
       BNO_roll_f = (1-alpha_roll)*BNO_roll_f + alpha_roll*BNO_roll;
       BNO_roll = BNO_roll_f;
@@ -587,7 +588,7 @@ void loop()
 
       pitch_des_f = (1 - alpha_stab) * pitch_des_f + alpha_stab * pitch_des; //
 
-      err_yaw_f = bte_ang_180(BNO_lacet - yaw_des);
+      err_yaw_f = bte_ang_180(BNO_lacet - yaw_des + K_traj_lat*lateral_distance);
       Commande_I_yaw += KI_Yaw * err_yaw_f * dt_flt / 360.0;
       Commande_I_yaw = constrain(Commande_I_yaw, -15,15);
 
@@ -616,7 +617,7 @@ void loop()
       K_Yaw = 0.9; KD_Yaw = 0.17; KI_Yaw = 0.0;
       KP_Moteur = 0.1; KI_Moteur = 0.2; Offset_gaz_reg = 0.0;
       KI_slope = 0.3;
-      K_traj = 0.0;
+      K_traj = 0.0, K_traj_lat = 0.0;
 
       // mises à 0 
       Commande_I_flaps = 0;
@@ -742,7 +743,7 @@ void loop()
 
 //////// Calcul de l'erreure pour la régulation du yaw
 
-      err_yaw_f = bte_ang_180(BNO_lacet - yaw_des);
+      err_yaw_f = bte_ang_180(BNO_lacet - yaw_des + K_traj_lat*lateral_distance);
       Commande_I_yaw += KI_Yaw * err_yaw_f * dt_flt / 360.0;
       Commande_I_yaw = constrain(Commande_I_yaw, -15,15);
 

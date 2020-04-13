@@ -412,7 +412,7 @@ void loop()
     
     // mode utilisé pour la phase de stabilisation avant le dauphin
 
-    else if (remote._switch_C == 1 || (remote._switch_C == 0 && declanchement == 0) ) 
+    else if (remote._switch_C == 1 || (remote._switch_C == 0))// && declanchement == 0) ) 
     { 
 
       regulation_state = 1;
@@ -426,6 +426,26 @@ void loop()
       K_Roll = 2.5; KD_Roll = 0.2;
       K_Yaw = 1.44; KD_Yaw = 0.3, KI_Yaw = 0.0;
       KP_Moteur = 0.1; KI_Moteur = 0.2; Offset_gaz_reg = 0.0;
+
+      if(remote._switch_F == 0)
+      {
+        KI_Yaw = 0.1;
+      } else if(remote._switch_F == 1)
+      {
+        KI_Yaw = 0.2;
+      } else
+      {
+        if(remote._switch_D == 0)
+        {
+          KI_Yaw = 0.4;
+        } else if(remote._switch_D == 1)
+        {
+          KI_Yaw = 0.8;
+        } else
+        {
+          KI_Yaw = 1.6;
+        }
+      }
 
       // mise à 0 des commandes inutilisées
       Commande_dauphin = 0;
@@ -536,6 +556,8 @@ void loop()
         
       } else if ( palier )// phase pré-cabrage
       {
+        pitch_des = -atan2f(hauteur_leddar_corrigee,longitudinal_distance)*RAD2DEG-10;
+        pitch_des = constrain(pitch_des,-30,0);
         pitch_des = 0.0;
         
         vitesse_anti_decrochage = 9.5;
@@ -603,6 +625,26 @@ void loop()
       // Consignes constantes
       vitesse_des = VITESSE_DES_DAUPHIN;
       yaw_des = yaw_to_target_lock;
+
+//      if(remote._switch_F == 0)
+//      {
+//        K_traj = 0.5;
+//      } else if(remote._switch_F == 1)
+//      {
+//        K_traj = 1;
+//      } else
+//      {
+//        if(remote._switch_D == 0)
+//        {
+//          K_traj = 1.5;
+//        } else if(remote._switch_D == 1)
+//        {
+//          K_traj = 2;
+//        } else
+//        {
+//          K_traj = 2.5;
+//        }
+//      }
       
 //////// Asservissement de la pente pendant le dauphin
 

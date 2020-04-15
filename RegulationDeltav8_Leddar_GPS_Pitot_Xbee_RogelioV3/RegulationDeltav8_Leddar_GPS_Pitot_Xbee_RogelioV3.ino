@@ -18,7 +18,7 @@
 /******* constantes fonction distance/altitude **************/
 
 #define VITESSE_DES_DAUPHIN 10.0
-#define PENTE_AERO_DAUPHIN1 45.0*DEG2RAD
+#define PENTE_AERO_DAUPHIN1 35.0*DEG2RAD
 #define PENTE_AERO_DAUPHIN2 20.0*DEG2RAD
 #define HAUTEUR_BONZAI 11.0
 #define LONGUEUR_BONZAI 42.0
@@ -30,6 +30,7 @@
 
 float distance_des, alti_, K_traj, K_traj_lat;
 float longitudinal_distance, lateral_distance;
+float alti_offset = 0;
 
 /******* Servos et moteur **************/
 
@@ -309,7 +310,7 @@ void loop()
 
 
 /***************** Estimation des angles de descente, vitesse pitot filtrée...  *********************/
-
+    Serial.println(GPS_pitot._speed_pitot);
     // filtrage moyen de la vitesse pitot sur 1s, utilisé pour la régulation de vitesse en mode dauphin
     bte_HistoriqueVal(GPS_pitot._speed_pitot, v_pitot_buffer, Ndata);
     bte_Mean(v_pitot_buffer, &v_pitot_mean, Ndata, Ndata-1);
@@ -390,6 +391,7 @@ void loop()
       slope_des_f = slope_aero_f;
       arrondi_final = 0;
       palier = 0;
+      alti_offset = 0;
 
       // mise à 0 des flags utilisées pour le dauphin
       arrondi_ready = 0;
@@ -427,26 +429,6 @@ void loop()
       K_Yaw = 1.44; KD_Yaw = 0.3, KI_Yaw = 0.5;
       KP_Moteur = 0.1; KI_Moteur = 0.2; Offset_gaz_reg = 0.0;
 
-//      if(remote._switch_F == 0)
-//      {
-//        KI_Yaw = 0.1;
-//      } else if(remote._switch_F == 1)
-//      {
-//        KI_Yaw = 0.2;
-//      } else
-//      {
-//        if(remote._switch_D == 0)
-//        {
-//          KI_Yaw = 0.4;
-//        } else if(remote._switch_D == 1)
-//        {
-//          KI_Yaw = 0.8;
-//        } else
-//        {
-//          KI_Yaw = 1.6;
-//        }
-//      }
-
       // mise à 0 des commandes inutilisées
       Commande_dauphin = 0;
       Commande_I_slope = 0;
@@ -472,7 +454,7 @@ void loop()
       // +10 et +5 pour prendre en compte le début de la courbe
       distance_des = distance_from_alti(GPS_pitot._z_gps+10.0,v_wind_mean_memory);
 
-      if( distance_to_target < distance_des+5.0 )
+      if( distance_to_target < distance_des+5.0+10.0 )
       {
         declanchement = 1;
       }
@@ -523,16 +505,16 @@ void loop()
       // paramètres mode stabilisé
       K_Pitch = 1; KD_Pitch = 0.4; KI_Pitch = 15;
       K_Roll = 2.5; KD_Roll = 0.2;
-      K_Yaw = 0.9; KD_Yaw = 0.05; KI_Yaw = 0.0;
+      K_Yaw = 0.9; KD_Yaw = 0.05; KI_Yaw = 0.3;
       KP_Moteur = 0; KI_Moteur = 0; Offset_gaz_reg = 0.0;
-      K_traj_lat = 0.0;
+      K_traj_lat = 2.0;
 
       // mise à 0 des commandes inutilisées et du gaz
       Commande_dauphin=0;
       flap_state = 1;
       thrust = 0.0;
       leddar_track = 0;
-      yaw_des = yaw_to_target_lock;
+      yaw_des = yaw_to_target_lock + K_traj_lat*lateral_distance;
 
       BNO_roll_f = (1-alpha_roll)*BNO_roll_f + alpha_roll*BNO_roll;
       BNO_roll = BNO_roll_f;
@@ -557,9 +539,14 @@ void loop()
         
       } else if ( palier )// phase pré-cabrage
       {
-        pitch_des = -atan2f(hauteur_leddar_corrigee,longitudinal_distance)*RAD2DEG-10;
-        pitch_des = constrain(pitch_des,-30,0);
-        pitch_des = 0.0;
+
+        
+      } else
+      {
+        
+        pitch_des = -atan2f(hauteur_leddar_corrigee,longitudinal_distance)*RAD2DEG;
+        pitch_des = constrain(pitch_des,-25,0);
+        //pitch_des = 0.0;
         
         vitesse_anti_decrochage = 9.5;
         pitch_des_f = pitch_des;
@@ -571,24 +558,11 @@ void loop()
           thrust = thrust_anti_decrochage;
         }
         
-      } else
-      {
-        
-        vitesse_anti_decrochage = 10.0;
-        pitch_des = -15.0;
-        thrust_anti_decrochage = 0.45;
-
-        if(GPS_pitot._speed_pitot < vitesse_anti_decrochage)
-        {
-          thrust = thrust_anti_decrochage;
-        }
-        
-        pitch_des_f = pitch_des;
       }
 
       pitch_des_f = (1 - alpha_stab) * pitch_des_f + alpha_stab * pitch_des; //
 
-      err_yaw_f = bte_ang_180(BNO_lacet - yaw_des + K_traj_lat*lateral_distance);
+      err_yaw_f = bte_ang_180(BNO_lacet - yaw_des);
       Commande_I_yaw += KI_Yaw * err_yaw_f * dt_flt / 360.0;
       Commande_I_yaw = constrain(Commande_I_yaw, -15,15);
 
@@ -608,16 +582,16 @@ void loop()
     else 
     {
 
-      time_switch = millis();
-      //timer_mode = millis() - time_switch;  // timer_mode = 0 tt le temps.
+      //time_switch = millis();
+      timer_mode = millis() - time_switch;  // timer_mode = 0 tt le temps.
       
       // paramètres mode dauphin
       K_Pitch = 0; KD_Pitch = 0; KI_Pitch = 0;
       K_Roll = 2.5; KD_Roll = 0.2;
-      K_Yaw = 0.9; KD_Yaw = 0.17; KI_Yaw = 0.0;
+      K_Yaw = 0.9; KD_Yaw = 0.17; KI_Yaw = 0.3;
       KP_Moteur = 0.1; KI_Moteur = 0.2; Offset_gaz_reg = 0.0;
       KI_slope = 0.3;
-      K_traj = 0.0, K_traj_lat = 0.0;
+      K_traj = 0.0, K_traj_lat = 2.0;
 
       // mises à 0 
       Commande_I_flaps = 0;
@@ -625,27 +599,8 @@ void loop()
 
       // Consignes constantes
       vitesse_des = VITESSE_DES_DAUPHIN;
-      yaw_des = yaw_to_target_lock;
+      yaw_des = yaw_to_target_lock + K_traj_lat*lateral_distance;
 
-//      if(remote._switch_F == 0)
-//      {
-//        K_traj = 0.5;
-//      } else if(remote._switch_F == 1)
-//      {
-//        K_traj = 1;
-//      } else
-//      {
-//        if(remote._switch_D == 0)
-//        {
-//          K_traj = 1.5;
-//        } else if(remote._switch_D == 1)
-//        {
-//          K_traj = 2;
-//        } else
-//        {
-//          K_traj = 2.5;
-//        }
-//      }
       
 //////// Asservissement de la pente pendant le dauphin
 
@@ -653,6 +608,7 @@ void loop()
       if(hauteur_leddar_corrigee<HAUTEUR_DAUPHIN2 && leddar._validity_flag==1 )
       {
         leddar_track = 1;
+        alti_offset = hauteur_leddar_corrigee - GPS_pitot._z_gps;
       }
 
       if (leddar._validity_flag==1 && leddar_track==1)
@@ -660,7 +616,7 @@ void loop()
         alti_ = hauteur_leddar_corrigee;
       } else
       {
-        alti_ = GPS_pitot._z_gps;
+        alti_ = GPS_pitot._z_gps + alti_offset;
       }
       distance_des = distance_from_alti(alti_,v_wind_mean_memory);
 
@@ -669,10 +625,12 @@ void loop()
       {
         slope_des = -penteGPS_from_aero(PENTE_AERO_DAUPHIN2,VITESSE_DES_DAUPHIN,v_wind_mean_memory)*RAD2DEG;
         regulation_state = 3;
+        K_traj = 1;
       } else
       {
         slope_des = -penteGPS_from_aero(PENTE_AERO_DAUPHIN1,VITESSE_DES_DAUPHIN,v_wind_mean_memory)*RAD2DEG;
         regulation_state = 2;
+        K_traj = 2.5;
       }
 
       if(time_switch>4000)
@@ -686,7 +644,7 @@ void loop()
       Commande_I_slope = constrain(Commande_I_slope, -20, 20);
       
       pitch_des = slope_des + 12 + Commande_I_slope;
-      pitch_des = constrain(pitch_des,-50,30);
+      pitch_des = constrain(pitch_des,-60,0);
       pitch_des_f = pitch_des;
 
 //////// pré-déclanchement de l'arrondi, l'arrondi sera fait à la prochaine oscillation
@@ -743,7 +701,7 @@ void loop()
 
 //////// Calcul de l'erreure pour la régulation du yaw
 
-      err_yaw_f = bte_ang_180(BNO_lacet - yaw_des + K_traj_lat*lateral_distance);
+      err_yaw_f = bte_ang_180(BNO_lacet - yaw_des);
       Commande_I_yaw += KI_Yaw * err_yaw_f * dt_flt / 360.0;
       Commande_I_yaw = constrain(Commande_I_yaw, -15,15);
 
@@ -771,18 +729,15 @@ void loop()
                     + KD_Roll * BNO_wx  / 360.0 
                     + aileron_trim; 
 
-float saturation;
+    float saturation;
 
-      if(remote._switch_F == 0)
-      {
-        saturation = 0.0;
-      } else if(remote._switch_F == 1)
-      {
-        saturation = 0.1;
-      } else
-      {
-        saturation = 0.2;
-      }
+    if(remote._switch_C!=0 || declanchement == 0)
+    {
+      saturation = 0.2;
+    } else
+    {
+      saturation = 0.1;
+    }
                     
     Commande_Roll = constrain(Commande_Roll,-saturation,saturation);
     

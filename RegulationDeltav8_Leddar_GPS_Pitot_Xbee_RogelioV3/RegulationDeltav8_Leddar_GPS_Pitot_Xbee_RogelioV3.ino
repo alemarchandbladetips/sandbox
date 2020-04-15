@@ -346,8 +346,8 @@ void loop()
     heading_to_target = atan2f((GPS_pitot._x_gps - gps_target[0]),-(GPS_pitot._y_gps - gps_target[1]))*RAD2DEG;
     heading = atan2f(-GPS_pitot._vx_gps,GPS_pitot._vy_gps)*RAD2DEG;
 
-    longitudinal_distance = distance_to_target*cos(heading_to_target-heading_to_target_lock);
-    lateral_distance = distance_to_target*sin(heading_to_target-heading_to_target_lock);
+    longitudinal_distance = distance_to_target*cos((heading_to_target-heading_to_target_lock)*DEG2RAD);
+    lateral_distance = distance_to_target*sin((heading_to_target-heading_to_target_lock)*DEG2RAD);
 
 /***************** Paramètres de régulation par defaut*********************/
     
@@ -412,7 +412,7 @@ void loop()
     
     // mode utilisé pour la phase de stabilisation avant le dauphin
 
-    else if (remote._switch_C == 1 || (remote._switch_C == 0))// && declanchement == 0) ) 
+    else if (remote._switch_C == 1 || (remote._switch_C == 0 && declanchement == 0) ) 
     { 
 
       regulation_state = 1;
@@ -424,33 +424,33 @@ void loop()
       // paramètres mode stabilisé
       K_Pitch = 1.0; KD_Pitch = 0.4; KI_Pitch = 15.0;
       K_Roll = 2.5; KD_Roll = 0.2;
-      K_Yaw = 1.44; KD_Yaw = 0.3, KI_Yaw = 0.0;
+      K_Yaw = 1.44; KD_Yaw = 0.3, KI_Yaw = 0.5;
       KP_Moteur = 0.1; KI_Moteur = 0.2; Offset_gaz_reg = 0.0;
 
-      if(remote._switch_F == 0)
-      {
-        KI_Yaw = 0.1;
-      } else if(remote._switch_F == 1)
-      {
-        KI_Yaw = 0.2;
-      } else
-      {
-        if(remote._switch_D == 0)
-        {
-          KI_Yaw = 0.4;
-        } else if(remote._switch_D == 1)
-        {
-          KI_Yaw = 0.8;
-        } else
-        {
-          KI_Yaw = 1.6;
-        }
-      }
+//      if(remote._switch_F == 0)
+//      {
+//        KI_Yaw = 0.1;
+//      } else if(remote._switch_F == 1)
+//      {
+//        KI_Yaw = 0.2;
+//      } else
+//      {
+//        if(remote._switch_D == 0)
+//        {
+//          KI_Yaw = 0.4;
+//        } else if(remote._switch_D == 1)
+//        {
+//          KI_Yaw = 0.8;
+//        } else
+//        {
+//          KI_Yaw = 1.6;
+//        }
+//      }
 
       // mise à 0 des commandes inutilisées
       Commande_dauphin = 0;
       Commande_I_slope = 0;
-      Commande_I_yaw = 0;
+      //Commande_I_yaw = 0;
       flap_state = 1;
       leddar_track = 0;
       slope_des_f = slope_aero_f;
@@ -522,7 +522,7 @@ void loop()
       
       // paramètres mode stabilisé
       K_Pitch = 1; KD_Pitch = 0.4; KI_Pitch = 15;
-      K_Roll = 4.5; KD_Roll = 0.2;
+      K_Roll = 2.5; KD_Roll = 0.2;
       K_Yaw = 0.9; KD_Yaw = 0.05; KI_Yaw = 0.0;
       KP_Moteur = 0; KI_Moteur = 0; Offset_gaz_reg = 0.0;
       K_traj_lat = 0.0;
@@ -613,7 +613,7 @@ void loop()
       
       // paramètres mode dauphin
       K_Pitch = 0; KD_Pitch = 0; KI_Pitch = 0;
-      K_Roll = 4.5; KD_Roll = 0.2;
+      K_Roll = 2.5; KD_Roll = 0.2;
       K_Yaw = 0.9; KD_Yaw = 0.17; KI_Yaw = 0.0;
       KP_Moteur = 0.1; KI_Moteur = 0.2; Offset_gaz_reg = 0.0;
       KI_slope = 0.3;
@@ -667,11 +667,11 @@ void loop()
       // Dauphin 1 et Dauphin 2
       if(leddar_track == 1)
       {
-        slope_des = -penteGPS_from_aero(PENTE_AERO_DAUPHIN2,VITESSE_DES_DAUPHIN,v_wind_mean_memory);
+        slope_des = -penteGPS_from_aero(PENTE_AERO_DAUPHIN2,VITESSE_DES_DAUPHIN,v_wind_mean_memory)*RAD2DEG;
         regulation_state = 3;
       } else
       {
-        slope_des = -penteGPS_from_aero(PENTE_AERO_DAUPHIN1,VITESSE_DES_DAUPHIN,v_wind_mean_memory);
+        slope_des = -penteGPS_from_aero(PENTE_AERO_DAUPHIN1,VITESSE_DES_DAUPHIN,v_wind_mean_memory)*RAD2DEG;
         regulation_state = 2;
       }
 
@@ -761,8 +761,8 @@ void loop()
     
 /*****************Commande générale avec les paramètres définis pour les différents modes *********************/
 
-    roll_des = - K_Yaw * err_yaw_f / 360.0
-               - KD_Yaw * BNO_wz  / 360.0
+    roll_des = - K_Yaw * err_yaw_f
+               - KD_Yaw * BNO_wz
                - Commande_I_yaw;
     
     // Commande correspondant au roll, télécommande + P roll + D roll + P yaw + D yaw
@@ -770,8 +770,21 @@ void loop()
                     + K_Roll * (BNO_roll-roll_des) / 360.0 
                     + KD_Roll * BNO_wx  / 360.0 
                     + aileron_trim; 
+
+float saturation;
+
+      if(remote._switch_F == 0)
+      {
+        saturation = 0.0;
+      } else if(remote._switch_F == 1)
+      {
+        saturation = 0.1;
+      } else
+      {
+        saturation = 0.2;
+      }
                     
-    Commande_Roll = constrain(Commande_Roll,-0.2,0.2);
+    Commande_Roll = constrain(Commande_Roll,-saturation,saturation);
     
     // Commande correspondant au pitch
     Commande_P_flaps = - K_Pitch * (BNO_pitch - pitch_des_f)  / 360.0;

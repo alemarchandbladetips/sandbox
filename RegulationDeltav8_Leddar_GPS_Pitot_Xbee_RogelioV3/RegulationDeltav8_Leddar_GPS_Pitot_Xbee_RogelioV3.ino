@@ -310,7 +310,10 @@ void loop()
 
 
 /***************** Estimation des angles de descente, vitesse pitot filtrée...  *********************/
-    Serial.println(GPS_pitot._speed_pitot);
+//    Serial.print(GPS_pitot._x_gps*100.0, 0); Serial.print("   ");
+//    Serial.print(GPS_pitot._y_gps*100.0, 0); Serial.print("   ");
+//    Serial.print(GPS_pitot._z_gps*100.0, 0); Serial.println("   ");
+    
     // filtrage moyen de la vitesse pitot sur 1s, utilisé pour la régulation de vitesse en mode dauphin
     bte_HistoriqueVal(GPS_pitot._speed_pitot, v_pitot_buffer, Ndata);
     bte_Mean(v_pitot_buffer, &v_pitot_mean, Ndata, Ndata-1);
@@ -454,7 +457,7 @@ void loop()
       // +10 et +5 pour prendre en compte le début de la courbe
       distance_des = distance_from_alti(GPS_pitot._z_gps+10.0,v_wind_mean_memory);
 
-      if( distance_to_target < distance_des+5.0+10.0 )
+      if( distance_to_target < distance_des+5.0+2.0 )
       {
         declanchement = 1;
       }
@@ -515,6 +518,7 @@ void loop()
       thrust = 0.0;
       leddar_track = 0;
       yaw_des = yaw_to_target_lock + K_traj_lat*lateral_distance;
+      distance_des = distance_from_alti(alti_,v_wind_mean_memory);
 
       BNO_roll_f = (1-alpha_roll)*BNO_roll_f + alpha_roll*BNO_roll;
       BNO_roll = BNO_roll_f;
@@ -860,7 +864,7 @@ float penteGPS_from_aero(float pente_aero, float vitesse_aero, float vitesse_ven
 float distance_from_alti(float alti, float wind_speed)
 {
 
-  float pente_dauphin1, pente_dauphin2, pente_dauphin2_1, pente_dauphin2_2;
+  float pente_dauphin1, pente_dauphin2, pente_dauphin2_1, pente_dauphin2_2,distance_des_;
 
   pente_dauphin1 = penteGPS_from_aero(PENTE_AERO_DAUPHIN1,VITESSE_DES_DAUPHIN,wind_speed);
   pente_dauphin2 = penteGPS_from_aero(PENTE_AERO_DAUPHIN2,VITESSE_DES_DAUPHIN,wind_speed);
@@ -869,19 +873,19 @@ float distance_from_alti(float alti, float wind_speed)
     
   if (alti < HAUTEUR_BONZAI)
   {
-    distance_des = (LONGUEUR_BONZAI-TEMPS_BONZAI*wind_speed)*(alti/HAUTEUR_BONZAI);
+    distance_des_ = (LONGUEUR_BONZAI-TEMPS_BONZAI*wind_speed)*(alti/HAUTEUR_BONZAI);
   } else if (alti < HAUTEUR_DAUPHIN2_2)
   {
-    distance_des = (alti-HAUTEUR_BONZAI)/tan(pente_dauphin2_2) + (LONGUEUR_BONZAI-TEMPS_BONZAI*wind_speed);
+    distance_des_ = (alti-HAUTEUR_BONZAI)/tan(pente_dauphin2_2) + (LONGUEUR_BONZAI-TEMPS_BONZAI*wind_speed);
   } else if (alti < HAUTEUR_DAUPHIN2)
   {
-    distance_des = (alti-HAUTEUR_DAUPHIN2_2)/tan(pente_dauphin2_1) + (HAUTEUR_DAUPHIN2_2-HAUTEUR_BONZAI)/tan(pente_dauphin2_2) + (LONGUEUR_BONZAI-TEMPS_BONZAI*wind_speed);
+    distance_des_ = (alti-HAUTEUR_DAUPHIN2_2)/tan(pente_dauphin2_1) + (HAUTEUR_DAUPHIN2_2-HAUTEUR_BONZAI)/tan(pente_dauphin2_2) + (LONGUEUR_BONZAI-TEMPS_BONZAI*wind_speed);
   } else
   {
-    distance_des = (alti-HAUTEUR_DAUPHIN2)/tan(pente_dauphin1) + (HAUTEUR_DAUPHIN2-HAUTEUR_DAUPHIN2_2)/tan(pente_dauphin2_1) + (HAUTEUR_DAUPHIN2_2-HAUTEUR_BONZAI)/tan(pente_dauphin2_2) + (LONGUEUR_BONZAI-TEMPS_BONZAI*wind_speed);
+    distance_des_ = (alti-HAUTEUR_DAUPHIN2)/tan(pente_dauphin1) + (HAUTEUR_DAUPHIN2-HAUTEUR_DAUPHIN2_2)/tan(pente_dauphin2_1) + (HAUTEUR_DAUPHIN2_2-HAUTEUR_BONZAI)/tan(pente_dauphin2_2) + (LONGUEUR_BONZAI-TEMPS_BONZAI*wind_speed);
   }
 
-  return distance_des;
+  return distance_des_;
 }
 
 void checkExist(void)

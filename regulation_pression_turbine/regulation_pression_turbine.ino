@@ -21,7 +21,7 @@ uint32_t pwm_servo;
 Servo my_servo;
 
 uint32_t pwm_0 = 1040;
-const uint32_t max_servo = 2000, min_servo = 1000;
+const uint32_t max_servo = 1200, min_servo = 1000;
 const int pin_servo = 14;
 
 float p_0 = 991.0;
@@ -128,7 +128,7 @@ void loop() {
     } else
     {
       //Commande_I = 0;
-      step_p += 2.0;
+      //step_p += 2.0;
       counter = 401;  
     }
 

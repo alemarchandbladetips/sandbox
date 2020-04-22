@@ -452,30 +452,30 @@ void loop()
 
       // paramètres mode stabilisé
       K_Pitch = 0.75; KD_Pitch = 0.6; KI_Pitch = 10.0;
-      K_Roll = 2.5; KD_Roll = 0.4;
-      //K_Yaw = 1.44; KD_Yaw = 0.3, KI_Yaw = 0.5;
+      K_Roll = 3.5; KD_Roll = 0.4;
+      K_Yaw = 1.44; KD_Yaw = 0.3, KI_Yaw = 0.5;
       KP_Moteur = 0.05; KI_Moteur = 0.2; Offset_gaz_reg = 0.0;
 
       if(remote._switch_F == 2)
       {
-        K_Roll = 3.5;
+        K_Yaw = 2;
       } else if (remote._switch_F == 1)
       {
-        K_Roll = 2.5;
+        K_Yaw = 1.5;
       } else
       {
-        K_Roll = 2;
+        K_Yaw = 1;
       }
 
       if(remote._switch_D == 2)
       {
-        KD_Roll = 0.6;
+        KI_Yaw = 0.75;
       } else if (remote._switch_D == 1)
       {
-        KD_Roll = 0.4;
+        KI_Yaw = 0.5;
       } else
       {
-        KD_Roll = 0.2;
+        KI_Yaw = 0.3;
       }
 
       // mise à 0 des commandes inutilisées

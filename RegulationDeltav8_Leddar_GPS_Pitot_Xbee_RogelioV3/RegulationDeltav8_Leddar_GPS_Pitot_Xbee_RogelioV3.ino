@@ -116,8 +116,8 @@ uint8_t regulation_state;
 
 //// régulation d'attitude et vitesse
 // params
-float K_Pitch_remote = 0.3, K_Pitch = 0, KD_Pitch = 0, KI_Pitch = 0;
-float K_Roll_remote = -0.3, K_Roll = 0, KD_Roll = 0.2;
+float K_Pitch_remote = 0.6, K_Pitch = 0, KD_Pitch = 0, KI_Pitch = 0;
+float K_Roll_remote = -0.4, K_Roll = 0, KD_Roll = 0.2;
 float K_Yaw = 0, KD_Yaw = 0, KI_Yaw = 0;
 float KP_Moteur = 0, KI_Moteur = 0, Offset_gaz_reg = 0;
 float alpha_stab = 0.025; // filtrage au passage en mode stabilisé
@@ -184,7 +184,7 @@ void setup()
   Servo_R.set_normalized_pwm(0);
   Servo_R.power_on();
   
-  Servo_L.set_range(850,2150,1500);
+  Servo_L.set_range(750,2050,1400);
   Servo_L.set_normalized_pwm(0);
   Servo_L.power_on();
 
@@ -307,8 +307,8 @@ void loop()
 
     // transformation en DPS
     BNO_wz = gyro_speed.z() * RAD2DEG;
-    BNO_wy = gyro_speed.y() * RAD2DEG;
-    BNO_wx = gyro_speed.x() * RAD2DEG;
+    BNO_wy = gyro_speed.x() * RAD2DEG;
+    BNO_wx = gyro_speed.y() * RAD2DEG;
 
     // lecture de l'acc linéaire (pour log)
     imu::Vector<3> linear_acc = bno.getVector(Adafruit_BNO055::VECTOR_LINEARACCEL);
@@ -326,14 +326,14 @@ void loop()
     // lecture des angles d'Euler (deg)+ application des offset 
     imu::Vector<3> eulAng = bno.getVector(Adafruit_BNO055::VECTOR_EULER);
     
-    BNO_roll = bte_ang_180(-eulAng.z() - RollOffs);
-    BNO_pitch = bte_ang_180(-eulAng.y() - PitchOffs);
+    BNO_roll = bte_ang_180(-eulAng.y() - RollOffs);
+    BNO_pitch = bte_ang_180(eulAng.z() - PitchOffs);
     BNO_lacet = bte_ang_180(-eulAng.x() - YawOffs);
 
 
 /***************** Estimation des angles de descente, vitesse pitot filtrée...  *********************/
 
-Serial.print(remote._thrust); Serial.print("   ");
+    Serial.print(GPS_pitot._speed_pitot); Serial.print("   ");
     Serial.print(BNO_roll); Serial.print("   ");
     Serial.print(BNO_pitch); Serial.print("   ");
     Serial.print(BNO_lacet); Serial.println("   ");
@@ -381,7 +381,7 @@ Serial.print(remote._thrust); Serial.print("   ");
     
     // peuvent être modifiés dans les différents modes, par défaut, juste le D sur le roll
     K_Pitch = 0; KD_Pitch = 0; KI_Pitch = 0;
-    K_Roll = 0; KD_Roll = 0.2;
+    K_Roll = 0; KD_Roll = 0.4;
     K_Yaw = 0; KD_Yaw = 0;
     KP_Moteur = 0; KP_Moteur = 0; Offset_gaz_reg = 0;
 
@@ -404,7 +404,7 @@ Serial.print(remote._thrust); Serial.print("   ");
 
       // paramètres mode manuel
       K_Pitch = 0; KD_Pitch = 0; KI_Pitch = 0;
-      K_Roll = 0; KD_Roll = 0.2;
+      K_Roll = 0; KD_Roll = 0.4;
       K_Yaw = 0; KD_Yaw = 0;
       KP_Moteur = 0; KI_Moteur = 0; Offset_gaz_reg = 0;
       
@@ -755,15 +755,16 @@ Serial.print(remote._thrust); Serial.print("   ");
                     + K_Roll * (BNO_roll-roll_des) / 360.0 
                     + KD_Roll * BNO_wx  / 360.0 
                     + aileron_trim; 
+    //Commande_Roll = -Commande_Roll;
 
     float saturation;
 
     if(remote._switch_C!=0 || declenchement == 0)
     {
-      saturation = 0.2;
+      saturation = 0.6;
     } else
     {
-      saturation = 0.1;
+      saturation = 0.2;
     }
                     
     Commande_Roll = constrain(Commande_Roll,-saturation,saturation);
@@ -777,6 +778,7 @@ Serial.print(remote._thrust); Serial.print("   ");
                       + Commande_I_flaps 
                       + Commande_D_flaps 
                       + elevation_trim; //+ Commande_P_flapping;
+    Commande_Pitch = -Commande_Pitch;
 
     
     // Construction de pwm servo a partir des commandes roll et pitch autour du zero des servo
@@ -799,11 +801,16 @@ Serial.print(remote._thrust); Serial.print("   ");
 /*************Ecriture PWMs Servo et Moteurs*****************/
 
     // Saturation des pwm normalisés.
+    
     pwm_norm_R = constrain(pwm_norm_R,-0.8,1);
     pwm_norm_L = constrain(pwm_norm_L,-1,0.8);
     
     Servo_R.set_normalized_pwm(pwm_norm_R);
     Servo_L.set_normalized_pwm(pwm_norm_L);
+//
+//    Serial.print(remote._knob*3000.0); Serial.println("   ");
+//    Servo_R.set_pwm(remote._knob*3000.0);
+//    Servo_L.set_pwm(remote._knob*3000.0);
 
     Motor_Prop.set_normalized_pwm(pwm_norm_prop);
 

@@ -56,7 +56,7 @@ uint16_t Switch_C_previous;
 
 // remplace le trim de la télécommande, exprimé en valeur de servo normalisé.
 // positif vers le haut et vers la droite
-float elevation_trim = 0.18;
+float elevation_trim = 0.15;
 float aileron_trim = 0.0;
 
 /******* GPS & pitot **************/
@@ -456,23 +456,23 @@ void loop()
       //K_Yaw = 1.44; KD_Yaw = 0.3, KI_Yaw = 0.5;
       KP_Moteur = 0.1; KI_Moteur = 0.2; Offset_gaz_reg = 0.0;
 
-      if(remote.Switch_F == 2)
-      {
-        KP_Moteur = 0.2;
-      } else if (remote.Switch_F == 1)
+      if(remote._switch_F == 2)
       {
         KP_Moteur = 0.1;
+      } else if (remote._switch_F == 1)
+      {
+        KP_Moteur = 0.075;
       } else
       {
         KP_Moteur = 0.05;
       }
 
-      if(remote.Switch_D == 2)
-      {
-        KI_Moteur = 0.4;
-      } else if (remote.Switch_D == 1)
+      if(remote._switch_D == 2)
       {
         KI_Moteur = 0.2;
+      } else if (remote._switch_D == 1)
+      {
+        KI_Moteur = 0.15;
       } else
       {
         KI_Moteur = 0.1;
@@ -492,7 +492,7 @@ void loop()
 
       // consignes de pitch et de vitesse
       pitch_des = 4;
-      vitesse_des = 10.0;
+      vitesse_des = 12.0;
       yaw_des = heading_to_target;
 
       //filtrage du yaw pour la régukation en mode dauphin

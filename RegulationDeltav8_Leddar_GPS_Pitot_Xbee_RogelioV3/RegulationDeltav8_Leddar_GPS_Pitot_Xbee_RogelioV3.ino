@@ -451,31 +451,31 @@ void loop()
       timer_mode = millis() - time_switch;  // timer_mode = 0 tt le temps.
 
       // paramètres mode stabilisé
-      //K_Pitch = 1.0; KD_Pitch = 0.4; KI_Pitch = 15.0;
+      K_Pitch = 1.0; KD_Pitch = 0.6; KI_Pitch = 15.0;
       //K_Roll = 2.5; KD_Roll = 0.2;
       //K_Yaw = 1.44; KD_Yaw = 0.3, KI_Yaw = 0.5;
-      KP_Moteur = 0.1; KI_Moteur = 0.2; Offset_gaz_reg = 0.0;
+      KP_Moteur = 0.05; KI_Moteur = 0.2; Offset_gaz_reg = 0.0;
 
       if(remote._switch_F == 2)
       {
-        KP_Moteur = 0.1;
+        K_Pitch = 1.5;
       } else if (remote._switch_F == 1)
       {
-        KP_Moteur = 0.075;
+        K_Pitch = 1.0;
       } else
       {
-        KP_Moteur = 0.05;
+        K_Pitch = 0.75;
       }
 
       if(remote._switch_D == 2)
       {
-        KI_Moteur = 0.2;
+        KI_Pitch = 20.0;
       } else if (remote._switch_D == 1)
       {
-        KI_Moteur = 0.15;
+        KI_Pitch = 15.0;
       } else
       {
-        KI_Moteur = 0.1;
+        KI_Pitch = 10.0;
       }
 
       // mise à 0 des commandes inutilisées

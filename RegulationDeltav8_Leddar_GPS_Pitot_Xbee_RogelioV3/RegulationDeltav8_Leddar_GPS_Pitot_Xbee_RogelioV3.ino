@@ -107,7 +107,7 @@ float BNO_roll, BNO_pitch, BNO_lacet;
 float BNO_linear_acc_norm;
 
 //Offsets
-float RollOffs = 0, PitchOffs = 0, YawOffs = 0; //en deg
+float RollOffs = 0, PitchOffs = 0, YawOffs = 180; //en deg
 
 /******* Variables et paramètres des régulation **************/
 
@@ -453,30 +453,8 @@ void loop()
       // paramètres mode stabilisé
       K_Pitch = 0.75; KD_Pitch = 0.6; KI_Pitch = 10.0;
       K_Roll = 3.5; KD_Roll = 0.4;
-      K_Yaw = 1.44; KD_Yaw = 0.3, KI_Yaw = 0.5;
+      K_Yaw = 2; KD_Yaw = 0.3, KI_Yaw = 0.3;
       KP_Moteur = 0.05; KI_Moteur = 0.2; Offset_gaz_reg = 0.0;
-
-      if(remote._switch_F == 2)
-      {
-        K_Yaw = 2;
-      } else if (remote._switch_F == 1)
-      {
-        K_Yaw = 1.5;
-      } else
-      {
-        K_Yaw = 1;
-      }
-
-      if(remote._switch_D == 2)
-      {
-        KI_Yaw = 0.75;
-      } else if (remote._switch_D == 1)
-      {
-        KI_Yaw = 0.5;
-      } else
-      {
-        KI_Yaw = 0.3;
-      }
 
       // mise à 0 des commandes inutilisées
       Commande_dauphin = 0;
@@ -491,7 +469,7 @@ void loop()
       heading_to_target_lock = heading_to_target;
 
       // consignes de pitch et de vitesse
-      pitch_des = 4;
+      pitch_des = 0;
       vitesse_des = 12.0;
       yaw_des = heading_to_target;
 
@@ -632,14 +610,14 @@ void loop()
 
       //time_switch = millis();
       timer_mode = millis() - time_switch;  // timer_mode = 0 tt le temps.
-      
+
       // paramètres mode dauphin
       K_Pitch = 0; KD_Pitch = 0; KI_Pitch = 0;
-      K_Roll = 2.5; KD_Roll = 0.2;
-      K_Yaw = 0.9; KD_Yaw = 0.17; KI_Yaw = 0.3;
-      KP_Moteur = 0.1; KI_Moteur = 0.2; Offset_gaz_reg = 0.0;
-      KI_slope = 0.3;
-      K_traj = 2.0, K_traj_lat = 3.0;
+      K_Roll = 2.5; KD_Roll = 0.3;
+      K_Yaw = 1; KD_Yaw = 0.15; KI_Yaw = 0.3;
+      KP_Moteur = 0.025; KI_Moteur = 0.2; Offset_gaz_reg = 0.0;
+      KI_slope = 0.0;
+      K_traj = 0.0, K_traj_lat = 0.0;
 
       // mises à 0 
       Commande_I_flaps = 0;
@@ -691,8 +669,21 @@ void loop()
 
       Commande_I_slope += KI_slope * (slope_des_f_delay - slope_ground_mean) * dt_flt; 
       Commande_I_slope = constrain(Commande_I_slope, -20, 20);
+
+
+
+      if(remote._switch_D == 2)
+      {
+        KI_Yaw = 0.75;
+      } else if (remote._switch_D == 1)
+      {
+        KI_Yaw = 0.5;
+      } else
+      {
+        KI_Yaw = 0.3;
+      }
       
-      pitch_des = slope_des + 12 + Commande_I_slope;
+      pitch_des = 30;//slope_des + 12 + Commande_I_slope;
       pitch_des = constrain(pitch_des,-60,0);
       pitch_des_f = pitch_des;
 
@@ -704,15 +695,39 @@ void loop()
       }
 
 //////// Génération du dauphin
+float offset_flaps;
+
+      if(remote._switch_F == 2)
+      {
+        flaps_amplitude = 0.6;
+      } else if (remote._switch_F == 1)
+      {
+        flaps_amplitude = 0.5;
+      } else
+      {
+        flaps_amplitude = 0.4;
+      }
+
+      if(remote._switch_D == 2)
+      {
+        offset_flaps = 0.2;
+      } else if (remote._switch_D == 1)
+      {
+        offset_flaps = 0.1;
+      } else
+      {
+        offset_flaps = 0.0;
+      }
 
       // Au premier plongeon on limite l'amplitude des flaps
       if(first_dive == 1)
       {
         flaps_amplitude = 0.3;
-      } else
-      {
-        flaps_amplitude = 0.5;
-      }
+      } 
+//      else
+//      {
+//        flaps_amplitude = 0.5;
+//      }
 
       // loie de commutation
       if (BNO_pitch > pitch_des_f)
@@ -734,7 +749,13 @@ void loop()
       }
 
       // commande dauphin.
-      Commande_dauphin = ((float)flap_state)*flaps_amplitude;
+      if(flap_state>0)
+      {
+        Commande_dauphin = ((float)flap_state)*(flaps_amplitude+offset_flaps);
+      }else
+      {
+        Commande_dauphin = ((float)flap_state)*flaps_amplitude;
+      }
 
 //////// Régulation de vitesse
       

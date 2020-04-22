@@ -56,7 +56,7 @@ uint16_t Switch_C_previous;
 
 // remplace le trim de la télécommande, exprimé en valeur de servo normalisé.
 // positif vers le haut et vers la droite
-float elevation_trim = 0.0;
+float elevation_trim = 0.18;
 float aileron_trim = 0.0;
 
 /******* GPS & pitot **************/
@@ -107,7 +107,7 @@ float BNO_roll, BNO_pitch, BNO_lacet;
 float BNO_linear_acc_norm;
 
 //Offsets
-float RollOffs = 0, PitchOffs = 0, YawOffs = -90; //en deg
+float RollOffs = 0, PitchOffs = 0, YawOffs = 0; //en deg
 
 /******* Variables et paramètres des régulation **************/
 
@@ -451,10 +451,32 @@ void loop()
       timer_mode = millis() - time_switch;  // timer_mode = 0 tt le temps.
 
       // paramètres mode stabilisé
-      K_Pitch = 1.0; KD_Pitch = 0.4; KI_Pitch = 15.0;
-      K_Roll = 2.5; KD_Roll = 0.2;
-      K_Yaw = 1.44; KD_Yaw = 0.3, KI_Yaw = 0.5;
+      //K_Pitch = 1.0; KD_Pitch = 0.4; KI_Pitch = 15.0;
+      //K_Roll = 2.5; KD_Roll = 0.2;
+      //K_Yaw = 1.44; KD_Yaw = 0.3, KI_Yaw = 0.5;
       KP_Moteur = 0.1; KI_Moteur = 0.2; Offset_gaz_reg = 0.0;
+
+      if(remote.Switch_F == 2)
+      {
+        KP_Moteur = 0.2;
+      } else if (remote.Switch_F == 1)
+      {
+        KP_Moteur = 0.1;
+      } else
+      {
+        KP_Moteur = 0.05;
+      }
+
+      if(remote.Switch_D == 2)
+      {
+        KI_Moteur = 0.4;
+      } else if (remote.Switch_D == 1)
+      {
+        KI_Moteur = 0.2;
+      } else
+      {
+        KI_Moteur = 0.1;
+      }
 
       // mise à 0 des commandes inutilisées
       Commande_dauphin = 0;

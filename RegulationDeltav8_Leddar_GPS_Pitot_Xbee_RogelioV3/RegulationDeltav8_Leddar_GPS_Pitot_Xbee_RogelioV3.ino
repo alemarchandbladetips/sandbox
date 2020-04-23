@@ -441,7 +441,7 @@ void loop()
     
     // mode utilisé pour la phase de stabilisation avant le dauphin
 
-    else if (remote._switch_C == 1 || (remote._switch_C == 0 && declenchement == 0) ) 
+    else if (remote._switch_C == 1 )//|| (remote._switch_C == 0 && declenchement == 0) ) 
     { 
 
       regulation_state = 1;
@@ -669,21 +669,8 @@ void loop()
 
       Commande_I_slope += KI_slope * (slope_des_f_delay - slope_ground_mean) * dt_flt; 
       Commande_I_slope = constrain(Commande_I_slope, -20, 20);
-
-
-
-      if(remote._switch_D == 2)
-      {
-        KI_Yaw = 0.75;
-      } else if (remote._switch_D == 1)
-      {
-        KI_Yaw = 0.5;
-      } else
-      {
-        KI_Yaw = 0.3;
-      }
       
-      pitch_des = 30;//slope_des + 12 + Commande_I_slope;
+      pitch_des = -30;//slope_des + 12 + Commande_I_slope;
       pitch_des = constrain(pitch_des,-60,0);
       pitch_des_f = pitch_des;
 
@@ -699,24 +686,13 @@ float offset_flaps;
 
       if(remote._switch_F == 2)
       {
-        flaps_amplitude = 0.6;
+        flaps_amplitude = 0.8;
       } else if (remote._switch_F == 1)
       {
-        flaps_amplitude = 0.5;
+        flaps_amplitude = 0.7;
       } else
       {
-        flaps_amplitude = 0.4;
-      }
-
-      if(remote._switch_D == 2)
-      {
-        offset_flaps = 0.2;
-      } else if (remote._switch_D == 1)
-      {
-        offset_flaps = 0.1;
-      } else
-      {
-        offset_flaps = 0.0;
+        flaps_amplitude = 0.6;
       }
 
       // Au premier plongeon on limite l'amplitude des flaps

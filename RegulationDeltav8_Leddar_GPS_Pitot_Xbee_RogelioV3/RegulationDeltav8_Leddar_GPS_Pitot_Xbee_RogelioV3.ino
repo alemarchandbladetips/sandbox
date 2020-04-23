@@ -682,17 +682,17 @@ void loop()
       }
 
 //////// Génération du dauphin
-float offset_flaps;
+float hist_width;
 
       if(remote._switch_F == 2)
       {
-        flaps_amplitude = 0.8;
+        hist_width = 15.0;
       } else if (remote._switch_F == 1)
       {
-        flaps_amplitude = 0.7;
+        hist_width = 10.0;
       } else
       {
-        flaps_amplitude = 0.6;
+        hist_width = 5.0;
       }
 
       // Au premier plongeon on limite l'amplitude des flaps
@@ -700,18 +700,19 @@ float offset_flaps;
       {
         flaps_amplitude = 0.3;
       } 
-//      else
-//      {
-//        flaps_amplitude = 0.5;
-//      }
+      else
+      {
+        flaps_amplitude = 0.7;
+      }
 
       // loie de commutation
-      if (BNO_pitch > pitch_des_f)
+      if (BNO_pitch > pitch_des_f + hist_width)
       {
         flap_state=-1;
-      } else
+      } else if (BNO_pitch < pitch_des_f)
       {
         flap_state=1;
+        first_dive = 0;
       }
 
       // condition d'arrêt du dauphin
@@ -727,7 +728,7 @@ float offset_flaps;
       // commande dauphin.
       if(flap_state>0)
       {
-        Commande_dauphin = ((float)flap_state)*(flaps_amplitude+offset_flaps);
+        Commande_dauphin = ((float)flap_state)*flaps_amplitude;
       }else
       {
         Commande_dauphin = ((float)flap_state)*flaps_amplitude;

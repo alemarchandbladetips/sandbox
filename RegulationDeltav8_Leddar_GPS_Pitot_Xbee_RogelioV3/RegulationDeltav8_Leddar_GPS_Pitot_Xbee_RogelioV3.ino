@@ -310,12 +310,15 @@ void loop()
     float produit_scalaire = (gravity_vector.x()*leddar_mounting_vector[0] + gravity_vector.y()*leddar_mounting_vector[1] + gravity_vector.z()*leddar_mounting_vector[2])/ 9.81 ;
     hauteur_leddar = leddar._hauteur *10.0;
 
-    
-
     bte_HistoriqueVal(produit_scalaire, scalar_prod_buffer, Ndata);
     bte_Mean(scalar_prod_buffer, &scalar_prod_mean, Ndata, Ndata-1);
 
     hauteur_leddar_corrigee = hauteur_leddar*scalar_prod_mean;
+    
+    if(abs(hauteur_leddar_corrigee-GPS_pitot._z_gps)>30.0)
+    {
+      leddar._validity_flag = 0;
+    }
 
     // lecture des angles d'Euler (deg)+ application des offset 
     imu::Vector<3> eulAng = bno.getVector(Adafruit_BNO055::VECTOR_EULER);
@@ -454,11 +457,6 @@ Serial.println("   ");
       K_Roll = 3.5; KD_Roll = 0.4;
       K_Yaw = 2.0; KD_Yaw = 0.3, KI_Yaw = 0.3;
       KP_Moteur = 0.05; KI_Moteur = 0.2; Offset_gaz_reg = 0.0;
-
-      if(remote._switch_F==0)
-      {
-        KP_Moteur = 0.0; KI_Moteur = 0.0; Offset_gaz_reg = 0.0;
-      }
       
       // mise à 0 des commandes inutilisées
       Commande_dauphin = 0;
@@ -473,29 +471,10 @@ Serial.println("   ");
       heading_to_target_lock = heading_to_target;
 
       // consignes de pitch et de vitesse
-//      if(remote._switch_F==0)
-//      {
-//        pitch_des = 0;
-//      } else if(remote._switch_F==1)
-//      {
-//        pitch_des = -2;
-//      } else 
-//      {
-//        if(remote._switch_D==0)
-//        {
-//          pitch_des = -4;
-//        } else if(remote._switch_D==1)
-//        {
-//          pitch_des = -6;
-//        } else 
-//        {
-//          pitch_des = -8;
-//        }
-//      }
-
-      pitch_des = 8;
       
-      vitesse_des = 12.0;
+      pitch_des = 8;
+      vitesse_des = VITESSE_DES_DAUPHIN;
+      
       yaw_des = heading_to_target;
 
       //filtrage du yaw pour la régukation en mode dauphin
@@ -559,10 +538,10 @@ Serial.println("   ");
       // paramètres mode stabilisé
       K_Pitch = 1; KD_Pitch = 0.4; KI_Pitch = 15;
       K_Roll = 2.5; KD_Roll = 0.2;
-      K_Yaw = 0.9; KD_Yaw = 0.05; KI_Yaw = 0.3;
+      K_Yaw = 1.0; KD_Yaw = 0.05; KI_Yaw = 0.3;
       KP_Moteur = 0; KI_Moteur = 0; Offset_gaz_reg = 0.0;
-      //K_traj_lat = 3.0;
-      K_traj_lat = 0.0;
+      K_traj_lat = 3.0;
+      //K_traj_lat = 0.0;
 
       // mise à 0 des commandes inutilisées et du gaz
       Commande_dauphin=0;
@@ -575,7 +554,7 @@ Serial.println("   ");
       BNO_roll_f = (1-alpha_roll)*BNO_roll_f + alpha_roll*BNO_roll;
       BNO_roll = BNO_roll_f;
 
-      if(hauteur_leddar_corrigee < HAUTEUR_CABRAGE && leddar._validity_flag==1 ) // phase pré-cabrage
+      if(hauteur_leddar_corrigee < HAUTEUR_CABRAGE)// && leddar._validity_flag==1 ) // phase pré-cabrage
       {
         arrondi_final = 1;
       }
@@ -588,7 +567,7 @@ Serial.println("   ");
       if( arrondi_final ) //cabrage final
       {
         
-        pitch_des = 80.0;
+        pitch_des = 120.0;
         pitch_des_f = pitch_des;
         regulation_state = 5;
         thrust = 0.0;
@@ -596,11 +575,11 @@ Serial.println("   ");
       } else
       {
         
-        pitch_des = -15;//-atan2f(hauteur_leddar_corrigee,longitudinal_distance)*RAD2DEG;
+        pitch_des = -atan2f(hauteur_leddar_corrigee,longitudinal_distance)*RAD2DEG;
         pitch_des = constrain(pitch_des,-25,0);
         //pitch_des = 0.0;
         
-        vitesse_anti_decrochage = 9.5;
+        vitesse_anti_decrochage = 13;
         pitch_des_f = pitch_des;
 
         thrust_anti_decrochage = 0.45;
@@ -640,15 +619,10 @@ Serial.println("   ");
       // paramètres mode dauphin
       K_Pitch = 0; KD_Pitch = 0; KI_Pitch = 0;
       K_Roll = 2.5; KD_Roll = 0.3;
-      K_Yaw = 1; KD_Yaw = 0.15; KI_Yaw = 0.3;
+      K_Yaw = 2; KD_Yaw = 0.3; KI_Yaw = 0.3;
       KP_Moteur = 0.05; KI_Moteur = 0.2; Offset_gaz_reg = 0.0;
       KI_slope = 0.3;
-      K_traj = 2.0, K_traj_lat = 0.0;
-
-      if(remote._switch_F==0)
-      {
-        KP_Moteur = 0.0; KI_Moteur = 0.0; Offset_gaz_reg = 0.0;
-      }
+      K_traj = 2.0, K_traj_lat = 3.0;
 
       // mises à 0 
       Commande_I_flaps = 0;
@@ -662,7 +636,7 @@ Serial.println("   ");
 //////// Asservissement de la pente pendant le dauphin
 
       // détection du leddar < 20m
-      if(hauteur_leddar_corrigee<HAUTEUR_DAUPHIN2 && leddar._validity_flag==1 )
+      if(hauteur_leddar_corrigee<HAUTEUR_DAUPHIN2 && leddar._validity_flag==1 && hauteur_leddar_corrigee>10.0)
       {
         leddar_track = 1;
         alti_offset = hauteur_leddar_corrigee - GPS_pitot._z_gps;
@@ -708,7 +682,7 @@ Serial.println("   ");
 
 //////// pré-déclanchement de l'arrondi, l'arrondi sera fait à la prochaine oscillation
 
-      if(0)//hauteur_leddar_corrigee<HAUTEUR_BONZAI && leddar._validity_flag==1 )
+      if(hauteur_leddar_corrigee<HAUTEUR_BONZAI && leddar._validity_flag==1 && leddar_track == 1)
       {
         arrondi_almost_ready = 1;
       }
@@ -912,7 +886,7 @@ float hist_width = 0.0;
 
           dataFile.print(longitudinal_distance*1000,0); dataFile.print(";");
           dataFile.print(lateral_distance*1000,0); dataFile.print(";");
-          dataFile.print(hauteur_leddar*100,0); dataFile.print(";");
+          dataFile.print(leddar._validity_flag); dataFile.print(";");
           
   
           dataFile.println(" "); // gaffe à la dernière ligne

@@ -69,6 +69,8 @@ float vh_pitot_mean;
 float vh_pitot_buffer[100];
 float v_wind, v_wind_mean, v_wind_mean_memory;
 float v_wind_buffer[100];
+float scalar_prod_buffer[100];
+float scalar_prod_mean;
 const int16_t Ndata = 100;
 uint8_t first_GPS_data = 0;
 float heading;
@@ -307,10 +309,13 @@ void loop()
 
     float produit_scalaire = (gravity_vector.x()*leddar_mounting_vector[0] + gravity_vector.y()*leddar_mounting_vector[1] + gravity_vector.z()*leddar_mounting_vector[2])/ 9.81 ;
     hauteur_leddar = leddar._hauteur *10.0;
-    if(produit_scalaire > 0.2)
-    {
-      hauteur_leddar_corrigee = hauteur_leddar*produit_scalaire;
-    }
+
+    
+
+    bte_HistoriqueVal(produit_scalaire, scalar_prod_buffer, Ndata);
+    bte_Mean(scalar_prod_buffer, &scalar_prod_mean, Ndata, Ndata-1);
+
+    hauteur_leddar_corrigee = hauteur_leddar*scalar_prod_mean;
 
     // lecture des angles d'Euler (deg)+ application des offset 
     imu::Vector<3> eulAng = bno.getVector(Adafruit_BNO055::VECTOR_EULER);
@@ -322,9 +327,11 @@ void loop()
 
 /***************** Estimation des angles de descente, vitesse pitot filtrée...  *********************/
 
-    Serial.print(hauteur_leddar); Serial.print("   ");
-    Serial.print(hauteur_leddar_corrigee); Serial.print("   ");
-    Serial.print(GPS_pitot._speed_pitot); Serial.print("   ");
+    Serial.print(hauteur_leddar*10); Serial.print("   ");
+    Serial.print(hauteur_leddar_corrigee*10); Serial.print("   ");
+    //Serial.print(gravity_vector.z()); Serial.print("   ");
+    Serial.print(produit_scalaire*10); Serial.print("   ");
+    //Serial.print(BNO_pitch); Serial.print("   ");
 //    Serial.print(BNO_roll); Serial.print("   ");
 //    Serial.print(BNO_pitch); Serial.print("   ");
 //    Serial.print(BNO_lacet); Serial.print("   ");
@@ -486,7 +493,7 @@ Serial.println("   ");
 //        }
 //      }
 
-      pitch_des = 2;
+      pitch_des = 8;
       
       vitesse_des = 12.0;
       yaw_des = heading_to_target;
@@ -655,7 +662,7 @@ Serial.println("   ");
 //////// Asservissement de la pente pendant le dauphin
 
       // détection du leddar < 20m
-      if(0)//hauteur_leddar_corrigee<HAUTEUR_DAUPHIN2 && leddar._validity_flag==1 )
+      if(hauteur_leddar_corrigee<HAUTEUR_DAUPHIN2 && leddar._validity_flag==1 )
       {
         leddar_track = 1;
         alti_offset = hauteur_leddar_corrigee - GPS_pitot._z_gps;
@@ -668,23 +675,21 @@ Serial.println("   ");
       {
         alti_ = GPS_pitot._z_gps + alti_offset;
       }
+      
       distance_des = distance_from_alti(alti_,alti_declenchement,distance_declenchement,v_wind_mean_memory);
 
       // Dauphin 1 et Dauphin 2
-      if(remote._switch_D == 0)//(leddar_track == 1)
+      if(leddar_track == 1)
       {
         slope_des = -penteGPS_from_aero(PENTE_AERO_DAUPHIN2,VITESSE_DES_DAUPHIN,v_wind_mean_memory)*RAD2DEG;
         regulation_state = 3;
-        //K_traj = 1.0;
-      } else if(remote._switch_D == 1)
+      } else
       {
         slope_des = -penteGPS_from_aero(PENTE_AERO_DAUPHIN1,VITESSE_DES_DAUPHIN,v_wind_mean_memory)*RAD2DEG;
         regulation_state = 2;
-      } else
-      {
-        arrondi_almost_ready = 1;
-      }
+      } 
 
+      
       if(timer_mode<3000)
       {
         K_traj = ((float)timer_mode/3000.0)*K_traj;
@@ -697,10 +702,8 @@ Serial.println("   ");
       Commande_I_slope += KI_slope * (slope_des_f_delay - slope_ground_mean) * dt_flt; 
       Commande_I_slope = constrain(Commande_I_slope, -20, 20);
 
-
-      
       pitch_des = slope_des + 18 + Commande_I_slope;
-      pitch_des = constrain(pitch_des,-60,0);
+      pitch_des = constrain(pitch_des,-40,0);
       pitch_des_f = pitch_des;
 
 //////// pré-déclanchement de l'arrondi, l'arrondi sera fait à la prochaine oscillation

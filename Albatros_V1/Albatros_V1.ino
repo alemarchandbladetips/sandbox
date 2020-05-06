@@ -27,7 +27,7 @@
 #define HAUTEUR_DAUPHIN2 20.0
 #define HAUTEUR_LEDDAR 35.0
 #define HAUTEUR_PALIER 7.0
-#define HAUTEUR_CABRAGE 5.0
+#define HAUTEUR_CABRAGE 2.0
 
 float distance_des, alti_, K_traj, K_traj_lat;
 float longitudinal_distance, lateral_distance;
@@ -36,9 +36,9 @@ float alti_declenchement,distance_declenchement;
 
 /******* Servos et moteur **************/
 
-#define PIN_SERVO_R 2
+#define PIN_SERVO_R 22
 #define PIN_SERVO_L 23
-#define PIN_MOTOR_PROP 3
+#define PIN_MOTOR_PROP 21
 
 bte_servo Servo_R = bte_servo(PIN_SERVO_R);
 bte_servo Servo_L = bte_servo(PIN_SERVO_L);
@@ -50,7 +50,7 @@ float pwm_norm_R, pwm_norm_L, pwm_norm_prop;
 
 /******* Télécommande **************/
 
-bte_controller remote = bte_controller(&Serial1);
+bte_controller remote = bte_controller(&Serial2);
 
 float knob2, thrust;
 uint16_t Switch_C_previous;
@@ -62,7 +62,7 @@ float aileron_trim = 0.0;
 
 /******* GPS & pitot **************/
 
-bte_GPS_pitot GPS_pitot = bte_GPS_pitot(&Serial3);
+bte_GPS_pitot GPS_pitot = bte_GPS_pitot(&Serial1);
 
 float v_pitot_mean;
 float v_pitot_buffer[100];
@@ -84,21 +84,10 @@ float altitude_stabilisation = 60.0;
 
 /******* leddar **************/
 
-bte_leddar leddar = bte_leddar(&Serial2);
+bte_leddar leddar = bte_leddar(&Serial3);
 
 float hauteur_leddar_corrigee, hauteur_leddar;
 const float leddar_mounting_vector[3] = {0.0,0.0,1.0};
-
-/******* Carte SD **************/
-
-File dataFile;
-bool Open = false, Closed = true;
-String dataString;
-char *filename;
-uint32_t nb_file = 0, counter = 0;
-bool  OK_SDCARD = false;
-char Num[8];
-uint32_t temps_log, dt_log, timer_mode, time_switch;
 
 /******* BN0055, orientation **************/
 
@@ -119,8 +108,8 @@ uint8_t regulation_state;
 
 //// régulation d'attitude et vitesse
 // params
-float K_Pitch_remote = 0.6, K_Pitch = 0, KD_Pitch = 0, KI_Pitch = 0;
-float K_Roll_remote = -0.4, K_Roll = 0, KD_Roll = 0.2;
+float K_Pitch_remote = 0.5, K_Pitch = 0, KD_Pitch = 0, KI_Pitch = 0;
+float K_Roll_remote = -0.5, K_Roll = 0, KD_Roll = 0.2;
 float K_Yaw = 0, KD_Yaw = 0, KI_Yaw = 0;
 float KP_Moteur = 0, KI_Moteur = 0, Offset_gaz_reg = 0;
 float alpha_stab = 0.025; // filtrage au passage en mode stabilisé
@@ -140,7 +129,6 @@ float flaps_amplitude, hyst_width, hauteur_switch, hauteur_cabrage, hauteur_pali
 float flaps_amplitude_plus, flaps_amplitude_moins;
 float alpha_dauphin = 0.015; // filtrage au passage en mode dauphin
 float thrust_anti_decrochage, vitesse_anti_decrochage;
-float pitch_commutation_prev, pitch_commutation_prev_1;
 // states
 float Commande_dauphin = 0;
 int8_t arrondi_almost_ready,arrondi_ready,flap_state_mem,flap_state = 1, leddar_track = 0, arrondi_final, palier, flag_dauphin2;
@@ -174,7 +162,7 @@ uint32_t stability_counter;
 uint8_t stability_achieved;
 
 //autres
-uint32_t temps, temps2, dt, time_idx, i;
+uint32_t temps, temps2, dt, time_idx, i, time_switch,timer_mode;
 uint32_t dt1, dt2, dt3, dt4;
 
 void setup()
@@ -217,28 +205,6 @@ void setup()
   temps = micros();
   while ( (micros() - temps) < 1000000 ) {};
   bno.setExtCrystalUse(true);
-
-  /******* Initialisation de la carte SD **************/
-  
-  OK_SDCARD = SD.begin(BUILTIN_SDCARD);
-  if ( !OK_SDCARD )
-  {
-    Serial.println("Card failed, or not present");
-    //return;
-  }
-  else
-  {
-    Serial.println("card initialized.");
-    filename = (char*) malloc( strlen("log") + strlen(Num) + strlen(".txt") + 1) ;
-    checkExist(); //vérifie existence du fichier et l'écriture commence à partir du numéro de fichier que n'existe pas
-    // Battement de l'aile gauche pour valider le démarage de la carte SD
-    Servo_L.set_normalized_pwm(0.3);
-    delay(500);
-    Servo_L.set_normalized_pwm(-0.3);
-    delay(500);
-    Servo_L.set_normalized_pwm(0);
-
-  }
 
   /*****************************************/
 
@@ -332,16 +298,20 @@ void loop()
 
 
 /***************** Estimation des angles de descente, vitesse pitot filtrée...  *********************/
-
-    Serial.print(hauteur_leddar*10); Serial.print("   ");
-    Serial.print(hauteur_leddar_corrigee*10); Serial.print("   ");
-    //Serial.print(gravity_vector.z()); Serial.print("   ");
-    Serial.print(produit_scalaire*10); Serial.print("   ");
+//
+//    Serial.print(remote._aileron ); Serial.print("   ");
+//    Serial.print(remote._elevator ); Serial.print("   ");
+//    Serial.print(remote._thrust ); Serial.print("   ");
+//    Serial.print(remote._switch_C ); Serial.print("   ");
+//    Serial.print(remote._switch_F ); Serial.print("   ");
+//    Serial.print(remote._switch_D ); Serial.print("   ");
+//    Serial.print(remote._knob ); Serial.print("   ");
+    //Serial.print(produit_scalaire*10); Serial.print("   ");
     //Serial.print(BNO_pitch); Serial.print("   ");
 //    Serial.print(BNO_roll); Serial.print("   ");
 //    Serial.print(BNO_pitch); Serial.print("   ");
 //    Serial.print(BNO_lacet); Serial.print("   ");
-Serial.println("   ");
+//Serial.println("   ");
     
     // filtrage moyen de la vitesse pitot sur 1s, utilisé pour la régulation de vitesse en mode dauphin
     bte_HistoriqueVal(GPS_pitot._speed_pitot, v_pitot_buffer, Ndata);
@@ -398,7 +368,7 @@ Serial.println("   ");
 // SWITCH C BAS ( 2  //  MODE MANUEL) //
 ////////////////////////////////////////
      
-    if (remote._switch_C == 2) 
+    if (1)//remote._switch_C == 2) 
     {/***Mode 1: normal, pas de moteur couple, KD sur le roll seulement.***/
 
       regulation_state = 0;
@@ -446,7 +416,7 @@ Serial.println("   ");
     
     // mode utilisé pour la phase de stabilisation avant le dauphin
 
-    else if (remote._switch_C == 1 || (remote._switch_C == 0 && declenchement == 0) ) 
+    else if (0)//remote._switch_C == 1 || (remote._switch_C == 0 && declenchement == 0) ) 
     { 
 
       regulation_state = 1;
@@ -459,7 +429,6 @@ Serial.println("   ");
       K_Pitch = 0.75; KD_Pitch = 0.6; KI_Pitch = 10.0;
       K_Roll = 3.5; KD_Roll = 0.4;
       K_Yaw = 2.0; KD_Yaw = 0.3, KI_Yaw = 0.3;
-      //K_Yaw = 0.0; KD_Yaw = 0.0; KI_Yaw = 0.0;
       KP_Moteur = 0.05; KI_Moteur = 0.2; Offset_gaz_reg = 0.0;
       
       // mise à 0 des commandes inutilisées
@@ -474,11 +443,10 @@ Serial.println("   ");
       v_wind_mean_memory = v_wind_mean;
       heading_to_target_lock = heading_to_target;
       flag_dauphin2 = 0;
-      pitch_commutation_prev = -25;
 
       // consignes de pitch et de vitesse
       
-      pitch_des = 4;
+      pitch_des = 8;
       vitesse_des = VITESSE_DES_DAUPHIN;
       
       yaw_des = heading_to_target;
@@ -534,7 +502,7 @@ Serial.println("   ");
 //        MODE BONZAI & ARRONDI FINAL        //
 ///////////////////////////////////////////////
 
-    else if (arrondi_ready == 1) 
+    else if (0)//arrondi_ready == 1) 
     { 
 
       timer_mode = millis() - time_switch;  // timer_mode = 0 tt le temps.
@@ -542,13 +510,12 @@ Serial.println("   ");
       regulation_state = 4;
       
       // paramètres mode stabilisé
-      K_Pitch = 0.5; KD_Pitch = 0.4; KI_Pitch = 10;
+      K_Pitch = 1; KD_Pitch = 0.4; KI_Pitch = 15;
       K_Roll = 2.5; KD_Roll = 0.2;
       K_Yaw = 1.0; KD_Yaw = 0.05; KI_Yaw = 0.3;
-      //K_Yaw = 0.0; KD_Yaw = 0.0; KI_Yaw = 0.0;
       KP_Moteur = 0; KI_Moteur = 0; Offset_gaz_reg = 0.0;
-      //K_traj_lat = 3.0;
-      K_traj_lat = 0.0;
+      K_traj_lat = 3.0;
+      //K_traj_lat = 0.0;
 
       // mise à 0 des commandes inutilisées et du gaz
       Commande_dauphin=0;
@@ -606,7 +573,7 @@ Serial.println("   ");
 
       // Intégrateur des flaps pour régulation du pitch
       Commande_I_flaps += -KI_Pitch * (BNO_pitch - pitch_des_f) * dt_flt / 360.0; // += addition de la valeur précédente
-      Commande_I_flaps = constrain(Commande_I_flaps, -0.1, 0.1);
+      Commande_I_flaps = constrain(Commande_I_flaps, -0.5, 0.5);
 
     }
 
@@ -627,7 +594,6 @@ Serial.println("   ");
       K_Pitch = 0; KD_Pitch = 0; KI_Pitch = 0;
       K_Roll = 2.5; KD_Roll = 0.3;
       K_Yaw = 2; KD_Yaw = 0.3; KI_Yaw = 0.3;
-      //K_Yaw = 0.0; KD_Yaw = 0.0; KI_Yaw = 0.0;
       KP_Moteur = 0.05; KI_Moteur = 0.2; Offset_gaz_reg = 0.0;
       KI_slope = 0.3;
       K_traj = 2.0, K_traj_lat = 3.0;
@@ -687,9 +653,9 @@ Serial.println("   ");
       slope_des_f = (1 - alpha_slope) * slope_des_f + alpha_slope * slope_des; 
 
       Commande_I_slope += KI_slope * (slope_des_f_delay - slope_ground_mean) * dt_flt; 
-      Commande_I_slope = constrain(Commande_I_slope, -25, 25);
+      Commande_I_slope = constrain(Commande_I_slope, -20, 20);
 
-      pitch_des = slope_des + 25 + Commande_I_slope;
+      pitch_des = slope_des + 18 + Commande_I_slope;
       pitch_des = constrain(pitch_des,-40,20);
       pitch_des_f = pitch_des;
 
@@ -713,18 +679,14 @@ float hist_width = 0.0;
         flaps_amplitude = 0.7;
       }
 
-      pitch_des_f = constrain(pitch_des_f, pitch_commutation_prev - 7.5, pitch_commutation_prev + 7.5);
-
       // loie de commutation
-      if (BNO_pitch > pitch_des_f + hist_width && flap_state==1)
+      if (BNO_pitch > pitch_des_f + hist_width)
       {
         flap_state=-1;
-        pitch_commutation_prev_1 = pitch_des_f;
-      } else if (BNO_pitch < pitch_des_f && flap_state==-1)
+      } else if (BNO_pitch < pitch_des_f)
       {
         flap_state=1;
         first_dive = 0;
-        pitch_commutation_prev = pitch_commutation_prev_1;
       }
 
       // condition d'arrêt du dauphin
@@ -734,7 +696,7 @@ float hist_width = 0.0;
         flap_state=0;
         pitch_des_f = BNO_pitch;
         // initialisation de l'action intégrale pour avoir une sortie de dauphin plus propre.
-        Commande_I_flaps = 0.5;
+        Commande_I_flaps = 0.0;
       }
 
       // commande dauphin.
@@ -783,10 +745,10 @@ float hist_width = 0.0;
                - Commande_I_yaw;
     
     // Commande correspondant au roll, télécommande + P roll + D roll + P yaw + D yaw
-    Commande_Roll = K_Roll_remote * remote._aileron 
+    Commande_Roll = - K_Roll_remote * remote._aileron 
                     + K_Roll * (BNO_roll-roll_des) / 360.0 
                     + KD_Roll * BNO_wx  / 360.0 
-                    + aileron_trim; 
+                    - aileron_trim; 
     //Commande_Roll = -Commande_Roll;
 
     float saturation;
@@ -800,7 +762,7 @@ float hist_width = 0.0;
     }
                     
     Commande_Roll = constrain(Commande_Roll,-saturation,saturation);
-    //Commande_I_flaps = 0.5;
+    
     // Commande correspondant au pitch
     Commande_P_flaps = - K_Pitch * (BNO_pitch - pitch_des_f)  / 360.0;
     Commande_D_flaps = - KD_Pitch * BNO_wy  / 360.0;
@@ -810,13 +772,6 @@ float hist_width = 0.0;
                       + Commande_I_flaps 
                       + Commande_D_flaps 
                       + elevation_trim; //+ Commande_P_flapping;
-
-    if(arrondi_ready)
-   {
-      Commande_Pitch = constrain(Commande_Pitch,-0.15,1.0);
-   }
-
-                      
     Commande_Pitch = -Commande_Pitch;
 
     
@@ -829,7 +784,7 @@ float hist_width = 0.0;
 /***************** Coupure moteur de sécurité *********************/
        
     // Sécurité, coupure des moteurs sur le switch ou si la carte SD n'est pas présente, ou perte de signal télécommande
-    if(  !OK_SDCARD || remote._perte_connection || remote._rudder < 0.0 || first_GPS_data==0 )
+    if( remote._perte_connection )//|| remote._rudder < 0.0 || first_GPS_data==0 )
     {
       Motor_Prop.power_off();
     } else
@@ -855,74 +810,7 @@ float hist_width = 0.0;
 
 /*********** Log sur la carte SD ***********/
  
-    if (OK_SDCARD) 
-    {
-        if (!Open) 
-        {
-          strcpy(filename, "log");
-          sprintf(Num, "%lu", nb_file);
-          strcat(filename, Num); strcat(filename, ".txt");
-          
-          dataFile = SD.open(filename, FILE_WRITE);
-          
-          nb_file++;
-          Open = true;
-          Closed = false;
-          temps2 = millis();
-       } else if (Open && !Closed) 
-       {
-          temps_log = millis();
-          dataFile.print(temps_log); dataFile.print(";");
-          
-          dataFile.print(BNO_lacet * 10, 0); dataFile.print(";");
-          dataFile.print(BNO_pitch * 10, 0); dataFile.print(";");
-          dataFile.print(BNO_roll * 10, 0); dataFile.print(";");
-          dataFile.print(BNO_linear_acc_norm * 100, 0); dataFile.print(";");
-  
-          dataFile.print(GPS_pitot._x_gps*100.0, 0); dataFile.print(";");
-          dataFile.print(GPS_pitot._y_gps*100.0, 0); dataFile.print(";");
-          dataFile.print(GPS_pitot._z_gps*100.0, 0); dataFile.print(";");
-          
-          dataFile.print(v_wind_mean*100,0); dataFile.print(";");
-          dataFile.print(hauteur_leddar_corrigee*100,0); dataFile.print(";");
-          dataFile.print(yaw_des*10.0,0); dataFile.print(";");
-  
-          dataFile.print(GPS_pitot._vx_gps*100.0, 0); dataFile.print(";");
-          dataFile.print(GPS_pitot._vy_gps*100.0, 0); dataFile.print(";");
-          dataFile.print(GPS_pitot._vz_gps*100.0, 0); dataFile.print(";");
-          dataFile.print(GPS_pitot._speed_pitot * 100.0, 0); dataFile.print(";");
-  
-          dataFile.print(pwm_norm_R*1000.0,0); dataFile.print(";");
-          dataFile.print(pwm_norm_L*1000.0,0); dataFile.print(";");
-          dataFile.print(pwm_norm_prop*1000.0,0); dataFile.print(";");
-  
-          dataFile.print(pitch_des_f * 10, 0); dataFile.print(";");
-          dataFile.print(distance_to_target*1000, 0); dataFile.print(";");
-          dataFile.print(err_yaw_f*1000, 0); dataFile.print(";");
-  
-          dataFile.print(slope_des_f_delay*10,0); dataFile.print(";");
-          dataFile.print(distance_des*1000,0); dataFile.print(";");
-          dataFile.print(slope_ground_mean*10,0); dataFile.print(";");
-
-          dataFile.print(regulation_state); dataFile.print(";");
-  
-          dataFile.print(remote._switch_F+10*remote._switch_D+100*remote._switch_C + declenchement*1000); dataFile.print(";");
-
-          dataFile.print(longitudinal_distance*1000,0); dataFile.print(";");
-          dataFile.print(lateral_distance*1000,0); dataFile.print(";");
-          dataFile.print(leddar._validity_flag); dataFile.print(";");
-          
-  
-          dataFile.println(" "); // gaffe à la dernière ligne
-          
-          if ((millis() - temps2 > 300.0 * 1000) || (remote._switch_C != Switch_C_previous) )
-          {
-            dataFile.close();
-            Closed = true;
-            Open = false;
-          }
-       }
-    }
+   
     Switch_C_previous = remote._switch_C;
   } // fin de boucle à 100 hz
 }
@@ -975,17 +863,4 @@ float distance_from_alti_raw(float alti, float wind_speed)
   }
 
   return distance_des_;
-}
-
-void checkExist(void)
-{
-  do
-  {
-    strcpy(filename, "log");
-    sprintf(Num, "%lu", counter);
-    strcat(filename, Num); strcat(filename, ".txt");
-    counter++;
-  }
-  while ( SD.exists(filename) );
-  nb_file = counter - 1;
 }

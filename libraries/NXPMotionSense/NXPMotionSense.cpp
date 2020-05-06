@@ -26,10 +26,10 @@ bool NXPMotionSense::begin()
 		Serial.println("config error FXAS21002");
 		delay(1000);
 	}
-	while (!MPL3115_begin()) {
+	/*while (!MPL3115_begin()) {
 		Serial.println("config error MPL3115");
 		delay(1000);
-	}
+	}*/
 	//Serial.println("init done");
 
 	for (i=0; i < NXP_MOTION_CAL_SIZE; i++) {
@@ -57,9 +57,9 @@ void NXPMotionSense::update()
 	if (FXOS8700_read(accel_mag_raw)) { // accel + mag
 		//Serial.print(" accel+mag ");
 	}
-	if (MPL3115_read(&alt, &temperature_raw)) { // alt
+	/*if (MPL3115_read(&alt, &temperature_raw)) { // alt
 		//Serial.print(" alt ");
-	}
+	}*/
 	if (FXAS21002_read(gyro_raw)) {  // gyro
 		//Serial.println(" gyro ");
 		newdata = 1;
@@ -102,13 +102,13 @@ static bool read_regs(uint8_t i2c, uint8_t *data, uint8_t num)
 
 bool NXPMotionSense::FXOS8700_begin()
 {
-	const uint8_t i2c_addr=FXOS8700_I2C_ADDR0;
+	const uint8_t i2c_addr=FXOS8700_I2C_ADDR3;
 	uint8_t b;
 
-	//Serial.println("FXOS8700_begin");
+	Serial.println("FXOS8700_begin");
 	// detect if chip is present
 	if (!read_regs(i2c_addr, FXOS8700_WHO_AM_I, &b, 1)) return false;
-	//Serial.printf("FXOS8700 ID = %02X\n", b);
+	Serial.printf("FXOS8700 ID = %02X\n", b);
 	if (b != 0xC7) return false;
 	// place into standby mode
 	if (!write_reg(i2c_addr, FXOS8700_CTRL_REG1, 0)) return false;
@@ -119,7 +119,7 @@ bool NXPMotionSense::FXOS8700_begin()
 	if (!write_reg(i2c_addr, FXOS8700_XYZ_DATA_CFG, 0x01)) return false; // 4G range
 	if (!write_reg(i2c_addr, FXOS8700_CTRL_REG2, 0x02)) return false; // hires
 	if (!write_reg(i2c_addr, FXOS8700_CTRL_REG1, 0x15)) return false; // 100Hz A+M
-	//Serial.println("FXOS8700 Configured");
+	Serial.println("FXOS8700 Configured");
 	return true;
 }
 
@@ -127,7 +127,7 @@ bool NXPMotionSense::FXOS8700_read(int16_t *data)  // accel + mag
 {
 	static elapsedMicros usec_since;
 	static int32_t usec_history=5000;
-	const uint8_t i2c_addr=FXOS8700_I2C_ADDR0;
+	const uint8_t i2c_addr=FXOS8700_I2C_ADDR3;
 	uint8_t buf[13];
 
 	int32_t usec = usec_since;
@@ -156,7 +156,7 @@ bool NXPMotionSense::FXOS8700_read(int16_t *data)  // accel + mag
 
 bool NXPMotionSense::FXAS21002_begin()
 {
-        const uint8_t i2c_addr=FXAS21002_I2C_ADDR0;
+        const uint8_t i2c_addr=FXAS21002_I2C_ADDR1;
         uint8_t b;
 
 	if (!read_regs(i2c_addr, FXAS21002_WHO_AM_I, &b, 1)) return false;
@@ -179,7 +179,7 @@ bool NXPMotionSense::FXAS21002_read(int16_t *data) // gyro
 {
 	static elapsedMicros usec_since;
 	static int32_t usec_history=10000;
-	const uint8_t i2c_addr=FXAS21002_I2C_ADDR0;
+	const uint8_t i2c_addr=FXAS21002_I2C_ADDR1;
 	uint8_t buf[7];
 
 	int32_t usec = usec_since;

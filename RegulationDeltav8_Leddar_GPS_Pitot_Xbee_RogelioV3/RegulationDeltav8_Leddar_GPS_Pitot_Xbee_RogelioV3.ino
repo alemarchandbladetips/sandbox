@@ -21,10 +21,15 @@
 #define PENTE_AERO_DAUPHIN1 35.0*DEG2RAD
 #define PENTE_AERO_DAUPHIN2 20.0*DEG2RAD
 #define HAUTEUR_BONZAI 11.0
+//#define HAUTEUR_BONZAI 21.0
 #define LONGUEUR_BONZAI 42.0
+//#define LONGUEUR_BONZAI 82.0
 #define TEMPS_BONZAI 3.0
+//#define TEMPS_BONZAI 6.0
 #define HAUTEUR_DAUPHIN2_2 16.0
 #define HAUTEUR_DAUPHIN2 20.0
+//#define HAUTEUR_DAUPHIN2_2 26.0
+//#define HAUTEUR_DAUPHIN2 30.0
 #define HAUTEUR_LEDDAR 35.0
 #define HAUTEUR_PALIER 7.0
 #define HAUTEUR_CABRAGE 5.0
@@ -143,7 +148,7 @@ float thrust_anti_decrochage, vitesse_anti_decrochage;
 float pitch_commutation_prev, pitch_commutation_prev_1;
 // states
 float Commande_dauphin = 0;
-int8_t arrondi_almost_ready,arrondi_ready,flap_state_mem,flap_state = 1, leddar_track = 0, arrondi_final, palier, flag_dauphin2;
+int8_t arrondi_almost_ready,arrondi_ready, _mem,flap_state = 1, leddar_track = 0, arrondi_final, palier, flag_dauphin2;
 int8_t first_dive = 1;
 
 // asservissement de la pente de descente
@@ -300,7 +305,7 @@ void loop()
 
     // transformation en DPS
     BNO_wz = gyro_speed.z() * RAD2DEG;
-    BNO_wy = gyro_speed.x() * RAD2DEG;
+    BNO_wy = -gyro_speed.x() * RAD2DEG;
     BNO_wx = gyro_speed.y() * RAD2DEG;
 
     // lecture de l'acc linéaire (pour log)
@@ -314,7 +319,9 @@ void loop()
     hauteur_leddar = leddar._hauteur *10.0;
 
     bte_HistoriqueVal(produit_scalaire, scalar_prod_buffer, Ndata);
-    bte_Mean(scalar_prod_buffer, &scalar_prod_mean, Ndata, Ndata-1);
+    scalar_prod_mean =  bte_medianFilter(produit_scalaire, scalar_prod_buffer, Ndata);
+    //bte_Mean(scalar_prod_buffer, &scalar_prod_mean, 30, 30-1);
+    //scalar_prod_mean = scalar_prod_buffer[Ndata-41];
 
     hauteur_leddar_corrigee = hauteur_leddar*scalar_prod_mean + 0.5*GPS_pitot._vz_gps;
     
@@ -333,15 +340,20 @@ void loop()
 
 /***************** Estimation des angles de descente, vitesse pitot filtrée...  *********************/
 
-    Serial.print(hauteur_leddar*10); Serial.print("   ");
-    Serial.print(hauteur_leddar_corrigee*10); Serial.print("   ");
-    //Serial.print(gravity_vector.z()); Serial.print("   ");
-    Serial.print(produit_scalaire*10); Serial.print("   ");
+//    Serial.print(hauteur_leddar*10); Serial.print("   ");
+//    Serial.print(hauteur_leddar_corrigee*10); Serial.print("   ");
+//    Serial.print(scalar_prod_mean*10); Serial.print("   ");
+//    Serial.print(produit_scalaire*10); Serial.print("   ");
+
     //Serial.print(BNO_pitch); Serial.print("   ");
 //    Serial.print(BNO_roll); Serial.print("   ");
 //    Serial.print(BNO_pitch); Serial.print("   ");
-//    Serial.print(BNO_lacet); Serial.print("   ");
-Serial.println("   ");
+    
+//    Serial.print(BNO_wx); Serial.print("   ");
+//    Serial.print(BNO_wy); Serial.print("   ");
+//    Serial.print(BNO_wz); Serial.print("   ");
+//
+//Serial.println("   ");
     
     // filtrage moyen de la vitesse pitot sur 1s, utilisé pour la régulation de vitesse en mode dauphin
     bte_HistoriqueVal(GPS_pitot._speed_pitot, v_pitot_buffer, Ndata);
@@ -475,6 +487,7 @@ Serial.println("   ");
       heading_to_target_lock = heading_to_target;
       flag_dauphin2 = 0;
       pitch_commutation_prev = -25;
+      pitch_commutation_prev_1 = -25;
 
       // consignes de pitch et de vitesse
       
@@ -516,7 +529,7 @@ Serial.println("   ");
 
       // Intégrateur des flaps pour régulation du pitch
       Commande_I_flaps += -KI_Pitch * (BNO_pitch - pitch_des_f) * dt_flt / 360.0; // += addition de la valeur précédente
-      Commande_I_flaps = constrain(Commande_I_flaps, -1.0, 1.0);
+      Commande_I_flaps = constrain(Commande_I_flaps, -0.2, 0.2);
 
 //////// Erreure de yaw pour la régulation
 
@@ -552,7 +565,6 @@ Serial.println("   ");
 
       // mise à 0 des commandes inutilisées et du gaz
       Commande_dauphin=0;
-      flap_state = 1;
       thrust = 0.0;
       leddar_track = 0;
       yaw_des = yaw_to_target_lock_offset + heading_to_target_lock + K_traj_lat*lateral_distance;
@@ -561,7 +573,28 @@ Serial.println("   ");
       BNO_roll_f = (1-alpha_roll)*BNO_roll_f + alpha_roll*BNO_roll;
       BNO_roll = BNO_roll_f;
 
-      if(hauteur_leddar_corrigee < HAUTEUR_CABRAGE)// && leddar._validity_flag==1 ) // phase pré-cabrage
+      hauteur_cabrage = HAUTEUR_CABRAGE;
+      if(remote._switch_F == 0)
+      {
+        hauteur_cabrage = 4.0;
+      } else if(remote._switch_F == 1)
+      {
+        hauteur_cabrage = 3.0;
+      } else
+      {
+        if(remote._switch_D == 0)
+        {
+          hauteur_cabrage = 2.5;
+        } else if(remote._switch_D == 1)
+        {
+          hauteur_cabrage = 2.0;
+        } else
+        {
+          hauteur_cabrage = 1.5;
+        }
+      }
+
+      if(hauteur_leddar_corrigee < hauteur_cabrage)// && leddar._validity_flag==1 ) // phase pré-cabrage
       {
         arrondi_final = 1;
       }
@@ -574,7 +607,7 @@ Serial.println("   ");
       if( arrondi_final ) //cabrage final
       {
         
-        pitch_des = 120.0;
+        pitch_des = 0.8/K_Pitch*360.0;
         pitch_des_f = pitch_des;
         regulation_state = 5;
         thrust = 0.0;
@@ -716,11 +749,11 @@ float hist_width = 0.0;
       pitch_des_f = constrain(pitch_des_f, pitch_commutation_prev - 7.5, pitch_commutation_prev + 7.5);
 
       // loie de commutation
-      if (BNO_pitch > pitch_des_f + hist_width && flap_state==1)
+      if (BNO_pitch > pitch_des_f + hist_width && flap_state!=-1)
       {
         flap_state=-1;
         pitch_commutation_prev_1 = pitch_des_f;
-      } else if (BNO_pitch < pitch_des_f && flap_state==-1)
+      } else if (BNO_pitch < pitch_des_f && flap_state!=1)
       {
         flap_state=1;
         first_dive = 0;
@@ -734,17 +767,11 @@ float hist_width = 0.0;
         flap_state=0;
         pitch_des_f = BNO_pitch;
         // initialisation de l'action intégrale pour avoir une sortie de dauphin plus propre.
-        Commande_I_flaps = 0.5;
+        Commande_I_flaps = 0.0;
       }
 
       // commande dauphin.
-      if(flap_state>0)
-      {
-        Commande_dauphin = ((float)flap_state)*flaps_amplitude+offset_dauphin;
-      }else
-      {
-        Commande_dauphin = ((float)flap_state)*flaps_amplitude+offset_dauphin;
-      }
+      Commande_dauphin = ((float)flap_state)*flaps_amplitude+offset_dauphin;
 
 //////// Régulation de vitesse
       
@@ -789,6 +816,10 @@ float hist_width = 0.0;
                     + aileron_trim; 
     //Commande_Roll = -Commande_Roll;
 
+//    Serial.print(K_Roll * (BNO_roll-roll_des) / 360.0 *10); Serial.print("   ");
+//    Serial.print(KD_Roll * BNO_wx  / 360.0 *10); Serial.print("   ");
+//    Serial.print(aileron_trim*10); Serial.print("   ");
+
     float saturation;
 
     if(remote._switch_C!=0 || declenchement == 0)
@@ -803,22 +834,21 @@ float hist_width = 0.0;
     //Commande_I_flaps = 0.5;
     // Commande correspondant au pitch
     Commande_P_flaps = - K_Pitch * (BNO_pitch - pitch_des_f)  / 360.0;
+
+    if(arrondi_final!=1)
+    {
+      Commande_P_flaps = constrain(Commande_P_flaps,-0.2,0.2);
+    }
+    
     Commande_D_flaps = - KD_Pitch * BNO_wy  / 360.0;
     Commande_Pitch = - K_Pitch_remote * remote._elevator 
                       + Commande_dauphin  
                       + Commande_P_flaps 
                       + Commande_I_flaps 
                       + Commande_D_flaps 
-                      + elevation_trim; //+ Commande_P_flapping;
-
-    if(arrondi_ready)
-   {
-      Commande_Pitch = constrain(Commande_Pitch,-0.15,1.0);
-   }
-
+                      + elevation_trim;
                       
     Commande_Pitch = -Commande_Pitch;
-
     
     // Construction de pwm servo a partir des commandes roll et pitch autour du zero des servo
     pwm_norm_R = Commande_Roll + Commande_Pitch;
@@ -843,6 +873,15 @@ float hist_width = 0.0;
     
     pwm_norm_R = constrain(pwm_norm_R,-1.0,1);
     pwm_norm_L = constrain(pwm_norm_L,-1,1.0);
+
+//    Serial.print(Commande_Roll*10); Serial.print("   ");
+//    Serial.print(Commande_Pitch*10); Serial.print("   ");
+//    Serial.print(Commande_dauphin*10); Serial.print("   ");
+//    Serial.print(flap_state*10); Serial.print("   ");
+//    Serial.print(-pwm_norm_R*10); Serial.print("   ");
+//    Serial.print(pwm_norm_L*10); Serial.print("   ");
+//
+//Serial.println("   ");
     
     Servo_R.set_normalized_pwm(pwm_norm_R);
     Servo_L.set_normalized_pwm(pwm_norm_L);

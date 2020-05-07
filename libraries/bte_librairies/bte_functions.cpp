@@ -66,6 +66,46 @@ uint16_t bte_medianFilter16(uint16_t val, uint16_t XX[], uint8_t Elem)
   return S[(Elem - 1) / 2]; // valeur au millieu
 }
 
+///Filtre median avec float
+float bte_medianFilter(float val, float XX[], uint8_t Elem)
+{
+  uint8_t i, j;
+  float S[Elem];
+  //Historique des valeurs stocké dans X
+  for (i = 0; i < (Elem - 1) ; i++) {
+    XX[i] = XX[i + 1];
+  }
+  XX[Elem - 1] = val;
+
+  for (i = 0; i < Elem ; i++) {
+    S[i] = XX[i];
+  }
+
+  //Rangement des valeurs (min au max)
+  float temp;
+  for ( i = 0; i < (Elem-1); i++)
+  {
+    boolean change = false;
+
+    for ( j = 1; j < (Elem - i); j++)
+    {
+      temp = S[j - 1];
+      if ( temp > S[j] )
+      {
+        S[j - 1] = S[j];
+        S[j] = temp;
+        change = true;
+      }
+    }
+    if (change == false) {
+        i=Elem;
+        //break;  //ceci implique que tous les vals sont ordonnées
+    }
+  }
+
+  return S[(Elem - 1) / 2]; // valeur au millieu
+}
+
 void bte_HistoriqueN(float val, float A[], uint8_t N)
 {
       for(int k=0;k<(N-1);k++){

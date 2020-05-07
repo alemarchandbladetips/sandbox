@@ -19,6 +19,8 @@ void bte_HistoriqueVal(float val, float A[], int NbData);
 // filtre median
 uint16_t bte_medianFilter16(uint16_t val, uint16_t XX[], uint8_t Elem);
 
+float bte_medianFilter(float val, float XX[], uint8_t Elem);
+
 // fonction signe
 float bte_signo(float val);
 

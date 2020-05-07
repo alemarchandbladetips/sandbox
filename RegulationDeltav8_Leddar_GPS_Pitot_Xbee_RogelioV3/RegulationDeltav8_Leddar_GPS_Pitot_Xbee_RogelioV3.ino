@@ -514,14 +514,16 @@ void loop()
 //////// Régulation de vitesse
 
       Commande_I_Moteur += -KI_Moteur * (GPS_pitot._speed_pitot - vitesse_des) * dt_flt;
-      Commande_I_Moteur = constrain(Commande_I_Moteur, 0, 0.7); // sat = 200
+      Commande_I_Moteur = constrain(Commande_I_Moteur, 0, 0.4); // sat = 200
     
       Commande_KP_Moteur = -KP_Moteur * (GPS_pitot._speed_pitot - vitesse_des);
-      Commande_KP_Moteur = constrain(Commande_KP_Moteur, -0.5, 0.5);
+      Commande_KP_Moteur = constrain(Commande_KP_Moteur, -0.4, 0.4);
     
       thrust = Offset_gaz_reg + Commande_KP_Moteur + Commande_I_Moteur;
     
-      thrust = constrain(thrust, 0, 1);
+      thrust = constrain(thrust, 0, 0.4);
+      //désaturation de l'action intégrale
+      Commande_I_Moteur = constrain(Commande_I_Moteur, 0, thrust-Commande_KP_Moteur);
 
 //////// Régulation de pitch
 

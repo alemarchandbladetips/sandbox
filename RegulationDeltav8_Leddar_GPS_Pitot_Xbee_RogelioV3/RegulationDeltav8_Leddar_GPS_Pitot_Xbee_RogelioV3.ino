@@ -751,11 +751,11 @@ float hist_width = 0.0;
       pitch_des_f = constrain(pitch_des_f, pitch_commutation_prev - 7.5, pitch_commutation_prev + 7.5);
 
       // loie de commutation
-      if (BNO_pitch > pitch_des_f + hist_width && flap_state!=-1)
+      if (BNO_pitch > pitch_des_f + hist_width && flap_state!=-1 && BNO_wy > 0.0)
       {
         flap_state=-1;
         pitch_commutation_prev_1 = pitch_des_f;
-      } else if (BNO_pitch < pitch_des_f && flap_state!=1)
+      } else if (BNO_pitch < pitch_des_f && flap_state!=1 && BNO_wy < 0.0)
       {
         flap_state=1;
         first_dive = 0;

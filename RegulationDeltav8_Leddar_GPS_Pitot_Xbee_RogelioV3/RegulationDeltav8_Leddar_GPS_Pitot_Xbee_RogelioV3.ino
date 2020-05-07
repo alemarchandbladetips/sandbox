@@ -475,6 +475,7 @@ void loop()
       KP_Moteur = 0.05; KI_Moteur = 0.2; Offset_gaz_reg = 0.0;
       
       // mise à 0 des commandes inutilisées
+      remote._elevator = 0;
       Commande_dauphin = 0;
       Commande_I_slope = 0;
       //Commande_I_yaw = 0;
@@ -564,8 +565,10 @@ void loop()
       KP_Moteur = 0; KI_Moteur = 0; Offset_gaz_reg = 0.0;
       //K_traj_lat = 3.0;
       K_traj_lat = 0.0;
+      
 
       // mise à 0 des commandes inutilisées et du gaz
+      remote._elevator = 0;
       Commande_dauphin=0;
       thrust = 0.0;
       leddar_track = 0;

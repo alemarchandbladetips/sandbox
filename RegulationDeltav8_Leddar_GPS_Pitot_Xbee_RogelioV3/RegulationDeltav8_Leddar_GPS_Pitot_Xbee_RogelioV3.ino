@@ -491,7 +491,7 @@ void loop()
 
       // consignes de pitch et de vitesse
       
-      pitch_des = 4;
+      pitch_des = 0;
       vitesse_des = VITESSE_DES_DAUPHIN;
       
       yaw_des = heading_to_target;
@@ -725,7 +725,7 @@ void loop()
       Commande_I_slope = constrain(Commande_I_slope, -25, 25);
 
       pitch_des = slope_des + 25 + Commande_I_slope;
-      pitch_des = constrain(pitch_des,-40,20);
+      pitch_des = constrain(pitch_des,-40,0);
       pitch_des_f = pitch_des;
 
 //////// pré-déclanchement de l'arrondi, l'arrondi sera fait à la prochaine oscillation

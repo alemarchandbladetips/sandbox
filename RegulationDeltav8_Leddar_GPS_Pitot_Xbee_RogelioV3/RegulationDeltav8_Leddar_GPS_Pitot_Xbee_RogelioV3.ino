@@ -278,6 +278,11 @@ void loop()
     Servo_L.set_normalized_pwm(0.5);
   }
 
+  if(first_GPS_data != 1 && leddar._hauteur*10.0 >1.0 && leddar._hauteur *10.0<2.0)
+  {
+    Servo_R.set_normalized_pwm(-0.5);
+  }
+
   if(GPS_pitot._x_gps != 0.0 && first_GPS_data != 1)
   {
     // Battement des 2 ailes pour valider la prise de référence du GPS
@@ -340,7 +345,7 @@ void loop()
 
 /***************** Estimation des angles de descente, vitesse pitot filtrée...  *********************/
 
-//    Serial.print(hauteur_leddar*10); Serial.print("   ");
+    Serial.print(hauteur_leddar*10); Serial.print("   ");
 //    Serial.print(hauteur_leddar_corrigee*10); Serial.print("   ");
 //    Serial.print(scalar_prod_mean*10); Serial.print("   ");
 //    Serial.print(produit_scalaire*10); Serial.print("   ");
@@ -353,7 +358,7 @@ void loop()
 //    Serial.print(BNO_wy); Serial.print("   ");
 //    Serial.print(BNO_wz); Serial.print("   ");
 //
-//Serial.println("   ");
+Serial.println("   ");
     
     // filtrage moyen de la vitesse pitot sur 1s, utilisé pour la régulation de vitesse en mode dauphin
     bte_HistoriqueVal(GPS_pitot._speed_pitot, v_pitot_buffer, Ndata);
@@ -492,7 +497,7 @@ void loop()
 
       // consignes de pitch et de vitesse
       
-      pitch_des = 0;
+      pitch_des = 4;
       vitesse_des = VITESSE_DES_DAUPHIN;
       
       yaw_des = heading_to_target;
@@ -522,7 +527,7 @@ void loop()
     
       thrust = Offset_gaz_reg + Commande_KP_Moteur + Commande_I_Moteur;
     
-      thrust = constrain(thrust, 0, 0.4);
+      thrust = constrain(thrust, 0, 0.5);
       //désaturation de l'action intégrale
       Commande_I_Moteur = constrain(Commande_I_Moteur, 0, thrust-Commande_KP_Moteur);
 
@@ -558,7 +563,7 @@ void loop()
       regulation_state = 4;
       
       // paramètres mode stabilisé
-      K_Pitch = 0.5; KD_Pitch = 0.4; KI_Pitch = 10;
+      K_Pitch = 1.0; KD_Pitch = 0.4; KI_Pitch = 10;
       K_Roll = 2.5; KD_Roll = 0.2;
       K_Yaw = 1.0; KD_Yaw = 0.05; KI_Yaw = 0.3;
       //K_Yaw = 0.0; KD_Yaw = 0.0; KI_Yaw = 0.0;
@@ -624,12 +629,12 @@ void loop()
         pitch_des = constrain(pitch_des,-25,0);
         //pitch_des = 0.0;
         
-        vitesse_anti_decrochage = 13;
+        vitesse_anti_decrochage = 12;
         pitch_des_f = pitch_des;
 
         thrust_anti_decrochage = 0.45;
 
-        if(GPS_pitot._speed_pitot < vitesse_anti_decrochage)
+        if(GPS_pitot._speed_pitot < vitesse_anti_decrochage && hauteur_leddar_corrigee > 5.0)
         {
           thrust = thrust_anti_decrochage;
         }
@@ -727,8 +732,8 @@ void loop()
       Commande_I_slope += KI_slope * (slope_des_f_delay - slope_ground_mean) * dt_flt; 
       Commande_I_slope = constrain(Commande_I_slope, -25, 25);
 
-      pitch_des = slope_des + 25 + Commande_I_slope;
-      pitch_des = constrain(pitch_des,-40,0);
+      pitch_des = slope_des + 20 + Commande_I_slope;
+      pitch_des = constrain(pitch_des,-40,5);
       pitch_des_f = pitch_des;
 
 //////// pré-déclanchement de l'arrondi, l'arrondi sera fait à la prochaine oscillation
@@ -788,7 +793,9 @@ float hist_width = 0.0;
     
       thrust = Offset_gaz_reg + Commande_KP_Moteur + Commande_I_Moteur;
     
-      thrust = constrain(thrust, 0, 1);
+      thrust = constrain(thrust, 0, 0.5);
+      //désaturation de l'action intégrale
+      Commande_I_Moteur = constrain(Commande_I_Moteur, 0, thrust-Commande_KP_Moteur);
 
 //////// Calcul de l'erreure pour la régulation du yaw
 
@@ -842,7 +849,7 @@ float hist_width = 0.0;
 
     if(arrondi_final!=1)
     {
-      Commande_P_flaps = constrain(Commande_P_flaps,-0.2,0.2);
+      Commande_P_flaps = constrain(Commande_P_flaps,-0.2,0.3);
     }
     
     Commande_D_flaps = - KD_Pitch * BNO_wy  / 360.0;

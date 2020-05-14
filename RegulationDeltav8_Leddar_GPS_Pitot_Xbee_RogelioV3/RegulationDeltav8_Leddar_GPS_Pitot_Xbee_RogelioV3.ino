@@ -584,25 +584,8 @@ Serial.println("   ");
       BNO_roll = BNO_roll_f;
 
       hauteur_cabrage = HAUTEUR_CABRAGE;
-      if(remote._switch_F == 0)
-      {
-        hauteur_cabrage = 4.0;
-      } else if(remote._switch_F == 1)
-      {
-        hauteur_cabrage = 3.0;
-      } else
-      {
-        if(remote._switch_D == 0)
-        {
-          hauteur_cabrage = 2.5;
-        } else if(remote._switch_D == 1)
-        {
-          hauteur_cabrage = 2.0;
-        } else
-        {
-          hauteur_cabrage = 1.5;
-        }
-      }
+
+      hauteur_cabrage = 1.5;
 
       if(hauteur_leddar_corrigee < hauteur_cabrage)// && leddar._validity_flag==1 ) // phase pré-cabrage
       {
@@ -673,7 +656,8 @@ Serial.println("   ");
       //K_Yaw = 0.0; KD_Yaw = 0.0; KI_Yaw = 0.0;
       KP_Moteur = 0.05; KI_Moteur = 0.2; Offset_gaz_reg = 0.0;
       KI_slope = 0.3;
-      K_traj = 2.0, K_traj_lat = 3.0;
+      K_traj = 2.0; K_traj_lat = 3.0;
+      K_traj = 0.0;
 
       // mises à 0 
       Commande_I_flaps = 0;
@@ -708,16 +692,36 @@ Serial.println("   ");
       
       distance_des = distance_from_alti(alti_,alti_declenchement,distance_declenchement,v_wind_mean_memory);
 
-      // Dauphin 1 et Dauphin 2
-      if(flag_dauphin2 == 1)
+      if(remote._switch_F == 0)
       {
-        slope_des = -penteGPS_from_aero(PENTE_AERO_DAUPHIN2,VITESSE_DES_DAUPHIN,v_wind_mean_memory)*RAD2DEG;
-        regulation_state = 3;
+        slope_des = -40;
+      } else if(remote._switch_F == 1)
+      {
+        slope_des = -45;
       } else
       {
-        slope_des = -penteGPS_from_aero(PENTE_AERO_DAUPHIN1,VITESSE_DES_DAUPHIN,v_wind_mean_memory)*RAD2DEG;
-        regulation_state = 2;
-      } 
+        if(remote._switch_D == 0)
+        {
+          slope_des = -50;
+        } else if(remote._switch_D == 1)
+        {
+          slope_des = -55;
+        } else
+        {
+          slope_des = -60;
+        }
+      }
+
+//      // Dauphin 1 et Dauphin 2
+//      if(flag_dauphin2 == 1)
+//      {
+//        slope_des = -penteGPS_from_aero(PENTE_AERO_DAUPHIN2,VITESSE_DES_DAUPHIN,v_wind_mean_memory)*RAD2DEG;
+//        regulation_state = 3;
+//      } else
+//      {
+//        slope_des = -penteGPS_from_aero(PENTE_AERO_DAUPHIN1,VITESSE_DES_DAUPHIN,v_wind_mean_memory)*RAD2DEG;
+//        regulation_state = 2;
+//      } 
 
       
       if(timer_mode<3000)

@@ -84,7 +84,7 @@ float altitude_stabilisation = 60.0;
 
 /******* leddar **************/
 
-bte_leddar leddar = bte_leddar(&Serial1);
+bte_leddar leddar = bte_leddar(&Serial4);
 
 float hauteur_leddar_corrigee, hauteur_leddar;
 const float leddar_mounting_vector[3] = {0.0,0.0,1.0};
@@ -111,6 +111,18 @@ float BNO_linear_acc_norm;
 
 //Offsets
 float RollOffs = 0, PitchOffs = 0, YawOffs = 90; //en deg
+
+/******* Xbee **************/
+
+#define XBEE_SERIAL Serial1
+
+const uint8_t NbDataXB = 9;
+int16_t DataXB[NbDataXB];
+
+int16_t DataXB1[10];
+int16_t DataXB2[10];
+int16_t DataXB3[3];
+uint8_t count_XB = 1;
 
 /******* Variables et paramètres des régulation **************/
 
@@ -638,6 +650,32 @@ Serial.println("   ");
     }
    
     Switch_C_previous = remote._switch_C;
+
+      /**********************Envoi vers PC Station******************************/
+    
+    DataXB[0] = (int16_t)(BNO_roll/180.0*32768);
+    DataXB[1] = (int16_t)(BNO_pitch/180.0*32768);
+    DataXB[2] = (int16_t)(BNO_lacet/180.0*32768);
+    
+    DataXB[3] = (int16_t)(constrain(GPS_pitot._x_gps,-499,500)/500.0*32768);
+    DataXB[4] = (int16_t)(constrain(GPS_pitot._y_gps,-499,500)/500.0*32768);
+    DataXB[5] = (int16_t)(constrain(GPS_pitot._z_gps,-499,500)/500.0*32768);
+    
+    DataXB[6] = (int16_t)(constrain(GPS_pitot._vx_gps,-49,50)/50.0*32768);
+    DataXB[7] = (int16_t)(constrain(GPS_pitot._vy_gps,-49,50)/50.0*32768);
+    DataXB[8] = (int16_t)(constrain(GPS_pitot._vz_gps,-49,50)/50.0*32768);
+
+    //Envoi des données vers le PC
+    
+        XBEE_SERIAL.write(137);
+        for (int i = 0; i < NbDataXB ; i++)
+        {
+            bte_send_in16_t(XBEE_SERIAL, DataXB + i);
+        }
+        
+        XBEE_SERIAL.write(173);
+
+    
   } // fin de boucle à 100 hz
 }
 

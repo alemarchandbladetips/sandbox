@@ -21,18 +21,12 @@
 #define PENTE_AERO_DAUPHIN1 35.0*DEG2RAD
 #define PENTE_AERO_DAUPHIN2 20.0*DEG2RAD
 #define HAUTEUR_BONZAI 11.0
-//#define HAUTEUR_BONZAI 21.0
 #define LONGUEUR_BONZAI 42.0
-//#define LONGUEUR_BONZAI 82.0
 #define TEMPS_BONZAI 3.0
-//#define TEMPS_BONZAI 6.0
 #define HAUTEUR_DAUPHIN2_2 16.0
 #define HAUTEUR_DAUPHIN2 20.0
-//#define HAUTEUR_DAUPHIN2_2 26.0
-//#define HAUTEUR_DAUPHIN2 30.0
 #define HAUTEUR_LEDDAR 35.0
-#define HAUTEUR_PALIER 7.0
-#define HAUTEUR_CABRAGE 5.0
+#define HAUTEUR_CABRAGE 1.5
 
 float distance_des, alti_, K_traj, K_traj_lat;
 float longitudinal_distance, lateral_distance;
@@ -124,9 +118,9 @@ uint8_t regulation_state;
 
 //// régulation d'attitude et vitesse
 // params
-float K_Pitch_remote = 0.6, K_Pitch = 0, KD_Pitch = 0, KI_Pitch = 0;
-float K_Roll_remote = -0.4, K_Roll = 0, KD_Roll = 0.2;
-float K_Yaw = 0, KD_Yaw = 0, KI_Yaw = 0;
+float K_Pitch_remote = 0.6, KP_Pitch = 0, KD_Pitch = 0, KI_Pitch = 0;
+float K_Roll_remote = -0.4, KP_Roll = 0, KD_Roll = 0.2;
+float KP_Yaw = 0, KD_Yaw = 0, KI_Yaw = 0;
 float KP_Moteur = 0, KI_Moteur = 0, Offset_gaz_reg = 0;
 float alpha_stab = 0.025; // filtrage au passage en mode stabilisé
 float offset_dauphin = 0.15;
@@ -148,8 +142,8 @@ float thrust_anti_decrochage, vitesse_anti_decrochage;
 float pitch_commutation_prev, pitch_commutation_prev_1;
 // states
 float Commande_dauphin = 0;
-int8_t arrondi_almost_ready,arrondi_ready, _mem,flap_state = 1, leddar_track = 0, arrondi_final, palier, flag_dauphin2;
-int8_t first_dive = 1;
+int8_t flag_dauphin_end,flag_bonsai_start, _mem,flap_state = 1, leddar_track = 0, flag_arrondi_final, palier, flag_dauphin2;
+int8_t flag_first_dive = 1;
 
 // asservissement de la pente de descente
 // params
@@ -164,7 +158,7 @@ float Commande_I_slope, KI_slope;
 // Asservissement de position
 float gps_target[2] = {0,0};
 float heading_to_target, heading_to_target_lock, yaw_to_target_lock_offset, distance_to_target;
-uint8_t declenchement = 0;
+uint8_t flag_declenchement = 0;
 
 /******* debug **************/
 
@@ -305,7 +299,7 @@ void loop()
     
 /********Info de BNO55***************/
 
-    // Lectures des infos gyro
+////// Lectures des infos gyro
     imu::Vector<3> gyro_speed = bno.getVector(Adafruit_BNO055::VECTOR_GYROSCOPE);
 
     // transformation en DPS
@@ -317,7 +311,7 @@ void loop()
     imu::Vector<3> linear_acc = bno.getVector(Adafruit_BNO055::VECTOR_LINEARACCEL);
     BNO_linear_acc_norm = sqrtf(linear_acc.x()*linear_acc.x() + linear_acc.y()*linear_acc.y() + linear_acc.z()*linear_acc.z())/9.81;
 
-    // lecture du vecteur gravité pour la projection de la mesure leddar (distance leddar -> altitude)
+////// lecture du vecteur gravité pour la projection de la mesure leddar (distance leddar -> altitude)
     imu::Vector<3> gravity_vector = bno.getVector(Adafruit_BNO055::VECTOR_GRAVITY);
 
     float produit_scalaire = (gravity_vector.x()*leddar_mounting_vector[0] + gravity_vector.y()*leddar_mounting_vector[1] + gravity_vector.z()*leddar_mounting_vector[2])/ 9.81 ;
@@ -325,9 +319,6 @@ void loop()
 
     bte_HistoriqueVal(produit_scalaire, scalar_prod_buffer, Ndata);
     scalar_prod_mean =  bte_medianFilter(produit_scalaire, scalar_prod_buffer, Ndata);
-    //bte_Mean(scalar_prod_buffer, &scalar_prod_mean, 30, 30-1);
-    //scalar_prod_mean = scalar_prod_buffer[Ndata-41];
-
     hauteur_leddar_corrigee = hauteur_leddar*scalar_prod_mean + 0.5*GPS_pitot._vz_gps;
     
     if(abs(hauteur_leddar_corrigee-GPS_pitot._z_gps)>30.0)
@@ -335,22 +326,14 @@ void loop()
       leddar._validity_flag = 0;
     }
 
-    // lecture des angles d'Euler (deg)+ application des offset 
+////// lecture des angles d'Euler (deg)+ application des offset 
     imu::Vector<3> eulAng = bno.getVector(Adafruit_BNO055::VECTOR_EULER);
     
     BNO_roll = bte_ang_180(-eulAng.y() - RollOffs);
     BNO_pitch = bte_ang_180(eulAng.z() - PitchOffs);
     BNO_lacet = bte_ang_180(-eulAng.x() - YawOffs);
 
-
-/***************** Estimation des angles de descente, vitesse pitot filtrée...  *********************/
-
-    Serial.print(hauteur_leddar*10); Serial.print("   ");
-//    Serial.print(hauteur_leddar_corrigee*10); Serial.print("   ");
-//    Serial.print(scalar_prod_mean*10); Serial.print("   ");
-//    Serial.print(produit_scalaire*10); Serial.print("   ");
-
-    //Serial.print(BNO_pitch); Serial.print("   ");
+//    Serial.print(BNO_pitch); Serial.print("   ");
 //    Serial.print(BNO_roll); Serial.print("   ");
 //    Serial.print(BNO_pitch); Serial.print("   ");
     
@@ -358,8 +341,10 @@ void loop()
 //    Serial.print(BNO_wy); Serial.print("   ");
 //    Serial.print(BNO_wz); Serial.print("   ");
 //
-Serial.println("   ");
-    
+//    Serial.println("   ");
+
+/***************** Estimation des angles de descente, vitesse pitot filtrée...  *********************/
+
     // filtrage moyen de la vitesse pitot sur 1s, utilisé pour la régulation de vitesse en mode dauphin
     bte_HistoriqueVal(GPS_pitot._speed_pitot, v_pitot_buffer, Ndata);
     bte_Mean(v_pitot_buffer, &v_pitot_mean, Ndata, Ndata-1);
@@ -396,15 +381,16 @@ Serial.println("   ");
     heading_to_target = atan2f((GPS_pitot._x_gps - gps_target[0]),-(GPS_pitot._y_gps - gps_target[1]))*RAD2DEG;
     heading = atan2f(-GPS_pitot._vx_gps,GPS_pitot._vy_gps)*RAD2DEG;
 
+    // projection de l'erreur sur l'axe longitudinal et latéral
     longitudinal_distance = distance_to_target*cos((heading_to_target-heading_to_target_lock)*DEG2RAD);
     lateral_distance = distance_to_target*sin((heading_to_target-heading_to_target_lock)*DEG2RAD);
 
 /***************** Paramètres de régulation par defaut*********************/
     
     // peuvent être modifiés dans les différents modes, par défaut, juste le D sur le roll
-    K_Pitch = 0; KD_Pitch = 0; KI_Pitch = 0;
-    K_Roll = 0; KD_Roll = 0.4;
-    K_Yaw = 0; KD_Yaw = 0;
+    KP_Pitch = 0; KD_Pitch = 0; KI_Pitch = 0;
+    KP_Roll = 0; KD_Roll = 0.4;
+    KP_Yaw = 0; KD_Yaw = 0;
     KP_Moteur = 0; KP_Moteur = 0; Offset_gaz_reg = 0;
 
 /***************** Modes de régulation *********************/
@@ -425,9 +411,9 @@ Serial.println("   ");
       timer_mode = millis() - time_switch;
 
       // paramètres mode manuel
-      K_Pitch = 0; KD_Pitch = 0; KI_Pitch = 0;
-      K_Roll = 0; KD_Roll = 0.4;
-      K_Yaw = 0; KD_Yaw = 0;
+      KP_Pitch = 0; KD_Pitch = 0; KI_Pitch = 0;
+      KP_Roll = 0; KD_Roll = 0.4;
+      KP_Yaw = 0; KD_Yaw = 0;
       KP_Moteur = 0; KI_Moteur = 0; Offset_gaz_reg = 0;
       
       // Mise à 0 des commandes inutilisées pour ce mode
@@ -438,14 +424,13 @@ Serial.println("   ");
       leddar_track = 0;
       stability_achieved = 0;
       slope_des_f = slope_aero_f;
-      arrondi_final = 0;
-      palier = 0;
+      flag_arrondi_final = 0;
       alti_offset = 0;
 
       // mise à 0 des flags utilisées pour le dauphin
-      arrondi_ready = 0;
-      arrondi_almost_ready = 0;
-      declenchement = 0;
+      flag_bonsai_start = 0;
+      flag_dauphin_end = 0;
+      flag_declenchement = 0;
       
       // mise à jour des consignes avec les valeurs courantes de la BNO
       yaw_des = BNO_lacet; 
@@ -463,7 +448,7 @@ Serial.println("   ");
     
     // mode utilisé pour la phase de stabilisation avant le dauphin
 
-    else if (remote._switch_C == 1 )//|| (remote._switch_C == 0 && declenchement == 0) ) 
+    else if (remote._switch_C == 1 || (remote._switch_C == 0 && flag_declenchement == 0) ) 
     { 
 
       regulation_state = 1;
@@ -473,22 +458,20 @@ Serial.println("   ");
       timer_mode = millis() - time_switch;  // timer_mode = 0 tt le temps.
 
       // paramètres mode stabilisé
-      K_Pitch = 0.75; KD_Pitch = 0.6; KI_Pitch = 10.0;
-      K_Roll = 3.5; KD_Roll = 0.4;
-      K_Yaw = 2.0; KD_Yaw = 0.3, KI_Yaw = 0.3;
-      //K_Yaw = 0.0; KD_Yaw = 0.0; KI_Yaw = 0.0;
+      KP_Pitch = 0.75; KD_Pitch = 0.6; KI_Pitch = 10.0;
+      KP_Roll = 3.5; KD_Roll = 0.4;
+      KP_Yaw = 2.0; KD_Yaw = 0.3, KI_Yaw = 0.3;
       KP_Moteur = 0.05; KI_Moteur = 0.2; Offset_gaz_reg = 0.0;
       
       // mise à 0 des commandes inutilisées
       remote._elevator = 0;
       Commande_dauphin = 0;
       Commande_I_slope = 0;
-      //Commande_I_yaw = 0;
       flap_state = 1;
       leddar_track = 0;
       slope_des_f = slope_aero_f;
       BNO_roll_f = BNO_roll;
-      first_dive = 1;
+      flag_first_dive = 1;
       v_wind_mean_memory = v_wind_mean;
       heading_to_target_lock = heading_to_target;
       flag_dauphin2 = 0;
@@ -512,7 +495,7 @@ Serial.println("   ");
 
       if( distance_to_target < distance_des+5.0 )
       {
-        declenchement = 1;
+        flag_declenchement = 1;
         alti_declenchement = GPS_pitot._z_gps;
         distance_declenchement = distance_to_target;
       }
@@ -555,7 +538,7 @@ Serial.println("   ");
 //        MODE BONZAI & ARRONDI FINAL        //
 ///////////////////////////////////////////////
 
-    else if (arrondi_ready == 1) 
+    else if (flag_bonsai_start == 1) 
     { 
 
       timer_mode = millis() - time_switch;  // timer_mode = 0 tt le temps.
@@ -563,15 +546,12 @@ Serial.println("   ");
       regulation_state = 4;
       
       // paramètres mode stabilisé
-      K_Pitch = 1.0; KD_Pitch = 0.4; KI_Pitch = 10;
-      K_Roll = 2.5; KD_Roll = 0.2;
-      K_Yaw = 1.0; KD_Yaw = 0.05; KI_Yaw = 0.3;
-      //K_Yaw = 0.0; KD_Yaw = 0.0; KI_Yaw = 0.0;
+      KP_Pitch = 1.0; KD_Pitch = 0.4; KI_Pitch = 10;
+      KP_Roll = 2.5; KD_Roll = 0.2;
+      KP_Yaw = 1.0; KD_Yaw = 0.05; KI_Yaw = 0.3;
       KP_Moteur = 0; KI_Moteur = 0; Offset_gaz_reg = 0.0;
-      //K_traj_lat = 3.0;
-      K_traj_lat = 0.0;
+      K_traj_lat = 3.0;
       
-
       // mise à 0 des commandes inutilisées et du gaz
       remote._elevator = 0;
       Commande_dauphin=0;
@@ -585,22 +565,15 @@ Serial.println("   ");
 
       hauteur_cabrage = HAUTEUR_CABRAGE;
 
-      hauteur_cabrage = 1.5;
-
       if(hauteur_leddar_corrigee < hauteur_cabrage)// && leddar._validity_flag==1 ) // phase pré-cabrage
       {
-        arrondi_final = 1;
+        flag_arrondi_final = 1;
       }
 
-      if(hauteur_leddar_corrigee < HAUTEUR_PALIER && leddar._validity_flag==1 ) // phase pré-cabrage
-      {
-        palier = 1;
-      }
-  
-      if( arrondi_final ) //cabrage final
+      if( flag_arrondi_final ) //cabrage final
       {
         
-        pitch_des = 0.8/K_Pitch*360.0;
+        pitch_des = 0.8/KP_Pitch*360.0;
         pitch_des_f = pitch_des;
         regulation_state = 5;
         thrust = 0.0;
@@ -650,14 +623,12 @@ Serial.println("   ");
       timer_mode = millis() - time_switch;  // timer_mode = 0 tt le temps.
 
       // paramètres mode dauphin
-      K_Pitch = 0; KD_Pitch = 0; KI_Pitch = 0;
-      K_Roll = 2.5; KD_Roll = 0.3;
-      K_Yaw = 2; KD_Yaw = 0.3; KI_Yaw = 0.3;
-      //K_Yaw = 0.0; KD_Yaw = 0.0; KI_Yaw = 0.0;
+      KP_Pitch = 0; KD_Pitch = 0; KI_Pitch = 0;
+      KP_Roll = 2.5; KD_Roll = 0.3;
+      KP_Yaw = 2; KD_Yaw = 0.3; KI_Yaw = 0.3;
       KP_Moteur = 0.05; KI_Moteur = 0.2; Offset_gaz_reg = 0.0;
       KI_slope = 0.6;
       K_traj = 2.0; K_traj_lat = 3.0;
-      K_traj = 0.0;
 
       // mises à 0 
       Commande_I_flaps = 0;
@@ -692,36 +663,16 @@ Serial.println("   ");
       
       distance_des = distance_from_alti(alti_,alti_declenchement,distance_declenchement,v_wind_mean_memory);
 
-      if(remote._switch_F == 0)
+      // Dauphin 1 et Dauphin 2
+      if(flag_dauphin2 == 1)
       {
-        slope_des = -60;
-      } else if(remote._switch_F == 1)
-      {
-        slope_des = -70;
+        slope_des = -penteGPS_from_aero(PENTE_AERO_DAUPHIN2,VITESSE_DES_DAUPHIN,v_wind_mean_memory)*RAD2DEG;
+        regulation_state = 3;
       } else
       {
-        if(remote._switch_D == 0)
-        {
-          slope_des = -80;
-        } else if(remote._switch_D == 1)
-        {
-          slope_des = -85;
-        } else
-        {
-          slope_des = -90;
-        }
-      }
-
-//      // Dauphin 1 et Dauphin 2
-//      if(flag_dauphin2 == 1)
-//      {
-//        slope_des = -penteGPS_from_aero(PENTE_AERO_DAUPHIN2,VITESSE_DES_DAUPHIN,v_wind_mean_memory)*RAD2DEG;
-//        regulation_state = 3;
-//      } else
-//      {
-//        slope_des = -penteGPS_from_aero(PENTE_AERO_DAUPHIN1,VITESSE_DES_DAUPHIN,v_wind_mean_memory)*RAD2DEG;
-//        regulation_state = 2;
-//      } 
+        slope_des = -penteGPS_from_aero(PENTE_AERO_DAUPHIN1,VITESSE_DES_DAUPHIN,v_wind_mean_memory)*RAD2DEG;
+        regulation_state = 2;
+      } 
 
       
       if(timer_mode<3000)
@@ -737,47 +688,46 @@ Serial.println("   ");
       Commande_I_slope = constrain(Commande_I_slope, -25, 25);
 
       pitch_des = slope_des + 20 + Commande_I_slope;
-      //pitch_des = constrain(pitch_des,-40,5);
+      pitch_des = constrain(pitch_des,-80,5);
       pitch_des_f = pitch_des;
 
 //////// pré-déclanchement de l'arrondi, l'arrondi sera fait à la prochaine oscillation
 
       if(hauteur_leddar_corrigee<HAUTEUR_BONZAI && leddar._validity_flag==1 && leddar_track == 1)
       {
-        arrondi_almost_ready = 1;
+        flag_dauphin_end = 1;
       }
 
 //////// Génération du dauphin
-float hist_width = 0.0;
 
       // Au premier plongeon on limite l'amplitude des flaps
-      if(first_dive == 1)
+      if(flag_first_dive == 1)
       {
         flaps_amplitude = 0.4;
+        pitch_commutation_prev_1 = pitch_des_f;
       } 
       else
       {
         flaps_amplitude = 0.7;
+        pitch_des_f = constrain(pitch_des_f, pitch_commutation_prev - 7.5, pitch_commutation_prev + 7.5);
       }
 
-      pitch_des_f = constrain(pitch_des_f, pitch_commutation_prev - 7.5, pitch_commutation_prev + 7.5);
-
       // loie de commutation
-      if (BNO_pitch > pitch_des_f + hist_width && flap_state!=-1 && BNO_wy > 0.0)
+      if (BNO_pitch > pitch_des_f && flap_state!=-1 && BNO_wy > 0.0)
       {
         flap_state=-1;
         pitch_commutation_prev_1 = pitch_des_f;
       } else if (BNO_pitch < pitch_des_f && flap_state!=1 && BNO_wy < 0.0)
       {
         flap_state=1;
-        first_dive = 0;
+        flag_first_dive = 0;
         pitch_commutation_prev = pitch_commutation_prev_1;
       }
 
       // condition d'arrêt du dauphin
-      if( BNO_pitch > (pitch_des_f) && arrondi_almost_ready==1 && BNO_wy > 0.0 ) // conditions réunies pour faire le bonzai
+      if( BNO_pitch > (pitch_des_f) && flag_dauphin_end==1 && BNO_wy > 0.0 ) // conditions réunies pour faire le bonzai
       {
-        arrondi_ready = 1;
+        flag_bonsai_start = 1;
         flap_state=0;
         pitch_des_f = BNO_pitch;
         // initialisation de l'action intégrale pour avoir une sortie de dauphin plus propre.
@@ -821,24 +771,19 @@ float hist_width = 0.0;
     
 /*****************Commande générale avec les paramètres définis pour les différents modes *********************/
 
-    roll_des = - K_Yaw * err_yaw_f
+    roll_des = - KP_Yaw * err_yaw_f
                - KD_Yaw * BNO_wz
                - Commande_I_yaw;
     
     // Commande correspondant au roll, télécommande + P roll + D roll + P yaw + D yaw
     Commande_Roll = K_Roll_remote * remote._aileron 
-                    + K_Roll * (BNO_roll-roll_des) / 360.0 
+                    + KP_Roll * (BNO_roll-roll_des) / 360.0 
                     + KD_Roll * BNO_wx  / 360.0 
                     + aileron_trim; 
-    //Commande_Roll = -Commande_Roll;
-
-//    Serial.print(K_Roll * (BNO_roll-roll_des) / 360.0 *10); Serial.print("   ");
-//    Serial.print(KD_Roll * BNO_wx  / 360.0 *10); Serial.print("   ");
-//    Serial.print(aileron_trim*10); Serial.print("   ");
 
     float saturation;
 
-    if(remote._switch_C!=0 || declenchement == 0)
+    if(remote._switch_C!=0 || flag_declenchement == 0)
     {
       saturation = 0.6;
     } else
@@ -849,9 +794,9 @@ float hist_width = 0.0;
     Commande_Roll = constrain(Commande_Roll,-saturation,saturation);
     //Commande_I_flaps = 0.5;
     // Commande correspondant au pitch
-    Commande_P_flaps = - K_Pitch * (BNO_pitch - pitch_des_f)  / 360.0;
+    Commande_P_flaps = - KP_Pitch * (BNO_pitch - pitch_des_f)  / 360.0;
 
-    if(arrondi_final!=1)
+    if(flag_arrondi_final!=1)
     {
       Commande_P_flaps = constrain(Commande_P_flaps,-0.2,0.3);
     }
@@ -890,21 +835,8 @@ float hist_width = 0.0;
     pwm_norm_R = constrain(pwm_norm_R,-1.0,1);
     pwm_norm_L = constrain(pwm_norm_L,-1,1.0);
 
-//    Serial.print(Commande_Roll*10); Serial.print("   ");
-//    Serial.print(Commande_Pitch*10); Serial.print("   ");
-//    Serial.print(Commande_dauphin*10); Serial.print("   ");
-//    Serial.print(flap_state*10); Serial.print("   ");
-//    Serial.print(-pwm_norm_R*10); Serial.print("   ");
-//    Serial.print(pwm_norm_L*10); Serial.print("   ");
-//
-//Serial.println("   ");
-    
     Servo_R.set_normalized_pwm(pwm_norm_R);
     Servo_L.set_normalized_pwm(pwm_norm_L);
-//
-//    Serial.print(remote._knob*3000.0); Serial.println("   ");
-//    Servo_R.set_pwm(remote._knob*3000.0);
-//    Servo_L.set_pwm(remote._knob*3000.0);
 
     Motor_Prop.set_normalized_pwm(pwm_norm_prop);
 
@@ -961,7 +893,7 @@ float hist_width = 0.0;
 
           dataFile.print(regulation_state); dataFile.print(";");
   
-          dataFile.print(remote._switch_F+10*remote._switch_D+100*remote._switch_C + declenchement*1000); dataFile.print(";");
+          dataFile.print(remote._switch_F+10*remote._switch_D+100*remote._switch_C + flag_declenchement*1000); dataFile.print(";");
 
           dataFile.print(longitudinal_distance*1000,0); dataFile.print(";");
           dataFile.print(lateral_distance*1000,0); dataFile.print(";");

@@ -45,13 +45,13 @@ bte_controller::bte_controller(HardwareSerial *controller_serial)
 
 /**** switchState retourne letat du switch: 1, 2, 3. ***/
 int bte_controller::switchState(int Sw, int a, int b, int c) {
-  if ( Sw == a )
+  if ( Sw <= a )
   {
     return 2;
   } else if ( Sw == b )
   {
     return 1;
-  } else if ( Sw == c )
+  } else if ( Sw >= c )
   {
     return 0;
   }
@@ -131,7 +131,6 @@ void bte_controller::update_controller(void)
             auxRoll = ( (DataRadio[19] - 140) * 256 + (DataRadio[20]) ) * 100.0 / 681 + 100 ;
           } else
           {
-
             auxRoll = ( (DataRadio[19] - 12) * 256 + (DataRadio[20]) ) * 100.0 / 681 + 100 ;
           }
 
@@ -144,7 +143,7 @@ void bte_controller::update_controller(void)
           }
           //auxSwitch_C = switchState(DataRadio[13], 57, 60, 62); //position de valeur du Switch et 3 possible valeurs
 
-          if (DataRadio[27] > 32)
+          if (DataRadio[27] >= 32)
           {
           //Serial.println(DataRadio[27]);
               auxSwitch_D = switchState(DataRadio[27], 33, 36, 38);
@@ -169,9 +168,9 @@ void bte_controller::update_controller(void)
           Collectif =  medianFilter( auxCollectif , CollectifHisto, BTE_CONTROLLER_NF);
           Pitch     =  medianFilter( auxPitch , PitchHisto, BTE_CONTROLLER_NF);
           Roll      =  medianFilter( auxRoll , RollHisto, BTE_CONTROLLER_NF);
-          Switch_C  =  medianFilter( auxSwitch_C , SwitchC_Histo, BTE_CONTROLLER_NF);
-          Switch_D  =  medianFilter( auxSwitch_D , SwitchD_Histo, BTE_CONTROLLER_NF);
-          Switch_F  =  medianFilter( auxSwitch_F , SwitchF_Histo, BTE_CONTROLLER_NF);
+          Switch_C  =  medianFilter( auxSwitch_C , SwitchC_Histo, BTE_CONTROLLER_NF_SWITCH);
+          Switch_D  =  medianFilter( auxSwitch_D , SwitchD_Histo, BTE_CONTROLLER_NF_SWITCH);
+          Switch_F  =  medianFilter( auxSwitch_F , SwitchF_Histo, BTE_CONTROLLER_NF_SWITCH);
 
           
           //avoidGazMax(Collectif);

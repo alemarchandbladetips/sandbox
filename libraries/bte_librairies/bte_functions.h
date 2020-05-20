@@ -41,7 +41,19 @@ void bte_HistoriqueN(float val, float A[], uint8_t N);
 
 void bte_send_in16_t(Stream &myport, int16_t *N);
 
+void bte_sendData_int16_t(Stream &myPort, uint8_t Ini, uint8_t Fin, int16_t *N, int NbData, bool verif);
+
 void bte_sendData_int16_t(Stream &myPort, uint8_t Ini, uint8_t Fin, int16_t *N, int NbData);
+
+bool bte_recep_int16_t(Stream &myPort, int NbData, uint8_t Ini, uint8_t Fin, int16_t *DATA, bool verif);
+
+void bte_sendData_int16_t(Stream &myPort, uint8_t Ini, uint8_t Fin, int16_t *N, int NbData);
+
+void bte_send_float(Stream &myPort, float *N);
+
+void bte_sendData_float(Stream &myPort, uint8_t Ini, uint8_t Fin, float *N, int NbData, bool verif);
+
+bool bte_recep_float(Stream &myPort, int NbData, uint8_t Ini, uint8_t Fin, float *DATA, bool verif);
 
 // fonction checksum SBG
 uint16_t bte_calcCRC(const void *pBuffer, uint16_t bufferSize);

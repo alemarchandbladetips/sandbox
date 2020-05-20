@@ -219,6 +219,22 @@ void bte_send_in16_t(Stream &myPort, int16_t *N)
    myPort.write( *( (uint8_t *) N + 1) );
 }
 
+void bte_sendData_int16_t(Stream &myPort, uint8_t Ini, uint8_t Fin, int16_t *N, int NbData, bool verif)
+{
+      myPort.write(Ini);
+      for (int i =0; i< NbData; i++)
+      {
+          bte_send_in16_t(myPort, N+i);
+      }
+      if (verif)
+      {
+        int16_t Checksum = bte_calcCRC(N, 2*NbData);
+        bte_send_in16_t(myPort, &Checksum); 
+      }
+      
+      myPort.write(Fin);
+}
+
 void bte_sendData_int16_t(Stream &myPort, uint8_t Ini, uint8_t Fin, int16_t *N, int NbData)
 {
       myPort.write(Ini);
@@ -229,4 +245,157 @@ void bte_sendData_int16_t(Stream &myPort, uint8_t Ini, uint8_t Fin, int16_t *N, 
       int16_t Checksum = bte_calcCRC(N, 2*NbData);
       bte_send_in16_t(myPort, &Checksum);
       myPort.write(Fin);
+}
+
+bool bte_recep_int16_t(Stream &myPort, int NbData, uint8_t Ini, uint8_t Fin, int16_t *DATA, bool verif)
+{    
+     int NbDataCRC = (verif)? 1 : 0;
+     uint8_t data_raw[2*(NbData+NbDataCRC)+1];
+     
+     if ( myPort.available() > (2*(NbData+NbDataCRC)+1) )
+      {  
+          if (myPort.read() == Ini)
+          {    
+              myPort.readBytes(data_raw,2*(NbData+NbDataCRC)+1);
+            
+                  if(data_raw[2*(NbData+NbDataCRC)] == Fin ) 
+                  {   
+                      int16_t val_int16;
+                      uint8_t *ptr_int16 = (uint8_t *)&val_int16;
+                      
+                      for (int i =0; i < NbData; i++) 
+                      {
+                          *ptr_int16 = data_raw[2*i];
+                          *(ptr_int16+1) = data_raw[2*i+1];
+                          DATA[i] =  val_int16;
+                          
+                       }
+                      if (verif)
+                      {
+                         uint16_t verifySum = bte_calcCRC( DATA,2*NbData );
+  
+                         uint16_t val_uint16;
+                         uint8_t *ptr_uint16 = (uint8_t *)&val_uint16;
+                          
+                         *ptr_uint16 = data_raw[2*NbData];
+                         *(ptr_uint16 +1) =  data_raw[2*NbData+1];
+                         if ( val_uint16 == verifySum )
+                         {
+                            return true;
+                         }
+                         else
+                         {
+                            return false;
+                         }               
+                      }
+                      else
+                      {
+                        return true;
+                      }
+                   }
+                   else
+                   {
+                      return false;
+                   }
+          }
+          else
+          {
+              return false;
+          }
+      }
+      else
+      {
+          return false;
+      }
+}
+
+void bte_send_float(Stream &myPort, float *N)
+{  
+   myPort.write( *( (uint8_t *) N) ); 
+   myPort.write( *( (uint8_t *) N + 1) );
+   myPort.write( *( (uint8_t *) N + 2) );
+   myPort.write( *( (uint8_t *) N + 3) );
+}
+
+void bte_sendData_float(Stream &myPort, uint8_t Ini, uint8_t Fin, float *N, int NbData, bool verif)
+{
+      myPort.write(Ini);
+      for (int i =0; i< NbData; i++)
+      {
+          bte_send_float(myPort, N+i);
+      }
+      if (verif)
+      {
+        int16_t Checksum = bte_calcCRC(N, 4*NbData);
+        bte_send_in16_t(myPort, &Checksum);
+      }
+      
+      myPort.write(Fin);
+}
+
+bool bte_recep_float(Stream &myPort, int NbData, uint8_t Ini, uint8_t Fin, float *DATA, bool verif)
+{    
+     int NbDataCRC = (verif)? 1 : 0;
+     uint8_t data_raw[4*(NbData)+2*(NbDataCRC)+1];
+     
+     if ( myPort.available() > ( 4*(NbData)+2*(NbDataCRC)+1) )
+     
+      {  
+          uint8_t temp_val = myPort.read();
+          if (temp_val == Ini)
+          {   
+              myPort.readBytes( data_raw, 4*(NbData)+2*(NbDataCRC)+1 );
+                   
+                  if( data_raw[4*(NbData)+2*(NbDataCRC)] == Fin ) 
+                  {   
+                      float val_float;
+                      uint8_t *ptr_float = (uint8_t *)&val_float;
+                      
+                      for (int i =0; i < NbData ;i++) 
+                      {
+                          *ptr_float     = data_raw[4*i];
+                          *(ptr_float+1) = data_raw[4*i+1];
+                          *(ptr_float+2) = data_raw[4*i+2];
+                          *(ptr_float+3) = data_raw[4*i+3];
+                          DATA[i]        = val_float;  
+                       }
+
+                      if (verif)
+                      { 
+                         uint16_t verifySum = bte_calcCRC( DATA,4*NbData );
+  
+                         uint16_t val_uint16;
+                         uint8_t *ptr_uint16 = (uint8_t *)&val_uint16;
+                         
+                         *ptr_uint16 = data_raw[4*NbData];
+                         *(ptr_uint16 +1) =  data_raw[4*NbData+1];
+                         
+                         if ( val_uint16 == verifySum )
+                         {
+                            return true;
+                         }
+                         else
+                         {
+                            return false;
+                         }               
+                      }
+                      else
+                      {
+                        return true;
+                      }
+                   }
+                   else
+                   {
+                      return false;
+                   }
+          }
+          else
+          {
+              return false;
+          }
+      }
+      else
+      {
+          return false;
+      }
 }

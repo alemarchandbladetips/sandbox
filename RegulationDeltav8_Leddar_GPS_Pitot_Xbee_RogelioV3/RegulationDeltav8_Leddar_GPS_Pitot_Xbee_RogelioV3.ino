@@ -385,7 +385,7 @@ Serial.println("   ");
 
     // retard de la pente désirée pour coller au retard du GPS.
     bte_HistoriqueVal(slope_des_f, slope_des_f_buffer, Ndata);
-    slope_des_f_delay = slope_des_f_buffer[0];
+    slope_des_f_delay = slope_des_f_buffer[50];
 
 /***************** Estimation de la distance à la cible et heading  *********************/
 
@@ -463,7 +463,7 @@ Serial.println("   ");
     
     // mode utilisé pour la phase de stabilisation avant le dauphin
 
-    else if (remote._switch_C == 1 || (remote._switch_C == 0 && declenchement == 0) ) 
+    else if (remote._switch_C == 1 )//|| (remote._switch_C == 0 && declenchement == 0) ) 
     { 
 
       regulation_state = 1;
@@ -492,8 +492,8 @@ Serial.println("   ");
       v_wind_mean_memory = v_wind_mean;
       heading_to_target_lock = heading_to_target;
       flag_dauphin2 = 0;
-      pitch_commutation_prev = -25;
-      pitch_commutation_prev_1 = -25;
+      pitch_commutation_prev = -50;
+      pitch_commutation_prev_1 = -50;
 
       // consignes de pitch et de vitesse
       
@@ -655,7 +655,7 @@ Serial.println("   ");
       K_Yaw = 2; KD_Yaw = 0.3; KI_Yaw = 0.3;
       //K_Yaw = 0.0; KD_Yaw = 0.0; KI_Yaw = 0.0;
       KP_Moteur = 0.05; KI_Moteur = 0.2; Offset_gaz_reg = 0.0;
-      KI_slope = 0.3;
+      KI_slope = 0.6;
       K_traj = 2.0; K_traj_lat = 3.0;
       K_traj = 0.0;
 
@@ -694,21 +694,21 @@ Serial.println("   ");
 
       if(remote._switch_F == 0)
       {
-        slope_des = -40;
+        slope_des = -60;
       } else if(remote._switch_F == 1)
       {
-        slope_des = -45;
+        slope_des = -70;
       } else
       {
         if(remote._switch_D == 0)
         {
-          slope_des = -50;
+          slope_des = -80;
         } else if(remote._switch_D == 1)
         {
-          slope_des = -55;
+          slope_des = -85;
         } else
         {
-          slope_des = -60;
+          slope_des = -90;
         }
       }
 
@@ -733,11 +733,11 @@ Serial.println("   ");
 
       slope_des_f = (1 - alpha_slope) * slope_des_f + alpha_slope * slope_des; 
 
-      Commande_I_slope += KI_slope * (slope_des_f_delay - slope_ground_mean) * dt_flt; 
+      Commande_I_slope += KI_slope * (slope_des_f_delay - slope_aero_f) * dt_flt; 
       Commande_I_slope = constrain(Commande_I_slope, -25, 25);
 
       pitch_des = slope_des + 20 + Commande_I_slope;
-      pitch_des = constrain(pitch_des,-40,5);
+      //pitch_des = constrain(pitch_des,-40,5);
       pitch_des_f = pitch_des;
 
 //////// pré-déclanchement de l'arrondi, l'arrondi sera fait à la prochaine oscillation
@@ -957,7 +957,7 @@ float hist_width = 0.0;
   
           dataFile.print(slope_des_f_delay*10,0); dataFile.print(";");
           dataFile.print(distance_des*1000,0); dataFile.print(";");
-          dataFile.print(slope_ground_mean*10,0); dataFile.print(";");
+          dataFile.print(slope_aero_f*10,0); dataFile.print(";");
 
           dataFile.print(regulation_state); dataFile.print(";");
   

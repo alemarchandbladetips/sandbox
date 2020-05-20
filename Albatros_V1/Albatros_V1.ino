@@ -12,7 +12,7 @@
 #include "bte_servo.h"
 #include "bte_motor.h"
 #include "bte_controller.h"
-#include "bte_GPS_pitot.h"
+#include "bte_GPS.h"
 #include "bte_leddar.h"
 
 /******* constantes fonction distance/altitude **************/
@@ -62,7 +62,7 @@ float aileron_trim = 0.0;
 
 /******* GPS & pitot **************/
 
-bte_GPS_pitot GPS_pitot = bte_GPS_pitot(&Serial2);
+bte_GPS GPS = bte_GPS(&Serial2);
 
 float v_pitot_mean;
 float v_pitot_buffer[100];
@@ -124,6 +124,11 @@ int16_t DataXB2[10];
 int16_t DataXB3[3];
 uint8_t count_XB = 1;
 
+float DataXB_float[5];
+uint8_t NbDataXB_float = 5;
+
+uint8_t GPS_init_validated = 0;
+
 /******* Variables et paramètres des régulation **************/
 
 const float dt_flt = 0.01;
@@ -131,7 +136,7 @@ uint8_t regulation_state;
 
 //// régulation d'attitude et vitesse
 // params
-float K_Pitch_remote = 0.5, K_Pitch = 0, KD_Pitch = 0, KI_Pitch = 0;
+float K_Pitch_remote = 0.5, K_Pitch = 0, KD_Pitch = 0, KI_Pitch = 0, K_alti = 0;
 float K_Roll_remote = -0.5, K_Roll = 0, KD_Roll = 0.2;
 float K_Yaw = 0, KD_Yaw = 0, KI_Yaw = 0;
 float KP_Moteur = 0, KI_Moteur = 0, Offset_gaz_reg = 0;
@@ -169,8 +174,8 @@ float Commande_I_slope, KI_slope;
 
 // Asservissement de position
 float gps_target[2] = {0,0};
-float gps_target0[2] = {300,300};
-float gps_target1[2] = {-300,-300};
+float gps_target0[2] = {150,150};
+float gps_target1[2] = {-150,-150};
 float heading_to_target, heading_to_target_lock, yaw_to_target_lock_offset, distance_to_target;
 uint8_t declenchement = 0;
 uint8_t current_target = 0;
@@ -197,6 +202,7 @@ void setup()
   /******* ouverture des ports série **************/
   
   Serial.begin(115200);
+  XBEE_SERIAL.begin(115200);
 
   /******* Initialisation Servo et Moteurs ************/
   
@@ -278,18 +284,9 @@ void loop()
   leddar.read_leddar();
 
   // mise à jour des valeurs GPS et pitot
-  GPS_pitot.read_GPS_pitot();
+  GPS.read_GPS();
 
-  if(first_GPS_data != 1 && GPS_pitot._speed_pitot>60)
-  {
-    Servo_L.set_normalized_pwm(-0.5);
-  }
-  if(first_GPS_data != 1 && GPS_pitot._speed_pitot<-60)
-  {
-    Servo_L.set_normalized_pwm(0.5);
-  }
-
-  if(GPS_pitot._x_gps != 0.0 && first_GPS_data != 1)
+  if(GPS._x_gps != 0.0 && first_GPS_data != 1)
   {
     // Battement des 2 ailes pour valider la prise de référence du GPS
     first_GPS_data = 1;
@@ -332,9 +329,9 @@ void loop()
     bte_HistoriqueVal(produit_scalaire, scalar_prod_buffer, Ndata);
     bte_Mean(scalar_prod_buffer, &scalar_prod_mean, Ndata, Ndata-1);
 
-    hauteur_leddar_corrigee = hauteur_leddar*scalar_prod_mean + 0.5*GPS_pitot._vz_gps;
+    hauteur_leddar_corrigee = hauteur_leddar*scalar_prod_mean + 0.5*GPS._vz_gps;
     
-    if(abs(hauteur_leddar_corrigee-GPS_pitot._z_gps)>30.0)
+    if(abs(hauteur_leddar_corrigee-GPS._z_gps)>30.0)
     {
       leddar._validity_flag = 0;
     }
@@ -349,6 +346,14 @@ void loop()
 
 /***************** Estimation des angles de descente, vitesse pitot filtrée...  *********************/
 //
+
+//    Serial.print(GPS._x_gps ); Serial.print("   ");
+//    Serial.print(GPS._lat_0_int ); Serial.print("   ");
+//    Serial.print(GPS._lat_0_dec ); Serial.print("   ");
+//    Serial.print(GPS._lon_0_int ); Serial.print("   ");
+//    Serial.print(GPS._lon_0_dec ); Serial.print("   ");
+//    Serial.print(GPS._alti_0 ); Serial.print("   ");
+
     Serial.print(remote._aileron ); Serial.print("   ");
     Serial.print(remote._elevator ); Serial.print("   ");
     Serial.print(remote._thrust ); Serial.print("   ");
@@ -376,42 +381,15 @@ Serial.println("   ");
       gps_target[0] = gps_target1[0];
       gps_target[1] = gps_target1[1];
     }
-    
-    // filtrage moyen de la vitesse pitot sur 1s, utilisé pour la régulation de vitesse en mode dauphin
-    bte_HistoriqueVal(GPS_pitot._speed_pitot, v_pitot_buffer, Ndata);
-    bte_Mean(v_pitot_buffer, &v_pitot_mean, Ndata, Ndata-1);
-
-    // vitesse pitot projeté sur le plan horizontal et filtré
-    bte_HistoriqueVal(GPS_pitot._speed_pitot*cosf(BNO_pitch*DEG2RAD), vh_pitot_buffer, Ndata);
-    bte_Mean(vh_pitot_buffer, &vh_pitot_mean, Ndata, Ndata-1);
-
-    // estimation de la vitesse du vent dans l'axe de l'attérissage. utilisé a la fin du mode stabilisé pour choisir la pente de descente et adapter le point de déclanchement du dauphin
-    v_wind = v_pitot_buffer[Ndata-31] - sqrtf(GPS_pitot._vx_gps*GPS_pitot._vx_gps + GPS_pitot._vy_gps*GPS_pitot._vy_gps +GPS_pitot._vz_gps*GPS_pitot._vz_gps);
-    bte_HistoriqueVal(v_wind, v_wind_buffer, Ndata);
-    bte_Mean(v_wind_buffer, &v_wind_mean, Ndata, Ndata-1);
-
-    // calcul de la pente aéro
-    slope_aero = atan2f(GPS_pitot._vz_gps,GPS_pitot._speed_pitot*cosf(BNO_pitch*DEG2RAD))*RAD2DEG;
-    slope_aero_f = atan2f(GPS_pitot._vz_gps,vh_pitot_mean)*RAD2DEG;
-
-    // calcul de la pente réelle + filtrage
-    v_horizontal_gps = sqrtf(GPS_pitot._vx_gps*GPS_pitot._vx_gps + GPS_pitot._vy_gps*GPS_pitot._vy_gps);
-    slope_ground = atan2f(GPS_pitot._vz_gps,v_horizontal_gps)*RAD2DEG;
-    bte_HistoriqueVal(slope_ground, slope_ground_buffer, Ndata);
-    bte_Mean(slope_ground_buffer, &slope_ground_mean, Ndata, Ndata-1);
-
-    // retard de la pente désirée pour coller au retard du GPS.
-    bte_HistoriqueVal(slope_des_f, slope_des_f_buffer, Ndata);
-    slope_des_f_delay = slope_des_f_buffer[0];
 
 /***************** Estimation de la distance à la cible et heading  *********************/
 
     // distance à la cible
-    distance_to_target = sqrtf( (GPS_pitot._x_gps - gps_target[0])*(GPS_pitot._x_gps - gps_target[0]) + (GPS_pitot._y_gps - gps_target[1])*(GPS_pitot._y_gps - gps_target[1]));
+    distance_to_target = sqrtf( (GPS._x_gps - gps_target[0])*(GPS._x_gps - gps_target[0]) + (GPS._y_gps - gps_target[1])*(GPS._y_gps - gps_target[1]));
     
     // Cap menant à la cible
-    heading_to_target = atan2f((GPS_pitot._x_gps - gps_target[0]),-(GPS_pitot._y_gps - gps_target[1]))*RAD2DEG;
-    heading = atan2f(-GPS_pitot._vx_gps,GPS_pitot._vy_gps)*RAD2DEG;
+    heading_to_target = atan2f((GPS._x_gps - gps_target[0]),-(GPS._y_gps - gps_target[1]))*RAD2DEG;
+    heading = atan2f(-GPS._vx_gps,GPS._vy_gps)*RAD2DEG;
 
     longitudinal_distance = distance_to_target*cos((heading_to_target-heading_to_target_lock)*DEG2RAD);
     lateral_distance = distance_to_target*sin((heading_to_target-heading_to_target_lock)*DEG2RAD);
@@ -433,7 +411,7 @@ Serial.println("   ");
     
     // mode utilisé pour la phase de stabilisation avant le dauphin
 
-    if (remote._switch_C == 1 ) 
+    if (remote._switch_C != 2 ) 
     { 
 
       regulation_state = 1;
@@ -443,30 +421,62 @@ Serial.println("   ");
       timer_mode = millis() - time_switch;  // timer_mode = 0 tt le temps.
 
       // paramètres mode stabilisé
-      K_Pitch = 0.75; KD_Pitch = 0.6; KI_Pitch = 10.0;
-      K_Roll = 3.5; KD_Roll = 0.4;
-      K_Yaw = 2.0; KD_Yaw = 0.3, KI_Yaw = 0.3;
+      K_Pitch = 1.6; KD_Pitch = 0.8; KI_Pitch = 15.0;
+      K_Roll = 7; KD_Roll = 0.4;
+      K_Yaw = 1.0; KD_Yaw = 0.0, KI_Yaw = 0.15;
+      //K_Yaw = 0.0; KD_Yaw = 0.0, KI_Yaw = 0.0;
       KP_Moteur = 0.05; KI_Moteur = 0.2; Offset_gaz_reg = 0.0;
 
       // consignes de pitch et de vitesse
+
+      if(remote._switch_F ==0)
+      {
+        K_alti = 0.5;
+      } else if(remote._switch_F ==1)
+      {
+        K_alti = 1.0;
+      } else
+      {
+        K_alti = 2.0;
+      }
       
-      pitch_des = alti_ref-GPS_pitot._z_gps + 5;
+      pitch_des = K_alti*(alti_ref-GPS._z_gps) + 20;
       
       vitesse_des = 5;
       
       yaw_des = heading_to_target;
 
+      if(remote._switch_D ==0)
+      {
+        KD_Pitch = 0.0;
+      } else if(remote._switch_D ==1)
+      {
+        KD_Pitch = 0.4;
+      } else
+      {
+        KD_Pitch = 0.8;
+      }
+
+      if(remote._switch_C != 0)
+      {
+        K_Yaw = 0;
+        KI_Yaw = 0;
+        KD_Yaw = 0;
+      }
+
 //////// Régulation de vitesse
 
-      Commande_I_Moteur += -KI_Moteur * (v_horizontal_gps - vitesse_des) * dt_flt;
-      Commande_I_Moteur = constrain(Commande_I_Moteur, 0, 0.5); // sat = 200
-    
-      Commande_KP_Moteur = -KP_Moteur * (v_horizontal_gps - vitesse_des);
-      Commande_KP_Moteur = constrain(Commande_KP_Moteur, -0.5, 0.5);
-    
-      thrust = Offset_gaz_reg + Commande_KP_Moteur + Commande_I_Moteur;
-    
-      thrust = constrain(thrust, 0, 1);
+//      Commande_I_Moteur += -KI_Moteur * (v_horizontal_gps - vitesse_des) * dt_flt;
+//      Commande_I_Moteur = constrain(Commande_I_Moteur, 0, 0.5); // sat = 200
+//    
+//      Commande_KP_Moteur = -KP_Moteur * (v_horizontal_gps - vitesse_des);
+//      Commande_KP_Moteur = constrain(Commande_KP_Moteur, -0.5, 0.5);
+//    
+//      thrust = Offset_gaz_reg + Commande_KP_Moteur + Commande_I_Moteur;
+//    
+//      thrust = constrain(thrust, 0, 1);
+
+      thrust = 0.35;
 
 //////// Régulation de pitch
 
@@ -480,7 +490,7 @@ Serial.println("   ");
       Commande_I_yaw += KI_Yaw * err_yaw_f * dt_flt / 360.0;
       Commande_I_yaw = constrain(Commande_I_yaw, -10,10);
 
-      if(current_target == 0 && distance_to_target < 50.0)
+      if(current_target == 0 && distance_to_target < 20.0)
       {
         current_target = 1;
       } else if (current_target != 0 && distance_to_target < 50.0)
@@ -512,7 +522,8 @@ Serial.println("   ");
       Commande_I_flaps = 0;
       Commande_I_Moteur = 0;
       Commande_I_yaw = 0;
-      alti_ref = GPS_pitot._z_gps;
+      alti_ref = GPS._z_gps;
+      yaw_des = BNO_lacet;
     }
 
 ////////////////////////////////////////////
@@ -522,11 +533,18 @@ Serial.println("   ");
     
 /*****************Commande générale avec les paramètres définis pour les différents modes *********************/
 
-    roll_des = - K_Yaw * err_yaw_f
-               - KD_Yaw * BNO_wz
-               - Commande_I_yaw;
+    if(abs(err_yaw_f)<90 || remote._switch_C != 0)
+    {
+      roll_des = - K_Yaw * err_yaw_f
+                 - KD_Yaw * BNO_wz
+                 - Commande_I_yaw;
+    } else
+    {
+      roll_des = 20.0;
+      Commande_I_yaw = 0;
+    }
 
-    roll_des = constrain(roll_des,-15,15);
+    roll_des = constrain(roll_des,-20,20);
     
     // Commande correspondant au roll, télécommande + P roll + D roll + P yaw + D yaw
     Commande_Roll = - K_Roll_remote * remote._aileron 
@@ -548,7 +566,7 @@ Serial.println("   ");
     Commande_Roll = constrain(Commande_Roll,-saturation,saturation);
     
     // Commande correspondant au pitch
-    Commande_P_flaps = - K_Pitch * (BNO_pitch - pitch_des_f)  / 360.0;
+    Commande_P_flaps = - K_Pitch * (BNO_pitch - pitch_des)  / 360.0;
     Commande_D_flaps = - KD_Pitch * BNO_wy  / 360.0;
     Commande_Pitch = - K_Pitch_remote * remote._elevator 
                       + Commande_dauphin  
@@ -586,7 +604,6 @@ Serial.println("   ");
     Servo_R.set_normalized_pwm(pwm_norm_R);
     Servo_L.set_normalized_pwm(pwm_norm_L);
 
-    pwm_norm_prop = 0;
     Motor_Prop.set_normalized_pwm(pwm_norm_prop);
 
 /*********** Log sur la carte SD ***********/
@@ -618,13 +635,13 @@ Serial.println("   ");
           dataFile.print(pitch_des * 10, 0); dataFile.print(";");
           dataFile.print(roll_des * 10, 0); dataFile.print(";");
   
-          dataFile.print(GPS_pitot._x_gps*100.0, 0); dataFile.print(";");
-          dataFile.print(GPS_pitot._y_gps*100.0, 0); dataFile.print(";");
-          dataFile.print(GPS_pitot._z_gps*100.0, 0); dataFile.print(";");
+          dataFile.print(GPS._x_gps*100.0, 0); dataFile.print(";");
+          dataFile.print(GPS._y_gps*100.0, 0); dataFile.print(";");
+          dataFile.print(GPS._z_gps*100.0, 0); dataFile.print(";");
 
-          dataFile.print(GPS_pitot._vx_gps*100.0, 0); dataFile.print(";");
-          dataFile.print(GPS_pitot._vy_gps*100.0, 0); dataFile.print(";");
-          dataFile.print(GPS_pitot._vz_gps*100.0, 0); dataFile.print(";");
+          dataFile.print(GPS._vx_gps*100.0, 0); dataFile.print(";");
+          dataFile.print(GPS._vy_gps*100.0, 0); dataFile.print(";");
+          dataFile.print(GPS._vz_gps*100.0, 0); dataFile.print(";");
   
           dataFile.print(pwm_norm_R*1000.0,0); dataFile.print(";");
           dataFile.print(pwm_norm_L*1000.0,0); dataFile.print(";");
@@ -636,6 +653,8 @@ Serial.println("   ");
           dataFile.print(distance_to_target*1000, 0); dataFile.print(";");
 
           dataFile.print(remote._switch_F+10*remote._switch_D+100*remote._switch_C + declenchement*1000); dataFile.print(";");
+
+          dataFile.print(remote._knob, 0); dataFile.print(";");
           
   
           dataFile.println(" "); // gaffe à la dernière ligne
@@ -652,83 +671,44 @@ Serial.println("   ");
     Switch_C_previous = remote._switch_C;
 
       /**********************Envoi vers PC Station******************************/
-    
-    DataXB[0] = (int16_t)(BNO_roll/180.0*32768);
-    DataXB[1] = (int16_t)(BNO_pitch/180.0*32768);
-    DataXB[2] = (int16_t)(BNO_lacet/180.0*32768);
-    
-    DataXB[3] = (int16_t)(constrain(GPS_pitot._x_gps,-499,500)/500.0*32768);
-    DataXB[4] = (int16_t)(constrain(GPS_pitot._y_gps,-499,500)/500.0*32768);
-    DataXB[5] = (int16_t)(constrain(GPS_pitot._z_gps,-499,500)/500.0*32768);
-    
-    DataXB[6] = (int16_t)(constrain(GPS_pitot._vx_gps,-49,50)/50.0*32768);
-    DataXB[7] = (int16_t)(constrain(GPS_pitot._vy_gps,-49,50)/50.0*32768);
-    DataXB[8] = (int16_t)(constrain(GPS_pitot._vz_gps,-49,50)/50.0*32768);
 
-    //Envoi des données vers le PC
-    
-        XBEE_SERIAL.write(137);
-        for (int i = 0; i < NbDataXB ; i++)
-        {
-            bte_send_in16_t(XBEE_SERIAL, DataXB + i);
-        }
-        
-        XBEE_SERIAL.write(173);
+    if(XBEE_SERIAL.available())
+    {
+      GPS_init_validated = XBEE_SERIAL.read();
+    }
 
-    
+    if(GPS_init_validated==1)
+    {
+      //Serial.println("position");
+      DataXB[0] = (int16_t)(BNO_roll/180.0*32768);
+      DataXB[1] = (int16_t)(BNO_pitch/180.0*32768);
+      DataXB[2] = (int16_t)(BNO_lacet/180.0*32768);
+      
+      DataXB[3] = (int16_t)(constrain(GPS._x_gps,-499,500)/500.0*32768);
+      DataXB[4] = (int16_t)(constrain(GPS._y_gps,-499,500)/500.0*32768);
+      DataXB[5] = (int16_t)(constrain(GPS._z_gps,-499,500)/500.0*32768);
+      
+      DataXB[6] = (int16_t)(constrain(GPS._vx_gps,-49,50)/50.0*32768);
+      DataXB[7] = (int16_t)(constrain(GPS._vy_gps,-49,50)/50.0*32768);
+      DataXB[8] = (int16_t)(constrain(GPS._vz_gps,-49,50)/50.0*32768);
+  
+      //Envoi des données vers le PC
+      bte_sendData_int16_t(XBEE_SERIAL, 137, 173, DataXB, NbDataXB);
+
+    } else
+    {
+      //Serial.println("initialisation");
+      DataXB_float[0] = GPS._lat_0_int;
+      DataXB_float[1] = GPS._lat_0_dec;
+      DataXB_float[2] = GPS._lon_0_int;
+      DataXB_float[3] = GPS._lon_0_dec;
+      DataXB_float[4] = GPS._alti_0;
+      
+      bte_sendData_float(XBEE_SERIAL, 137, 173, DataXB_float, NbDataXB_float, 0);
+    }
+
   } // fin de boucle à 100 hz
 }
-
-float penteGPS_from_aero(float pente_aero, float vitesse_aero, float vitesse_vent)
-{
-  return atan2(vitesse_aero*sin(pente_aero),vitesse_aero*cos(pente_aero)-vitesse_vent);
-}
-
-float distance_from_alti(float alti, float alti0, float distance0, float wind_speed)
-{
-  float distance_des_;
-  
-  if (alti0-alti<5.0)
-  {
-    distance_des_ = distance0 - (distance0-distance_from_alti_raw(alti0-10, wind_speed))/2 * (1/3.333) * (alti0-alti);
-  } else if (alti0-alti<10.0)
-  {
-    distance_des_ = distance0 - (distance0-distance_from_alti_raw(alti0-10, wind_speed))/2 * (1+1/6.667*(alti0-3.333-alti)) ;
-  } else
-  {
-    distance_des_ = distance_from_alti_raw(alti, wind_speed);
-  }
-  
-  return distance_des_;
-}
-
-float distance_from_alti_raw(float alti, float wind_speed)
-{
-
-  float pente_dauphin1, pente_dauphin2, pente_dauphin2_1, pente_dauphin2_2,distance_des_;
-
-  pente_dauphin1 = penteGPS_from_aero(PENTE_AERO_DAUPHIN1,VITESSE_DES_DAUPHIN,wind_speed);
-  pente_dauphin2 = penteGPS_from_aero(PENTE_AERO_DAUPHIN2,VITESSE_DES_DAUPHIN,wind_speed);
-  pente_dauphin2_1 = pente_dauphin2 + 4.0/5.0*(pente_dauphin1-pente_dauphin2);
-  pente_dauphin2_2 = pente_dauphin2 + 1.0/5.0*(pente_dauphin1-pente_dauphin2);
-    
-  if (alti < HAUTEUR_BONZAI)
-  {
-    distance_des_ = (LONGUEUR_BONZAI-TEMPS_BONZAI*wind_speed)*(alti/HAUTEUR_BONZAI);
-  } else if (alti < HAUTEUR_DAUPHIN2_2)
-  {
-    distance_des_ = (alti-HAUTEUR_BONZAI)/tan(pente_dauphin2_2) + (LONGUEUR_BONZAI-TEMPS_BONZAI*wind_speed);
-  } else if (alti < HAUTEUR_DAUPHIN2)
-  {
-    distance_des_ = (alti-HAUTEUR_DAUPHIN2_2)/tan(pente_dauphin2_1) + (HAUTEUR_DAUPHIN2_2-HAUTEUR_BONZAI)/tan(pente_dauphin2_2) + (LONGUEUR_BONZAI-TEMPS_BONZAI*wind_speed);
-  } else
-  {
-    distance_des_ = (alti-HAUTEUR_DAUPHIN2)/tan(pente_dauphin1) + (HAUTEUR_DAUPHIN2-HAUTEUR_DAUPHIN2_2)/tan(pente_dauphin2_1) + (HAUTEUR_DAUPHIN2_2-HAUTEUR_BONZAI)/tan(pente_dauphin2_2) + (LONGUEUR_BONZAI-TEMPS_BONZAI*wind_speed);
-  }
-
-  return distance_des_;
-}
-
 
 void checkExist(void)
 {

@@ -6,6 +6,7 @@
 
 #define BTE_CONTROLLER_NB_DATA_RADIO 32
 #define BTE_CONTROLLER_NF 3
+#define BTE_CONTROLLER_NF_SWITCH 5
 
 class bte_controller
 {
@@ -79,10 +80,10 @@ class bte_controller
   uint8_t CollectifHisto[BTE_CONTROLLER_NF];
   uint8_t PitchHisto[BTE_CONTROLLER_NF];
   uint8_t RollHisto[BTE_CONTROLLER_NF];
-  uint8_t SwitchC_Histo[BTE_CONTROLLER_NF];
-  uint8_t SwitchD_Histo[BTE_CONTROLLER_NF];
-  uint8_t SwitchF_Histo[BTE_CONTROLLER_NF];
-  uint8_t Switch_Histo[BTE_CONTROLLER_NF];
+  uint8_t SwitchC_Histo[BTE_CONTROLLER_NF_SWITCH];
+  uint8_t SwitchD_Histo[BTE_CONTROLLER_NF_SWITCH];
+  uint8_t SwitchF_Histo[BTE_CONTROLLER_NF_SWITCH];
+  uint8_t Switch_Histo[BTE_CONTROLLER_NF_SWITCH];
 
 };
 

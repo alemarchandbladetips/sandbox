@@ -68,6 +68,8 @@ float local_Speed_Avion=0;
 float local_Speed_Avion_med=0;
 float V[20]= {0};
 
+uint32_t time_tmp;
+
 void setup() {
   
   Serial.begin(115200);
@@ -367,14 +369,7 @@ void loop() {
   if (dt > DT_TRANSMISSION)
   {
 
-    Serial.print(NED_coordinates_transmit[0]*100.0); Serial.print(" ");
-    Serial.print(NED_coordinates_transmit[1]*100.0); Serial.print(" ");
-    Serial.print(NED_coordinates_transmit[2]*100.0); Serial.print(" ");
-    Serial.print(NED_coordinates_offset[0]*100.0); Serial.print(" ");
-    Serial.print(NED_coordinates_offset[1]*100.0); Serial.print(" ");
-    Serial.print(NED_coordinates_offset[2]*100.0); Serial.print(" ");
-    Serial.print(GPS_mode_transmit); Serial.println(" ");
-
+    time_tmp = micros();
     temps_transmission += dt;
     
     if(transmit_raw){ myserial.write(PACKET_START); } // starting byte
@@ -401,8 +396,32 @@ void loop() {
       }
     }
 
-    // DOP
-    buffer_float = local_Speed_Avion_med;
+    // Latitude et ongitude initiale
+    buffer_float = lat_0_int;
+    if(print_data){ Serial.print(buffer_float); Serial.print(" ");}
+    for (j = 0; j < 4; j++)
+    {
+      if (transmit_raw) { myserial.write(ptr_buffer[j]); }
+    }
+    buffer_float = lat_0_dec;
+    if(print_data){ Serial.print(buffer_float); Serial.print(" ");}
+    for (j = 0; j < 4; j++)
+    {
+      if (transmit_raw) { myserial.write(ptr_buffer[j]); }
+    }
+    buffer_float = lon_0_int;
+    if(print_data){ Serial.print(buffer_float); Serial.print(" ");}
+    for (j = 0; j < 4; j++)
+    {
+      if (transmit_raw) { myserial.write(ptr_buffer[j]); }
+    }
+    buffer_float = lon_0_dec;
+    if(print_data){ Serial.print(buffer_float); Serial.print(" ");}
+    for (j = 0; j < 4; j++)
+    {
+      if (transmit_raw) { myserial.write(ptr_buffer[j]); }
+    }
+    buffer_float = alt_0;
     if(print_data){ Serial.print(buffer_float); Serial.print(" ");}
     for (j = 0; j < 4; j++)
     {
@@ -419,6 +438,8 @@ void loop() {
 
     if(transmit_raw){ myserial.write(PACKET_STOP); } // ending byte
     transmition_ready = 0;
+    
+    //Serial.println(micros()-time_tmp);
   }
 
   // FIN GPS CODE
@@ -426,19 +447,6 @@ void loop() {
   //Serial.println("OK");
   
   dt =millis() - temps;
-  if (dt > TEMPS_EXEC)
-  {   
-      temps += dt;
-      
-
-      dPression = SDP3x.getdP_SDP3X();
-      local_Speed_Avion = (dPression < 0 )? -1.5*sqrt(-dPression) : 1.5*sqrt(dPression) ;
-      local_Speed_Avion_med =  medianFilter(local_Speed_Avion, V, 11);
-      
-      //Serial.print( local_Speed_Avion_med );Serial.print("\t");
-      //Serial.println( local_Speed_Avion );
-    
-  }
 
 }
 

@@ -124,6 +124,7 @@ int8_t flag_dauphin_end, flag_bonsai_start, flag_leddar_track, flag_arrondi_fina
 // params
 const float K_Pitch_remote = 0.6;
 float KP_Pitch, KD_Pitch, KI_Pitch;
+float Commande_I_flaps_sat;
 const float K_Roll_remote = -0.4;
 float KP_Roll, KD_Roll;
 float KP_Yaw, KD_Yaw, KI_Yaw;
@@ -472,6 +473,7 @@ void loop()
 
       // paramètres mode stabilisé
       KP_Pitch = 0.75; KD_Pitch = 0.6; KI_Pitch = 10.0;
+      Commande_I_flaps_sat = 0.2;
       KP_Roll = 3.5; KD_Roll = 0.4;
       KP_Yaw = 2.0; KD_Yaw = 0.3, KI_Yaw = 0.3;
       KP_Moteur = 0.05; KI_Moteur = 0.2;
@@ -554,6 +556,7 @@ void loop()
       
       // paramètres mode stabilisé
       KP_Pitch = 1.0; KD_Pitch = 0.4; KI_Pitch = 10;
+      Commande_I_flaps_sat = 0.1;
       KP_Roll = 2.5; KD_Roll = 0.2;
       KP_Yaw = 1.0; KD_Yaw = 0.05; KI_Yaw = 0.3;
       KP_Moteur = 0; KI_Moteur = 0;
@@ -792,7 +795,7 @@ void loop()
     
     // Intégrateur des flaps pour régulation du pitch
     Commande_I_flaps += -KI_Pitch * (BNO_pitch - pitch_des_f) * dt_flt / 360.0; // += addition de la valeur précédente
-    Commande_I_flaps = constrain(Commande_I_flaps, -0.2, 0.2);
+    Commande_I_flaps = constrain(Commande_I_flaps, -Commande_I_flaps_sat, Commande_I_flaps_sat);
 
     // proportionelle
     Commande_P_flaps = - KP_Pitch * (BNO_pitch - pitch_des_f)  / 360.0;

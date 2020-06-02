@@ -354,13 +354,13 @@ void loop()
 //    Serial.print(GPS._lon_0_dec ); Serial.print("   ");
 //    Serial.print(GPS._alti_0 ); Serial.print("   ");
 
-    Serial.print(remote._aileron ); Serial.print("   ");
-    Serial.print(remote._elevator ); Serial.print("   ");
-    Serial.print(remote._thrust ); Serial.print("   ");
-    Serial.print(remote._switch_C ); Serial.print("   ");
-    Serial.print(remote._switch_F ); Serial.print("   ");
-    Serial.print(remote._switch_D ); Serial.print("   ");
-    Serial.print(remote._knob ); Serial.print("   ");
+//    Serial.print(remote._aileron ); Serial.print("   ");
+//    Serial.print(remote._elevator ); Serial.print("   ");
+//    Serial.print(remote._thrust ); Serial.print("   ");
+//    Serial.print(remote._switch_C ); Serial.print("   ");
+//    Serial.print(remote._switch_F ); Serial.print("   ");
+//    Serial.print(remote._switch_D ); Serial.print("   ");
+//    Serial.print(remote._knob ); Serial.print("   ");
     //Serial.print(produit_scalaire*10); Serial.print("   ");
 
 //    Serial.print(BNO_wx); Serial.print("   ");
@@ -370,7 +370,7 @@ void loop()
 //    Serial.print(BNO_roll); Serial.print("   ");
 //    Serial.print(BNO_pitch); Serial.print("   ");
 //    Serial.print(BNO_lacet); Serial.print("   ");
-Serial.println("   ");
+//Serial.println("   ");
 
     if(current_target == 0 )
     {
@@ -671,40 +671,58 @@ Serial.println("   ");
     Switch_C_previous = remote._switch_C;
 
       /**********************Envoi vers PC Station******************************/
-
-    if(XBEE_SERIAL.available())
+    if (first_GPS_data)
     {
-      GPS_init_validated = XBEE_SERIAL.read();
-    }
-
-    if(GPS_init_validated==1)
-    {
-      //Serial.println("position");
-      DataXB[0] = (int16_t)(BNO_roll/180.0*32768);
-      DataXB[1] = (int16_t)(BNO_pitch/180.0*32768);
-      DataXB[2] = (int16_t)(BNO_lacet/180.0*32768);
-      
-      DataXB[3] = (int16_t)(constrain(GPS._x_gps,-499,500)/500.0*32768);
-      DataXB[4] = (int16_t)(constrain(GPS._y_gps,-499,500)/500.0*32768);
-      DataXB[5] = (int16_t)(constrain(GPS._z_gps,-499,500)/500.0*32768);
-      
-      DataXB[6] = (int16_t)(constrain(GPS._vx_gps,-49,50)/50.0*32768);
-      DataXB[7] = (int16_t)(constrain(GPS._vy_gps,-49,50)/50.0*32768);
-      DataXB[8] = (int16_t)(constrain(GPS._vz_gps,-49,50)/50.0*32768);
+       uint8_t x;
   
-      //Envoi des données vers le PC
-      bte_sendData_int16_t(XBEE_SERIAL, 137, 173, DataXB, NbDataXB);
-
-    } else
-    {
-      //Serial.println("initialisation");
-      DataXB_float[0] = GPS._lat_0_int;
-      DataXB_float[1] = GPS._lat_0_dec;
-      DataXB_float[2] = GPS._lon_0_int;
-      DataXB_float[3] = GPS._lon_0_dec;
-      DataXB_float[4] = GPS._alti_0;
+      if(XBEE_SERIAL.available()>1)
+      {
+//        Serial.print("Validation ");
+//        Serial.print(XBEE_SERIAL.available());
+        x = XBEE_SERIAL.read();
+//        Serial.print(" ; ");
+//        Serial.print(x);
+        if(x==137)
+        {
+//          Serial.print(" OK : ");
+          x = XBEE_SERIAL.read();
+//          Serial.print(x);
+          GPS_init_validated = (x==173);
+//          Serial.print(" flag : ");
+//          Serial.println(GPS_init_validated);
+        }
+      }
+  
+      if(GPS_init_validated==1)
+      {
+        //Serial.println("position");
+        DataXB[0] = (int16_t)(BNO_roll/180.0*32768);
+        DataXB[1] = (int16_t)(BNO_pitch/180.0*32768);
+        DataXB[2] = (int16_t)(BNO_lacet/180.0*32768);
+        
+        DataXB[3] = (int16_t)(constrain(GPS._x_gps,-499,500)/500.0*32768);
+        DataXB[4] = (int16_t)(constrain(GPS._y_gps,-499,500)/500.0*32768);
+        DataXB[5] = (int16_t)(constrain(GPS._z_gps,-499,500)/500.0*32768);
+        
+        DataXB[6] = (int16_t)(constrain(GPS._vx_gps,-49,50)/50.0*32768);
+        DataXB[7] = (int16_t)(constrain(GPS._vy_gps,-49,50)/50.0*32768);
+        DataXB[8] = (int16_t)(constrain(GPS._vz_gps,-49,50)/50.0*32768);
+    
+        //Envoi des données vers le PC
+        bte_sendData_int16_t(XBEE_SERIAL, 137, 173, DataXB, NbDataXB);
+  
+      } else
+      {
+        //Serial.println("initialisation");
+        DataXB_float[0] = GPS._lat_0_int;
+        DataXB_float[1] = GPS._lat_0_dec;
+        DataXB_float[2] = GPS._lon_0_int;
+        DataXB_float[3] = GPS._lon_0_dec;
+        DataXB_float[4] = GPS._alti_0;
+        
+        bte_sendData_float(XBEE_SERIAL, 137, 173, DataXB_float, NbDataXB_float, 0);
+      }
       
-      bte_sendData_float(XBEE_SERIAL, 137, 173, DataXB_float, NbDataXB_float, 0);
     }
 
   } // fin de boucle à 100 hz

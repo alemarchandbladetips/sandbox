@@ -7,6 +7,7 @@
 #define myserial Serial1
 
 #define DT_TRANSMISSION 10
+#define INIT_TIME 120.0
 
 #define PACKET_START 0xAA // starting char of package
 #define PACKET_STOP 0x55 // starting char of package
@@ -309,7 +310,7 @@ void loop() {
 
     if(field_idx==11 && idx_in_field == 0)
     {
-      if((GPS_mode>1 || (millis()-init_timer)>120.0*1000.0 ) && alt_0 >10.0 )
+      if((GPS_mode>1 || (millis()-init_timer)>INIT_TIME*1000.0 ) && alt_0 >10.0 )
       {
         GPS_init_done = 1;
       }
@@ -318,20 +319,20 @@ void loop() {
 
       
 
-      if (GPS_mode!=GPS_mode_prev && GPS_mode_prev!=1)
-      {
-        for (i = 0; i < 2; i++)
-        {
-          NED_coordinates_offset[i] = NED_coordinates_prev[i] - NED_coordinates[i];
-        }
-      }
-
-      GPS_mode_prev = GPS_mode;
-      for (i = 0; i < 2; i++)
-      {
-        NED_coordinates[i] = NED_coordinates[i] + NED_coordinates_offset[i];
-        NED_coordinates_prev[i] = NED_coordinates[i];
-      }
+//      if (GPS_mode!=GPS_mode_prev && GPS_mode_prev!=1)
+//      {
+//        for (i = 0; i < 2; i++)
+//        {
+//          NED_coordinates_offset[i] = NED_coordinates_prev[i] - NED_coordinates[i];
+//        }
+//      }
+//
+//      GPS_mode_prev = GPS_mode;
+//      for (i = 0; i < 2; i++)
+//      {
+//        NED_coordinates[i] = NED_coordinates[i] + NED_coordinates_offset[i];
+//        NED_coordinates_prev[i] = NED_coordinates[i];
+//      }
 
       for(i=0;i<3;i++)
       {

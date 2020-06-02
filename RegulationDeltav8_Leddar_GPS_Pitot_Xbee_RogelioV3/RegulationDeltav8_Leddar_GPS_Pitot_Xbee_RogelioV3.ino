@@ -22,7 +22,7 @@
 /******* constantes fonction distance/altitude **************/
 
 #define VITESSE_DES_DAUPHIN 12.0
-#define PENTE_AERO_DAUPHIN1 35.0*DEG2RAD
+#define PENTE_AERO_DAUPHIN1 40.0*DEG2RAD
 #define PENTE_AERO_DAUPHIN2 20.0*DEG2RAD
 #define HAUTEUR_BONZAI 11.0
 #define LONGUEUR_BONZAI 42.0
@@ -60,7 +60,7 @@ uint16_t Switch_C_previous;
 
 // remplace le trim de la télécommande, exprimé en valeur de servo normalisé.
 // positif vers le haut et vers la droite
-float elevation_trim = 0.0;
+float elevation_trim = 0.075;
 float aileron_trim = 0.0;
 
 /******* GPS & pitot **************/
@@ -131,7 +131,7 @@ float KP_Yaw, KD_Yaw, KI_Yaw;
 float KP_Moteur, KI_Moteur;
 const float alpha_stab = 0.025; // filtrage au passage en mode stabilisé
 float flaps_amplitude_dauphin; 
-const float flaps_offset_dauphin = 0.15;
+float flaps_offset_dauphin = 0.1;
 
 //consignes
 float pitch_des = 0, pitch_des_f = 0, yaw_des = 0, vitesse_des = 10, roll_des = 0.0;
@@ -150,7 +150,7 @@ float thrust_anti_decrochage, vitesse_anti_decrochage;
 float pitch_commutation_prev, pitch_commutation_prev_1;
 // states
 float Commande_dauphin = 0;
-int8_t flap_state = 1;
+int8_t flap_state;
 
 // asservissement de la pente de descente
 // params
@@ -385,7 +385,7 @@ void loop()
 
     // retard de la pente désirée pour coller au retard du GPS.
     bte_HistoriqueVal(slope_des_f, slope_des_f_buffer, Ndata);
-    slope_des_f_delay = slope_des_f_buffer[50];
+    slope_des_f_delay = slope_des_f_buffer[0];
 
 /***************** Estimation de la distance/cap à la cible et heading  *********************/
 
@@ -482,7 +482,7 @@ void loop()
       remote._elevator = 0;
       Commande_dauphin = 0;
       Commande_I_slope = 0;
-      flap_state = 1;
+      flap_state = -1;
       flag_leddar_track = 0;
       slope_des_f = slope_aero_f;
       BNO_roll_f = BNO_roll;
@@ -490,8 +490,8 @@ void loop()
       v_wind_mean_memory = v_wind_mean;
       heading_to_target_lock = heading_to_target;
       flag_dauphin2 = 0;
-      pitch_commutation_prev = -50;
-      pitch_commutation_prev_1 = -50;
+      pitch_commutation_prev = -25;
+      pitch_commutation_prev_1 = -25;
 
       // consignes de pitch et de vitesse
       
@@ -555,7 +555,7 @@ void loop()
       regulation_state = 4;
       
       // paramètres mode stabilisé
-      KP_Pitch = 1.0; KD_Pitch = 0.4; KI_Pitch = 10;
+      KP_Pitch = 1.5; KD_Pitch = 0.4; KI_Pitch = 10;
       Commande_I_flaps_sat = 0.1;
       KP_Roll = 2.5; KD_Roll = 0.2;
       KP_Yaw = 1.0; KD_Yaw = 0.05; KI_Yaw = 0.3;
@@ -666,10 +666,12 @@ void loop()
       if(flag_dauphin2 == 1)
       {
         slope_des = -penteGPS_from_aero(PENTE_AERO_DAUPHIN2,VITESSE_DES_DAUPHIN,v_wind_mean_memory)*RAD2DEG;
+        slope_des = constrain(slope_des,-25,-15);
         regulation_state = 3;
       } else
       {
         slope_des = -penteGPS_from_aero(PENTE_AERO_DAUPHIN1,VITESSE_DES_DAUPHIN,v_wind_mean_memory)*RAD2DEG;
+        slope_des = constrain(slope_des,-45,-35);
         regulation_state = 2;
       } 
 
@@ -703,16 +705,37 @@ void loop()
  
 //////// Commande Dauphin
 
+      if(remote._switch_D == 0)
+      {
+        flaps_amplitude_dauphin = 0.7;
+        flaps_offset_dauphin = 0.15;
+      } else if(remote._switch_D == 1)
+      {
+        flaps_amplitude_dauphin = 0.65;
+        flaps_offset_dauphin = 0.20;
+      } else
+      {
+        flaps_amplitude_dauphin = 0.6;
+        flaps_offset_dauphin = 0.25;
+      }
+
       // Au premier plongeon on limite l'amplitude des flaps
       if(flag_first_dive == 1)
       {
-        flaps_amplitude_dauphin = 0.4;
+        flaps_amplitude_dauphin = 0.35;
+        flaps_offset_dauphin = 0.1;
         pitch_commutation_prev_1 = pitch_des_f;
       } 
       else
       {
-        flaps_amplitude_dauphin = 0.7;
-        pitch_des_f = constrain(pitch_des_f, pitch_commutation_prev - 7.5, pitch_commutation_prev + 7.5);
+        if(BNO_pitch < -30)
+        {
+          pitch_des_f = constrain(pitch_des_f, pitch_commutation_prev - 10, pitch_commutation_prev + 10);
+        } else
+        {
+          pitch_des_f = constrain(pitch_des_f, pitch_commutation_prev - 10, pitch_commutation_prev + 5);
+        }
+        
       }
 
       // loie de commutation
@@ -828,7 +851,7 @@ void loop()
 /***************** Coupure moteur de sécurité *********************/
        
     // Sécurité, coupure des moteurs sur le switch ou si la carte SD n'est pas présente, ou perte de signal télécommande
-    if(  !OK_SDCARD || remote._perte_connection || remote._rudder < 0.0 || first_GPS_data==0 )
+    if(  !OK_SDCARD || remote._perte_connection || remote._switch_F != 0 || first_GPS_data==0 )
     {
       Motor_Prop.power_off();
     } else
@@ -951,7 +974,9 @@ float distance_from_alti_raw(float alti, float wind_speed)
   float pente_dauphin1, pente_dauphin2, pente_dauphin2_1, pente_dauphin2_2,distance_des_;
 
   pente_dauphin1 = penteGPS_from_aero(PENTE_AERO_DAUPHIN1,VITESSE_DES_DAUPHIN,wind_speed);
+  pente_dauphin1 = constrain(pente_dauphin1,35/RAD2DEG,45/RAD2DEG);
   pente_dauphin2 = penteGPS_from_aero(PENTE_AERO_DAUPHIN2,VITESSE_DES_DAUPHIN,wind_speed);
+  pente_dauphin1 = constrain(pente_dauphin1,15/RAD2DEG,25/RAD2DEG);
   pente_dauphin2_1 = pente_dauphin2 + 4.0/5.0*(pente_dauphin1-pente_dauphin2);
   pente_dauphin2_2 = pente_dauphin2 + 1.0/5.0*(pente_dauphin1-pente_dauphin2);
     

@@ -30,7 +30,7 @@
 #define HAUTEUR_DAUPHIN2_2 16.0
 #define HAUTEUR_DAUPHIN2 20.0
 #define HAUTEUR_LEDDAR 35.0
-#define HAUTEUR_CABRAGE 1.5
+#define HAUTEUR_CABRAGE 0.5
 
 float distance_des, alti_, K_traj, K_traj_lat;
 float longitudinal_distance, lateral_distance;
@@ -60,7 +60,7 @@ uint16_t Switch_C_previous;
 
 // remplace le trim de la télécommande, exprimé en valeur de servo normalisé.
 // positif vers le haut et vers la droite
-float elevation_trim = 0.075;
+float elevation_trim = -0.075;
 float aileron_trim = 0.0;
 
 /******* GPS & pitot **************/
@@ -184,11 +184,11 @@ void setup()
 
   /******* Initialisation Servo et Moteurs ************/
   
-  Servo_R.set_range(750,2050,1400);
+  Servo_R.set_range(800,2000,1400);
   Servo_R.set_normalized_pwm(0);
   Servo_R.power_on();
   
-  Servo_L.set_range(750,2050,1400);
+  Servo_L.set_range(800,2000,1400);
   Servo_L.set_normalized_pwm(0);
   Servo_L.power_on();
 
@@ -344,10 +344,6 @@ void loop()
     BNO_pitch = bte_ang_180(eulAng.z() - PitchOffs);
     BNO_lacet = bte_ang_180(-eulAng.x() - YawOffs);
 
-    // Filtrage du roll pour la régulation en mode dauphin
-    BNO_roll_f = (1-alpha_roll)*BNO_roll_f + alpha_roll*BNO_roll;
-    BNO_roll = BNO_roll_f;
-
 //    Serial.print(BNO_pitch); Serial.print("   ");
 //    Serial.print(BNO_roll); Serial.print("   ");
 //    Serial.print(BNO_pitch); Serial.print("   ");
@@ -496,6 +492,7 @@ void loop()
       // consignes de pitch et de vitesse
       
       pitch_des = 4;
+
       vitesse_des = VITESSE_DES_DAUPHIN;
       
       yaw_des = heading_to_target;
@@ -537,6 +534,10 @@ void loop()
 
       err_yaw_f = bte_ang_180(heading - yaw_des);
       err_yaw_f = constrain(err_yaw_f,-30,30);
+
+      // Filtrage du roll pour la régulation en mode dauphin
+      BNO_roll_f = (1-alpha_roll)*BNO_roll_f + alpha_roll*BNO_roll;
+      BNO_roll = BNO_roll_f;
     
     }
 
@@ -555,8 +556,8 @@ void loop()
       regulation_state = 4;
       
       // paramètres mode stabilisé
-      KP_Pitch = 1.5; KD_Pitch = 0.4; KI_Pitch = 10;
-      Commande_I_flaps_sat = 0.1;
+      KP_Pitch = 2.0; KD_Pitch = 0.4; KI_Pitch = 10;
+      Commande_I_flaps_sat = 0.15;
       KP_Roll = 2.5; KD_Roll = 0.2;
       KP_Yaw = 1.0; KD_Yaw = 0.05; KI_Yaw = 0.3;
       KP_Moteur = 0; KI_Moteur = 0;
@@ -571,6 +572,17 @@ void loop()
       distance_des = distance_from_alti(alti_,alti_declenchement,distance_declenchement,v_wind_mean_memory);
 
       hauteur_cabrage = HAUTEUR_CABRAGE;
+
+      if(remote._switch_D == 0)
+      {
+        hauteur_cabrage = HAUTEUR_CABRAGE-0.5;
+      } else if(remote._switch_D == 1)
+      {
+        hauteur_cabrage = HAUTEUR_CABRAGE;
+      } else
+      {
+        hauteur_cabrage = HAUTEUR_CABRAGE+0.5;
+      }
 
       if(hauteur_leddar_corrigee < hauteur_cabrage)// && leddar._validity_flag==1 ) // phase pré-cabrage
       {
@@ -705,25 +717,13 @@ void loop()
  
 //////// Commande Dauphin
 
-      if(remote._switch_D == 0)
-      {
-        flaps_amplitude_dauphin = 0.7;
-        flaps_offset_dauphin = 0.15;
-      } else if(remote._switch_D == 1)
-      {
-        flaps_amplitude_dauphin = 0.65;
-        flaps_offset_dauphin = 0.20;
-      } else
-      {
-        flaps_amplitude_dauphin = 0.6;
-        flaps_offset_dauphin = 0.25;
-      }
+      flaps_offset_dauphin = 0.0;
+      flaps_amplitude_dauphin = 0.75;
 
       // Au premier plongeon on limite l'amplitude des flaps
       if(flag_first_dive == 1)
       {
-        flaps_amplitude_dauphin = 0.35;
-        flaps_offset_dauphin = 0.1;
+        flaps_amplitude_dauphin = 0.375;
         pitch_commutation_prev_1 = pitch_des_f;
       } 
       else
@@ -778,6 +778,11 @@ void loop()
 //////// Calcul de l'erreure pour la régulation du yaw
 
       err_yaw_f = bte_ang_180(BNO_lacet - yaw_des);  
+
+      
+      // Filtrage du roll pour la régulation en mode dauphin
+      BNO_roll_f = (1-alpha_roll)*BNO_roll_f + alpha_roll*BNO_roll;
+      BNO_roll = BNO_roll_f;
     }
 
 ////////////////////////////////////////////
@@ -872,7 +877,7 @@ void loop()
     Motor_Prop.set_normalized_pwm(pwm_norm_prop);
 
 /*********** Log sur la carte SD ***********/
- 
+
     if (OK_SDCARD) 
     {
         if (!Open) 
@@ -976,7 +981,7 @@ float distance_from_alti_raw(float alti, float wind_speed)
   pente_dauphin1 = penteGPS_from_aero(PENTE_AERO_DAUPHIN1,VITESSE_DES_DAUPHIN,wind_speed);
   pente_dauphin1 = constrain(pente_dauphin1,35/RAD2DEG,45/RAD2DEG);
   pente_dauphin2 = penteGPS_from_aero(PENTE_AERO_DAUPHIN2,VITESSE_DES_DAUPHIN,wind_speed);
-  pente_dauphin1 = constrain(pente_dauphin1,15/RAD2DEG,25/RAD2DEG);
+  pente_dauphin2 = constrain(pente_dauphin1,15/RAD2DEG,25/RAD2DEG);
   pente_dauphin2_1 = pente_dauphin2 + 4.0/5.0*(pente_dauphin1-pente_dauphin2);
   pente_dauphin2_2 = pente_dauphin2 + 1.0/5.0*(pente_dauphin1-pente_dauphin2);
     

@@ -235,18 +235,6 @@ void bte_sendData_int16_t(Stream &myPort, uint8_t Ini, uint8_t Fin, int16_t *N, 
       myPort.write(Fin);
 }
 
-void bte_sendData_int16_t(Stream &myPort, uint8_t Ini, uint8_t Fin, int16_t *N, int NbData)
-{
-      myPort.write(Ini);
-      for (int i =0; i< NbData; i++)
-      {
-          bte_send_in16_t(myPort, N+i);
-      }
-      int16_t Checksum = bte_calcCRC(N, 2*NbData);
-      bte_send_in16_t(myPort, &Checksum);
-      myPort.write(Fin);
-}
-
 bool bte_recep_int16_t(Stream &myPort, int NbData, uint8_t Ini, uint8_t Fin, int16_t *DATA, bool verif)
 {    
      int NbDataCRC = (verif)? 1 : 0;

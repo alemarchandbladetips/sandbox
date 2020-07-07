@@ -29,6 +29,8 @@
 #define HAUTEUR_PALIER 7.0
 #define HAUTEUR_CABRAGE 2.0
 
+#define RAYON_TRAJ 100.0
+
 float distance_des, alti_, K_traj, K_traj_lat;
 float longitudinal_distance, lateral_distance;
 float alti_offset = 0;
@@ -36,9 +38,9 @@ float alti_declenchement,distance_declenchement;
 
 /******* Servos et moteur **************/
 
-#define PIN_SERVO_R 38
-#define PIN_SERVO_L 37
-#define PIN_MOTOR_PROP 36
+#define PIN_SERVO_R 35
+#define PIN_SERVO_L 36
+#define PIN_MOTOR_PROP 37
 
 bte_servo Servo_R = bte_servo(PIN_SERVO_R);
 bte_servo Servo_L = bte_servo(PIN_SERVO_L);
@@ -84,10 +86,31 @@ float altitude_stabilisation = 60.0;
 
 /******* leddar **************/
 
-bte_leddar leddar = bte_leddar(&Serial4);
+//bte_leddar leddar = bte_leddar(&Serial4);
 
-float hauteur_leddar_corrigee, hauteur_leddar;
-const float leddar_mounting_vector[3] = {0.0,0.0,1.0};
+//float hauteur_leddar_corrigee, hauteur_leddar;
+//const float leddar_mounting_vector[3] = {0.0,0.0,1.0};
+
+/******* PIXY **************/
+
+#define SERIAL_PIXY Serial5
+
+int const NB_DATA =  18;
+
+uint8_t ID1 = 0x55;
+uint8_t ID2 = 0xAA;
+
+uint8_t DATA_temp[12];
+
+int16_t val_int16;
+uint8_t *ptr_int16 = (uint8_t *) &val_int16; 
+
+int16_t x_pixy, y_pixy;
+int16_t width_pixy, height_pixy;
+
+uint32_t counter_pixy;
+
+bool OK_DATA = false;
 
 /******* Carte SD **************/
 
@@ -116,7 +139,7 @@ float RollOffs = 0, PitchOffs = 0, YawOffs = 90; //en deg
 
 #define XBEE_SERIAL Serial1
 
-const uint8_t NbDataXB = 9;
+const uint8_t NbDataXB = 11;
 int16_t DataXB[NbDataXB];
 
 int16_t DataXB1[10];
@@ -126,6 +149,9 @@ uint8_t count_XB = 1;
 
 float DataXB_float[5];
 uint8_t NbDataXB_float = 5;
+
+uint8_t serial_data;
+uint8_t xbee_counter = 0;
 
 uint8_t GPS_init_validated = 0;
 
@@ -203,6 +229,7 @@ void setup()
   
   Serial.begin(115200);
   XBEE_SERIAL.begin(115200);
+  SERIAL_PIXY.begin(115200);
 
   /******* Initialisation Servo et Moteurs ************/
   
@@ -217,7 +244,7 @@ void setup()
   Motor_Prop.set_range(1000,2000);
   Motor_Prop.power_off(); // should already be off (normally)...
   Motor_Prop.set_normalized_pwm(0);
-
+  
   remote.set_connection_lost_time_millis(1000);
 
     /******* Initialisation BNO **************/
@@ -281,7 +308,7 @@ void loop()
   thrust = remote._thrust;
 
   // mise à jour des valeurs leddar
-  leddar.read_leddar();
+//  leddar.read_leddar();
 
   // mise à jour des valeurs GPS et pitot
   GPS.read_GPS();
@@ -321,20 +348,20 @@ void loop()
     BNO_linear_acc_norm = sqrtf(linear_acc.x()*linear_acc.x() + linear_acc.y()*linear_acc.y() + linear_acc.z()*linear_acc.z())/9.81;
 
     // lecture du vecteur gravité pour la projection de la mesure leddar (distance leddar -> altitude)
-    imu::Vector<3> gravity_vector = bno.getVector(Adafruit_BNO055::VECTOR_GRAVITY);
-
-    float produit_scalaire = (gravity_vector.x()*leddar_mounting_vector[0] + gravity_vector.y()*leddar_mounting_vector[1] + gravity_vector.z()*leddar_mounting_vector[2])/ 9.81 ;
-    hauteur_leddar = leddar._hauteur *10.0;
-
-    bte_HistoriqueVal(produit_scalaire, scalar_prod_buffer, Ndata);
-    bte_Mean(scalar_prod_buffer, &scalar_prod_mean, Ndata, Ndata-1);
-
-    hauteur_leddar_corrigee = hauteur_leddar*scalar_prod_mean + 0.5*GPS._vz_gps;
-    
-    if(abs(hauteur_leddar_corrigee-GPS._z_gps)>30.0)
-    {
-      leddar._validity_flag = 0;
-    }
+//    imu::Vector<3> gravity_vector = bno.getVector(Adafruit_BNO055::VECTOR_GRAVITY);
+//
+//    float produit_scalaire = (gravity_vector.x()*leddar_mounting_vector[0] + gravity_vector.y()*leddar_mounting_vector[1] + gravity_vector.z()*leddar_mounting_vector[2])/ 9.81 ;
+//    hauteur_leddar = leddar._hauteur *10.0;
+//
+//    bte_HistoriqueVal(produit_scalaire, scalar_prod_buffer, Ndata);
+//    bte_Mean(scalar_prod_buffer, &scalar_prod_mean, Ndata, Ndata-1);
+//
+//    hauteur_leddar_corrigee = hauteur_leddar*scalar_prod_mean + 0.5*GPS._vz_gps;
+//    
+//    if(abs(hauteur_leddar_corrigee-GPS._z_gps)>30.0)
+//    {
+//      leddar._validity_flag = 0;
+//    }
 
     // lecture des angles d'Euler (deg)+ application des offset 
     imu::Vector<3> eulAng = bno.getVector(Adafruit_BNO055::VECTOR_EULER);
@@ -426,18 +453,19 @@ void loop()
       K_Yaw = 1.0; KD_Yaw = 0.0, KI_Yaw = 0.15;
       //K_Yaw = 0.0; KD_Yaw = 0.0, KI_Yaw = 0.0;
       KP_Moteur = 0.05; KI_Moteur = 0.2; Offset_gaz_reg = 0.0;
+      K_alti = 1.0;
 
       // consignes de pitch et de vitesse
 
       if(remote._switch_F ==0)
       {
-        K_alti = 0.5;
+        K_traj = 0.5;
       } else if(remote._switch_F ==1)
       {
-        K_alti = 1.0;
+        K_traj = 1;
       } else
       {
-        K_alti = 2.0;
+        K_traj = 2.0;
       }
       
       pitch_des = K_alti*(alti_ref-GPS._z_gps) + 20;
@@ -445,6 +473,8 @@ void loop()
       vitesse_des = 5;
       
       yaw_des = heading_to_target;
+//      yaw_des = atan2(GPS._x_gps,GPS._y_gps)*RAD2DEG + 90 
+//                + constrain(K_traj*(sqrt(GPS._x_gps*GPS._x_gps+GPS._y_gps*GPS._y_gps)-RAYON_TRAJ),-30,30);
 
       if(remote._switch_D ==0)
       {
@@ -490,13 +520,13 @@ void loop()
       Commande_I_yaw += KI_Yaw * err_yaw_f * dt_flt / 360.0;
       Commande_I_yaw = constrain(Commande_I_yaw, -10,10);
 
-      if(current_target == 0 && distance_to_target < 20.0)
-      {
-        current_target = 1;
-      } else if (current_target != 0 && distance_to_target < 50.0)
-      {
-        current_target = 0;
-      }
+//      if(current_target == 0 && distance_to_target < 20.0)
+//      {
+//        current_target = 1;
+//      } else if (current_target != 0 && distance_to_target < 50.0)
+//      {
+//        current_target = 0;
+//      }
     
     }
 //////////////////////////////////////// 
@@ -533,16 +563,9 @@ void loop()
     
 /*****************Commande générale avec les paramètres définis pour les différents modes *********************/
 
-    if(abs(err_yaw_f)<90 || remote._switch_C != 0)
-    {
-      roll_des = - K_Yaw * err_yaw_f
-                 - KD_Yaw * BNO_wz
-                 - Commande_I_yaw;
-    } else
-    {
-      roll_des = 20.0;
-      Commande_I_yaw = 0;
-    }
+    roll_des = - K_Yaw * err_yaw_f
+               - KD_Yaw * BNO_wz
+               - Commande_I_yaw;
 
     roll_des = constrain(roll_des,-20,20);
     
@@ -601,10 +624,14 @@ void loop()
     pwm_norm_R = constrain(pwm_norm_R,-1.0,1);
     pwm_norm_L = constrain(pwm_norm_L,-1,1.0);
     
-    Servo_R.set_normalized_pwm(pwm_norm_R);
-    Servo_L.set_normalized_pwm(pwm_norm_L);
+    Servo_R.set_pwm(1400);
+    Servo_L.set_pwm(1400);
+
+//    Servo_R.set_normalized_pwm(pwm_norm_R);
+//    Servo_L.set_normalized_pwm(pwm_norm_L);
 
     Motor_Prop.set_normalized_pwm(pwm_norm_prop);
+
 
 /*********** Log sur la carte SD ***********/
 
@@ -624,6 +651,11 @@ void loop()
           temps2 = millis();
        } else if (Open && !Closed) 
        {
+          Serial.print(GPS._x_gps); Serial.print(" ");
+          Serial.print(GPS._y_gps); Serial.print(" ");
+          Serial.print(GPS._z_gps); Serial.println(" ");
+
+        
           temps_log = millis();
           dataFile.print(temps_log); dataFile.print(";");
           
@@ -659,7 +691,7 @@ void loop()
   
           dataFile.println(" "); // gaffe à la dernière ligne
           
-          if ((millis() - temps2 > 300.0 * 1000) || (remote._switch_C != Switch_C_previous) )
+          if ((millis() - temps2 > 60.0 * 1000) || (remote._switch_C != Switch_C_previous) )
           {
             dataFile.close();
             Closed = true;
@@ -670,32 +702,40 @@ void loop()
    
     Switch_C_previous = remote._switch_C;
 
-      /**********************Envoi vers PC Station******************************/
-    if (first_GPS_data)
+      /**********************Communication Xbee Avec le quadri******************************/
+
+    if(XBEE_SERIAL.available()>1)
     {
-       uint8_t x;
-  
-      if(XBEE_SERIAL.available()>1)
-      {
-//        Serial.print("Validation ");
-//        Serial.print(XBEE_SERIAL.available());
-        x = XBEE_SERIAL.read();
-//        Serial.print(" ; ");
-//        Serial.print(x);
-        if(x==137)
-        {
-//          Serial.print(" OK : ");
-          x = XBEE_SERIAL.read();
-//          Serial.print(x);
-          GPS_init_validated = (x==173);
-//          Serial.print(" flag : ");
-//          Serial.println(GPS_init_validated);
-        }
+     serial_data = XBEE_SERIAL.read();
+     
+//     Serial.print("Validation ");
+//     Serial.print(XBEE_SERIAL.available());
+//     Serial.print(" ; ");
+//     Serial.print(serial_data);
+     
+      if(serial_data==137)
+      {     
+        serial_data = XBEE_SERIAL.read();
+        GPS_init_validated = (serial_data==173);// && (first_GPS_data==1);
+
+//        Serial.print(" OK : ");
+//        Serial.print(serial_data);
+//        Serial.print(" flag : ");
+//        Serial.println(GPS_init_validated);
       }
+    }
+      
+    if (1)//(first_GPS_data)
+    {
   
-      if(GPS_init_validated==1)
+      if(1)//(GPS_init_validated==1)
       {
-        //Serial.println("position");
+        if(millis()-counter_pixy>100)
+        {
+          x_pixy = 1000;
+          y_pixy = 1000;
+        }
+        Serial.println("p");
         DataXB[0] = (int16_t)(BNO_roll/180.0*32768);
         DataXB[1] = (int16_t)(BNO_pitch/180.0*32768);
         DataXB[2] = (int16_t)(BNO_lacet/180.0*32768);
@@ -707,25 +747,74 @@ void loop()
         DataXB[6] = (int16_t)(constrain(GPS._vx_gps,-49,50)/50.0*32768);
         DataXB[7] = (int16_t)(constrain(GPS._vy_gps,-49,50)/50.0*32768);
         DataXB[8] = (int16_t)(constrain(GPS._vz_gps,-49,50)/50.0*32768);
+        DataXB[9] = (int16_t)(x_pixy);
+        DataXB[10] = (int16_t)(y_pixy);
     
         //Envoi des données vers le PC
-        bte_sendData_int16_t(XBEE_SERIAL, 137, 173, DataXB, NbDataXB);
+        XBEE_SERIAL.write(21);
+        XBEE_SERIAL.write(72);
+        bte_sendData_int16_t(XBEE_SERIAL, 137, 173, DataXB, NbDataXB,1);
+        //bte_sendData_int16_t(Serial, 137, 173, DataXB, NbDataXB,1);
   
       } else
       {
-        //Serial.println("initialisation");
+        
+//        Serial.println("i");
         DataXB_float[0] = GPS._lat_0_int;
         DataXB_float[1] = GPS._lat_0_dec;
         DataXB_float[2] = GPS._lon_0_int;
         DataXB_float[3] = GPS._lon_0_dec;
         DataXB_float[4] = GPS._alti_0;
-        
-        bte_sendData_float(XBEE_SERIAL, 137, 173, DataXB_float, NbDataXB_float, 0);
+
+        XBEE_SERIAL.write(12);
+        XBEE_SERIAL.write(27);
+        bte_sendData_float(XBEE_SERIAL, 137, 173, DataXB_float, NbDataXB_float, 1);
       }
       
     }
 
   } // fin de boucle à 100 hz
+/*********** Lecture PIXY ***********/
+//Serial.print(SERIAL_PIXY.available());Serial.print(" ");
+if ( SERIAL_PIXY.available() > NB_DATA-1 )
+{   
+  
+  uint8_t val_temp = SERIAL_PIXY.read();
+  //Serial.print(val_temp);Serial.print(" ");
+  if (  val_temp == ID1 )
+  {  
+      if ( SERIAL_PIXY.read() == ID2 )
+      {  
+         if (  SERIAL_PIXY.read() == ID1 )
+         {  
+             if ( SERIAL_PIXY.read() == ID2 )
+             { 
+               counter_pixy = millis();
+               SERIAL_PIXY.readBytes(DATA_temp,NB_DATA-6);
+  
+               *ptr_int16     = DATA_temp[4];
+               *(ptr_int16 + 1) = DATA_temp[5];
+               x_pixy = val_int16;
+    
+               *(ptr_int16)     = DATA_temp[6];
+               *(ptr_int16 + 1) = DATA_temp[7];
+               y_pixy = val_int16;
+    
+               *(ptr_int16)     = DATA_temp[8];
+               *(ptr_int16 + 1) = DATA_temp[9];
+               width_pixy = val_int16;
+    
+               *(ptr_int16)     = DATA_temp[10];
+               *(ptr_int16 + 1) = DATA_temp[11];
+               height_pixy = val_int16;
+  
+               OK_DATA = false;     
+             }
+  
+         }
+      }
+  }
+}
 }
 
 void checkExist(void)

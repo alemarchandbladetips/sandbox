@@ -126,7 +126,7 @@ void bte_controller::update_controller(void)
           }
           //auxCollectif=1000-( (DataRadio[11]-1)*256+(DataRadio[12]-86) )*1000.0/1620; auxCollectif=constrain(auxCollectif,0,1000);
           auxPitch = ( (DataRadio[7] - 19) * 256 + (DataRadio[8] - 248) ) * 100.0 / 681 + 100; auxPitch = constrain(auxPitch, 0, 200);
-          if ( (DataRadio[19] - 9) > 5 )
+          if ( (DataRadio[19] - 9) > 6 )
           {
             auxRoll = ( (DataRadio[19] - 140) * 256 + (DataRadio[20]) ) * 100.0 / 681 + 100 ;
           } else

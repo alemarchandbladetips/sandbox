@@ -25,21 +25,21 @@
 
 // constant used to enable/disable communication, debug, timing checks
 const int8_t transmit_raw = 1;
-const int8_t print_data = 0;
+const int8_t print_data = 1;
 
 // definition of some constants to ease computations
 const float rad_to_deg = 57.2957795; // 180/pi
 const float pi = 3.14159265358979;
 
 ///////////// SBG IMU data ////////////////////////
-float rpy[3], acc[3];
+float ypr[3], acc[3];
 uint8_t sanity_flag;
 
 uint8_t raw_data[100], start_char, footer[3], data_availability;
 uint8_t device_status,accuracy_flags;
 uint16_t datalen, checkSum, checkSumCalc;
 
-float buffer_float, quaternion[4], omega[3], offset[3];
+float buffer_float, quaternion[4], omega[3], offset[3], omega_tmp[3];
 unsigned char *ptr_buffer = (unsigned char *)&buffer_float;
 int16_t buffer_int16;
 unsigned char *ptr_buffer_int16 = (unsigned char *)&buffer_int16;
@@ -53,7 +53,7 @@ long t0,t1,t2,t3;
 void setup() {
   // serial port opening
   Serial.begin(115200);
-  Serial1.begin(115200);
+  Serial3.begin(115200);
 }
 
 //////////////////////////////////////////////////////////////////////
@@ -66,10 +66,10 @@ int i,j,x;
 ////////////////////////////////////////////////////////////////////////
 //////////// Availability and sanity of serial data ////////////////////
 
-  if (Serial1.available() > PACKET_SIZE_IMU + 8 - 1) // 8 is the header(5)+footer(3) size
+  if (Serial3.available() > PACKET_SIZE_IMU + 8 - 1) // 8 is the header(5)+footer(3) size
   { // data available
 //    time5 = millis();
-    start_char = Serial1.read(); //reading first char
+    start_char = Serial3.read(); //reading first char
     //Serial.print("IMU "); Serial.print(" ");
     //Serial.print(start_char); Serial.println(" ");
     
@@ -80,7 +80,7 @@ int i,j,x;
 //      time1 = time2;
       //if(print_data){ Serial.println(" "); Serial.print(start_char); Serial.println(" "); }
 
-      Serial1.readBytes(raw_data, 4); //reading rest of the header
+      Serial3.readBytes(raw_data, 4); //reading rest of the header
 
       datalen = raw_data[3] + (raw_data[2] << 8); // Number of data to read
       //if(print_data){ Serial.print(datalen); Serial.print(" "); }
@@ -90,9 +90,9 @@ int i,j,x;
       if (raw_data[0] == PACKET_START_IMU2 && datalen == PACKET_SIZE_IMU) // second char and data length are OK too
       {
 
-        Serial1.readBytes(raw_data + 4, datalen); // read the data with the length specified in the header
+        Serial3.readBytes(raw_data + 4, datalen); // read the data with the length specified in the header
         
-        Serial1.readBytes(footer, 3); // read the footer
+        Serial3.readBytes(footer, 3); // read the footer
 
         // reading checksum in packet footer
         checkSum = footer[1] + ((uint16_t)footer[0] << 8);
@@ -119,10 +119,12 @@ int i,j,x;
             quaternion[i] = buffer_float; // 180/pi
             //if(print_data){ Serial.print(quaternion[i]); Serial.print(" "); }
           }
-          // transformation of quaternion to rpy
-          quat2rpy_ellipse_east(quaternion,rpy);
-          rpy[1] = -rpy[1];
-          rpy[2] = -rpy[2]-pi/2.0;
+          // transformation of quaternion to ypr
+          quat2ypr(quaternion,ypr);
+//          ypr[1] = -ypr[1];
+          ypr[0] = mod180(ypr[0]*rad_to_deg+180);
+          ypr[1] = mod180(ypr[1]*rad_to_deg);
+          ypr[2] = mod180(ypr[2]*rad_to_deg);
 
           // read gyroscope data
           for (i = 0; i < 3; i++) 
@@ -131,11 +133,12 @@ int i,j,x;
             {
               ptr_buffer[j] = raw_data[4 * i + j + 20];
             }
-            omega[i] = buffer_float * RAD_TO_DEG;
+            omega_tmp[i] = buffer_float * RAD_TO_DEG;
             //if(print_data){ Serial.print(omega[i]); Serial.print(" "); }
           }
-          omega[0] = -omega[0];
-          omega[2] = -omega[2];
+          omega[0] = -omega_tmp[2];
+          omega[1] = omega_tmp[0];
+          omega[2] = omega_tmp[1];
 
           // accelerometer data
           for (i = 0; i < 3; i++) 
@@ -159,17 +162,17 @@ int i,j,x;
 //////////// transmision to main board ////////////////////
 
           // starting byte
-          if(transmit_raw){ Serial1.write(PACKET_START); } 
-          if(print_data){ Serial.print(PACKET_START); Serial.print(" "); }
+          if(transmit_raw){ Serial3.write(PACKET_START); } 
+          //if(print_data){ Serial.print(PACKET_START); Serial.print(" "); }
           
           // Roll and pitch yaw
           for(i=0;i<3;i++)
           {
-            buffer_int16 = (int16_t)(mod180(rpy[i]*rad_to_deg)*32768.0/180.0);
-            if(print_data){ Serial.print(mod180(rpy[i]*rad_to_deg)); Serial.print(" "); }
+            buffer_int16 = (int16_t)(ypr[i]*32768.0/180.0);
+            if(print_data){ Serial.print(ypr[i]); Serial.print(" "); }
             for(j=0;j<2;j++)
             {
-              if(transmit_raw){ Serial1.write(ptr_buffer_int16[j]); }
+              if(transmit_raw){ Serial3.write(ptr_buffer_int16[j]); }
             }
           }
 
@@ -177,20 +180,20 @@ int i,j,x;
           for(i=0;i<3;i++)
           {
             buffer_int16 = (int16_t)(omega[i]*32768.0/2000.0);
-            if(print_data){ Serial.print(omega[i]); Serial.print(" "); }
+            //if(print_data){ Serial.print(omega[i]); Serial.print(" "); }
             for(j=0;j<2;j++)
             {
-              if(transmit_raw){ Serial1.write(ptr_buffer_int16[j]); }
+              if(transmit_raw){ Serial3.write(ptr_buffer_int16[j]); }
             }
           }
   
           // sanity flag
-          if(transmit_raw){ Serial1.write(sanity_flag); }
+          if(transmit_raw){ Serial3.write(sanity_flag); }
           if(print_data){ Serial.print(sanity_flag); Serial.print(" ");}
           
           // packet stop
-          if(transmit_raw){ Serial1.write(PACKET_STOP); }
-          if(print_data){ Serial.print(PACKET_STOP);}
+          if(transmit_raw){ Serial3.write(PACKET_STOP); }
+          //if(print_data){ Serial.print(PACKET_STOP);}
           if(print_data){ Serial.println(" ");}
           
         } // end footer checksum
@@ -229,23 +232,11 @@ uint16_t calcCRC(const void *pBuffer, uint16_t bufferSize)
 
 //////////////////////////////////////////////////////////////////////
 
-// transformation from quaternion to Roll Pitch Yaw angles
-// input: q[4]: quaternion in flt
-// output: rpy[3]: Euler angles in flt (rd)
-// Measured execution time for a random quaternion : 500us to 750us
-
-void quat2rpy_ellipse_east(float q[4], float rpy[3]) // 
+void quat2ypr(float q[4], float ypr[3]) // 
 {
-  rpy[0] = atan2(2*q[1]*q[3] + 2*q[2]*q[0], 1 - 2*q[1]*q[1] - 2*q[2]*q[2]);
-  rpy[1] = asin(2*q[2]*q[3] - 2*q[1]*q[0]);
-  rpy[2] = atan2(2*q[1]*q[2] + 2*q[3]*q[0], 1 - 2*q[1]*q[1] - 2*q[3]*q[3]);
-}
-
-void quat2rpy_ellipse_north(float q[4], float rpy[3]) // 
-{
-  rpy[0] = -atan2(2*q[2]*q[3] - 2*q[1]*q[0], 1 - 2*q[1]*q[1] - 2*q[2]*q[2]);
-  rpy[1] = asin(2*q[1]*q[3] + 2*q[2]*q[0]);
-  rpy[2] = -atan2(2*q[1]*q[2] - 2*q[3]*q[0], 1 - 2*q[2]*q[2] - 2*q[3]*q[3]);
+  ypr[2] = -atan2(2*q[1]*q[3] - 2*q[0]*q[2], 1 - 2*q[1]*q[1] - 2*q[2]*q[2]);
+  ypr[1] = asin(2*q[0]*q[1] + 2*q[2]*q[3]);
+  ypr[0] = atan2(2*q[0]*q[3] - 2*q[1]*q[2], 1 - 2*q[0]*q[0] - 2*q[2]*q[2]);
 }
 //////////////////////////////////////////////////////////////////////
 

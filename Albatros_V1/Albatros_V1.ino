@@ -374,12 +374,12 @@ void loop()
 /***************** Estimation des angles de descente, vitesse pitot filtrée...  *********************/
 //
 
-//    Serial.print(GPS._x_gps ); Serial.print("   ");
-//    Serial.print(GPS._lat_0_int ); Serial.print("   ");
-//    Serial.print(GPS._lat_0_dec ); Serial.print("   ");
-//    Serial.print(GPS._lon_0_int ); Serial.print("   ");
-//    Serial.print(GPS._lon_0_dec ); Serial.print("   ");
-//    Serial.print(GPS._alti_0 ); Serial.print("   ");
+    Serial.print(GPS._x_gps ); Serial.print("   ");
+    Serial.print(GPS._lat_0_int ); Serial.print("   ");
+    Serial.print(GPS._lat_0_dec ); Serial.print("   ");
+    Serial.print(GPS._lon_0_int ); Serial.print("   ");
+    Serial.print(GPS._lon_0_dec ); Serial.print("   ");
+    Serial.print(GPS._alti_0 ); Serial.print("   ");
 
 //    Serial.print(remote._aileron ); Serial.print("   ");
 //    Serial.print(remote._elevator ); Serial.print("   ");
@@ -725,10 +725,10 @@ void loop()
       }
     }
       
-    if (1)//(first_GPS_data)
+    if(first_GPS_data)
     {
   
-      if(1)//(GPS_init_validated==1)
+      if(GPS_init_validated==1)
       {
         if(millis()-counter_pixy>100)
         {
@@ -759,7 +759,7 @@ void loop()
       } else
       {
         
-//        Serial.println("i");
+        Serial.println("i");
         DataXB_float[0] = GPS._lat_0_int;
         DataXB_float[1] = GPS._lat_0_dec;
         DataXB_float[2] = GPS._lon_0_int;

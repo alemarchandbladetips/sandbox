@@ -38,9 +38,9 @@ float alti_declenchement,distance_declenchement;
 
 /******* Servos et moteur **************/
 
-#define PIN_SERVO_R 35
-#define PIN_SERVO_L 36
-#define PIN_MOTOR_PROP 37
+#define PIN_SERVO_R 2
+#define PIN_SERVO_L 23
+#define PIN_MOTOR_PROP 3
 
 bte_servo Servo_R = bte_servo(PIN_SERVO_R);
 bte_servo Servo_L = bte_servo(PIN_SERVO_L);
@@ -52,7 +52,7 @@ float pwm_norm_R, pwm_norm_L, pwm_norm_prop;
 
 /******* Télécommande **************/
 
-bte_controller remote = bte_controller(&Serial3);
+bte_controller remote = bte_controller(&Serial1);
 
 float knob2, thrust;
 uint16_t Switch_C_previous;
@@ -64,7 +64,7 @@ float aileron_trim = 0.0;
 
 /******* GPS & pitot **************/
 
-bte_GPS GPS = bte_GPS(&Serial2);
+bte_GPS GPS = bte_GPS(&Serial3);
 
 float v_pitot_mean;
 float v_pitot_buffer[100];
@@ -137,7 +137,7 @@ float RollOffs = 0, PitchOffs = 0, YawOffs = 90; //en deg
 
 /******* Xbee **************/
 
-#define XBEE_SERIAL Serial1
+#define XBEE_SERIAL Serial2
 
 const uint8_t NbDataXB = 11;
 int16_t DataXB[NbDataXB];
@@ -163,7 +163,7 @@ uint8_t regulation_state;
 //// régulation d'attitude et vitesse
 // params
 float K_Pitch_remote = 0.5, K_Pitch = 0, KD_Pitch = 0, KI_Pitch = 0, K_alti = 0;
-float K_Roll_remote = -0.5, K_Roll = 0, KD_Roll = 0.2;
+float K_Roll_remote = 0.5, K_Roll = 0, KD_Roll = 0.2;
 float K_Yaw = 0, KD_Yaw = 0, KI_Yaw = 0;
 float KP_Moteur = 0, KI_Moteur = 0, Offset_gaz_reg = 0;
 float alpha_stab = 0.025; // filtrage au passage en mode stabilisé
@@ -340,8 +340,8 @@ void loop()
 
     // transformation en DPS
     BNO_wz = gyro_speed.z() * RAD2DEG;
-    BNO_wy = -gyro_speed.y() * RAD2DEG;
-    BNO_wx = -gyro_speed.x() * RAD2DEG;
+    BNO_wy = -gyro_speed.x() * RAD2DEG;
+    BNO_wx = gyro_speed.y() * RAD2DEG;
 
     // lecture de l'acc linéaire (pour log)
     imu::Vector<3> linear_acc = bno.getVector(Adafruit_BNO055::VECTOR_LINEARACCEL);
@@ -366,15 +366,16 @@ void loop()
     // lecture des angles d'Euler (deg)+ application des offset 
     imu::Vector<3> eulAng = bno.getVector(Adafruit_BNO055::VECTOR_EULER);
     
-    BNO_roll = bte_ang_180(eulAng.z() - RollOffs);
-    BNO_pitch = bte_ang_180(eulAng.y() - PitchOffs);
+    BNO_roll = bte_ang_180(-eulAng.y() - RollOffs);
+    BNO_pitch = bte_ang_180(eulAng.z() - PitchOffs);
     BNO_lacet = bte_ang_180(-eulAng.x() - YawOffs);
 
 
 /***************** Estimation des angles de descente, vitesse pitot filtrée...  *********************/
 //
 
-//    Serial.print(GPS._x_gps ); Serial.print("   ");
+    Serial.print(GPS._x_gps ); Serial.print("   ");
+    Serial.print(GPS._y_gps ); Serial.print("   ");
 //    Serial.print(GPS._lat_0_int ); Serial.print("   ");
 //    Serial.print(GPS._lat_0_dec ); Serial.print("   ");
 //    Serial.print(GPS._lon_0_int ); Serial.print("   ");
@@ -389,15 +390,16 @@ void loop()
 //    Serial.print(remote._switch_D ); Serial.print("   ");
 //    Serial.print(remote._knob ); Serial.print("   ");
     //Serial.print(produit_scalaire*10); Serial.print("   ");
-
+//
 //    Serial.print(BNO_wx); Serial.print("   ");
 //    Serial.print(BNO_wy); Serial.print("   ");
 //    Serial.print(BNO_wz); Serial.print("   ");
-
+//
 //    Serial.print(BNO_roll); Serial.print("   ");
 //    Serial.print(BNO_pitch); Serial.print("   ");
 //    Serial.print(BNO_lacet); Serial.print("   ");
-//Serial.println("   ");
+    
+    Serial.println("   ");
 
     if(current_target == 0 )
     {
@@ -609,7 +611,7 @@ void loop()
 /***************** Coupure moteur de sécurité *********************/
        
     // Sécurité, coupure des moteurs sur le switch ou si la carte SD n'est pas présente, ou perte de signal télécommande
-    if(  !OK_SDCARD || remote._perte_connection )//|| remote._rudder < 0.0 || first_GPS_data==0 )
+    if(  remote._perte_connection )//!OK_SDCARD ||  || remote._rudder < 0.0 || first_GPS_data==0 )
     {
       Motor_Prop.power_off();
     } else
@@ -624,11 +626,11 @@ void loop()
     pwm_norm_R = constrain(pwm_norm_R,-1.0,1);
     pwm_norm_L = constrain(pwm_norm_L,-1,1.0);
     
-    Servo_R.set_pwm(1400);
-    Servo_L.set_pwm(1400);
+//    Servo_R.set_pwm(1400);
+//    Servo_L.set_pwm(1400);
 
-//    Servo_R.set_normalized_pwm(pwm_norm_R);
-//    Servo_L.set_normalized_pwm(pwm_norm_L);
+    Servo_R.set_normalized_pwm(pwm_norm_R);
+    Servo_L.set_normalized_pwm(pwm_norm_L);
 
     Motor_Prop.set_normalized_pwm(pwm_norm_prop);
 
@@ -735,7 +737,7 @@ void loop()
           x_pixy = 1000;
           y_pixy = 1000;
         }
-        Serial.println("p");
+        //Serial.println("p");
         DataXB[0] = (int16_t)(BNO_roll/180.0*32768);
         DataXB[1] = (int16_t)(BNO_pitch/180.0*32768);
         DataXB[2] = (int16_t)(BNO_lacet/180.0*32768);

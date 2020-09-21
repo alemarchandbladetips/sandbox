@@ -459,16 +459,16 @@ void loop()
 
       // consignes de pitch et de vitesse
 
-      if(remote._switch_F ==0)
-      {
-        K_traj = 0.5;
-      } else if(remote._switch_F ==1)
-      {
-        K_traj = 1;
-      } else
-      {
-        K_traj = 2.0;
-      }
+//      if(remote._switch_F ==0)
+//      {
+//        K_traj = 0.5;
+//      } else if(remote._switch_F ==1)
+//      {
+//        K_traj = 1;
+//      } else
+//      {
+//        K_traj = 2.0;
+//      }
       
       pitch_des = K_alti*(alti_ref-GPS._z_gps) + 20;
       
@@ -478,23 +478,16 @@ void loop()
 //      yaw_des = atan2(GPS._x_gps,GPS._y_gps)*RAD2DEG + 90 
 //                + constrain(K_traj*(sqrt(GPS._x_gps*GPS._x_gps+GPS._y_gps*GPS._y_gps)-RAYON_TRAJ),-30,30);
 
-      if(remote._switch_D ==0)
-      {
-        KD_Pitch = 0.0;
-      } else if(remote._switch_D ==1)
-      {
-        KD_Pitch = 0.4;
-      } else
-      {
-        KD_Pitch = 0.8;
-      }
-
-      if(remote._switch_C != 0)
-      {
-        K_Yaw = 0;
-        KI_Yaw = 0;
-        KD_Yaw = 0;
-      }
+//      if(remote._switch_D ==0)
+//      {
+//        KD_Pitch = 0.0;
+//      } else if(remote._switch_D ==1)
+//      {
+//        KD_Pitch = 0.4;
+//      } else
+//      {
+//        KD_Pitch = 0.8;
+//      }
 
 //////// Régulation de vitesse
 
@@ -522,13 +515,13 @@ void loop()
       Commande_I_yaw += KI_Yaw * err_yaw_f * dt_flt / 360.0;
       Commande_I_yaw = constrain(Commande_I_yaw, -10,10);
 
-//      if(current_target == 0 && distance_to_target < 20.0)
-//      {
-//        current_target = 1;
-//      } else if (current_target != 0 && distance_to_target < 50.0)
-//      {
-//        current_target = 0;
-//      }
+      if(current_target == 0 && distance_to_target < 40.0)
+      {
+        current_target = 1;
+      } else if (current_target != 0 && distance_to_target < 40.0)
+      {
+        current_target = 0;
+      }
     
     }
 //////////////////////////////////////// 
@@ -569,7 +562,7 @@ void loop()
                - KD_Yaw * BNO_wz
                - Commande_I_yaw;
 
-    roll_des = constrain(roll_des,-20,20);
+    roll_des = constrain(roll_des,-30,30);
     
     // Commande correspondant au roll, télécommande + P roll + D roll + P yaw + D yaw
     Commande_Roll = - K_Roll_remote * remote._aileron 
@@ -579,14 +572,7 @@ void loop()
     //Commande_Roll = -Commande_Roll;
 
     float saturation;
-
-    if(remote._switch_C!=0 || declenchement == 0)
-    {
-      saturation = 0.6;
-    } else
-    {
-      saturation = 0.3;
-    }
+    saturation = 0.6;
                     
     Commande_Roll = constrain(Commande_Roll,-saturation,saturation);
     

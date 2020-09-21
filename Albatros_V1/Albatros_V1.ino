@@ -374,12 +374,12 @@ void loop()
 /***************** Estimation des angles de descente, vitesse pitot filtrée...  *********************/
 //
 
-    Serial.print(GPS._x_gps ); Serial.print("   ");
-    Serial.print(GPS._lat_0_int ); Serial.print("   ");
-    Serial.print(GPS._lat_0_dec ); Serial.print("   ");
-    Serial.print(GPS._lon_0_int ); Serial.print("   ");
-    Serial.print(GPS._lon_0_dec ); Serial.print("   ");
-    Serial.print(GPS._alti_0 ); Serial.print("   ");
+//    Serial.print(GPS._x_gps ); Serial.print("   ");
+//    Serial.print(GPS._lat_0_int ); Serial.print("   ");
+//    Serial.print(GPS._lat_0_dec ); Serial.print("   ");
+//    Serial.print(GPS._lon_0_int ); Serial.print("   ");
+//    Serial.print(GPS._lon_0_dec ); Serial.print("   ");
+//    Serial.print(GPS._alti_0 ); Serial.print("   ");
 
 //    Serial.print(remote._aileron ); Serial.print("   ");
 //    Serial.print(remote._elevator ); Serial.print("   ");
@@ -396,8 +396,10 @@ void loop()
 
 //    Serial.print(BNO_roll); Serial.print("   ");
 //    Serial.print(BNO_pitch); Serial.print("   ");
-//    Serial.print(BNO_lacet); Serial.print("   ");
-//Serial.println("   ");
+    Serial.print(bte_ang_180(BNO_lacet-90)); Serial.print("   ");
+    Serial.print(heading); Serial.print("   ");
+
+    Serial.println("   ");
 
     if(current_target == 0 )
     {
@@ -651,11 +653,7 @@ void loop()
           temps2 = millis();
        } else if (Open && !Closed) 
        {
-          Serial.print(GPS._x_gps); Serial.print(" ");
-          Serial.print(GPS._y_gps); Serial.print(" ");
-          Serial.print(GPS._z_gps); Serial.println(" ");
-
-        
+          
           temps_log = millis();
           dataFile.print(temps_log); dataFile.print(";");
           
@@ -735,7 +733,7 @@ void loop()
           x_pixy = 1000;
           y_pixy = 1000;
         }
-        Serial.println("p");
+//        Serial.println("p");
         DataXB[0] = (int16_t)(BNO_roll/180.0*32768);
         DataXB[1] = (int16_t)(BNO_pitch/180.0*32768);
         DataXB[2] = (int16_t)(BNO_lacet/180.0*32768);
@@ -759,7 +757,7 @@ void loop()
       } else
       {
         
-        Serial.println("i");
+//        Serial.println("i");
         DataXB_float[0] = GPS._lat_0_int;
         DataXB_float[1] = GPS._lat_0_dec;
         DataXB_float[2] = GPS._lon_0_int;

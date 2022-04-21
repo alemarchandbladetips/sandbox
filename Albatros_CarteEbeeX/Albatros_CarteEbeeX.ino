@@ -374,8 +374,8 @@ void loop()
 /***************** Estimation des angles de descente, vitesse pitot filtrée...  *********************/
 //
 
-    Serial.print(GPS._x_gps ); Serial.print("   ");
-    Serial.print(GPS._y_gps ); Serial.print("   ");
+//    Serial.print(GPS._x_gps ); Serial.print("   ");
+//    Serial.print(GPS._y_gps ); Serial.print("   ");
 //    Serial.print(GPS._lat_0_int ); Serial.print("   ");
 //    Serial.print(GPS._lat_0_dec ); Serial.print("   ");
 //    Serial.print(GPS._lon_0_int ); Serial.print("   ");
@@ -396,7 +396,7 @@ void loop()
 //    Serial.print(BNO_wz); Serial.print("   ");
 //
 //    Serial.print(BNO_roll); Serial.print("   ");
-//    Serial.print(BNO_pitch); Serial.print("   ");
+    Serial.print(BNO_pitch); Serial.print("   ");
 //    Serial.print(BNO_lacet); Serial.print("   ");
     
     Serial.println("   ");

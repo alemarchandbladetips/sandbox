@@ -44,18 +44,18 @@
 
 typedef struct
 {
-    uint16_t accel_offset_x;
-    uint16_t accel_offset_y;
-    uint16_t accel_offset_z;
-    int16_t gyro_offset_x;
-    int16_t gyro_offset_y;
-    int16_t gyro_offset_z;
+    int16_t accel_offset_x;
+    int16_t accel_offset_y;
+    int16_t accel_offset_z;
     int16_t mag_offset_x;
     int16_t mag_offset_y;
     int16_t mag_offset_z;
+    int16_t gyro_offset_x;
+    int16_t gyro_offset_y;
+    int16_t gyro_offset_z;
 
-    uint16_t accel_radius;
-    uint16_t mag_radius;
+    int16_t accel_radius;
+    int16_t mag_radius;
 } adafruit_bno055_offsets_t;
 
 class Adafruit_BNO055 : public Adafruit_Sensor
@@ -208,7 +208,8 @@ class Adafruit_BNO055 : public Adafruit_Sensor
       ACCEL_RADIUS_LSB_ADDR                                   = 0X67,
       ACCEL_RADIUS_MSB_ADDR                                   = 0X68,
       MAG_RADIUS_LSB_ADDR                                     = 0X69,
-      MAG_RADIUS_MSB_ADDR                                     = 0X6A
+      MAG_RADIUS_MSB_ADDR                                     = 0X6A,
+      GYRO_CONFIG_0                                           = 0x0A
     } adafruit_bno055_reg_t;
 
     typedef enum
@@ -235,6 +236,15 @@ class Adafruit_BNO055 : public Adafruit_Sensor
       OPERATION_MODE_NDOF_FMC_OFF                             = 0X0B,
       OPERATION_MODE_NDOF                                     = 0X0C
     } adafruit_bno055_opmode_t;
+
+    typedef enum
+    {
+      /* Operation gyro mode settings*/
+      FREQ_GYRO_523                                           = 0x00,
+      FREQ_GYRO_230                                           = 0x08,
+      FREQ_GYRO_116                                           = 0x10,
+      FREQ_GYRO_32                                            = 0x38
+    } adafruit_bno055_gyro_mode_t;
 
     typedef enum
     {
@@ -278,14 +288,24 @@ class Adafruit_BNO055 : public Adafruit_Sensor
       VECTOR_LINEARACCEL   = BNO055_LINEAR_ACCEL_DATA_X_LSB_ADDR,
       VECTOR_GRAVITY       = BNO055_GRAVITY_DATA_X_LSB_ADDR
     } adafruit_vector_type_t;
+    
+    imu::Vector<3> gyro_xyz; //added
 
-#ifdef ARDUINO_SAMD_ZERO
+#if defined (ARDUINO_SAMD_ZERO) && ! (ARDUINO_SAMD_FEATHER_M0)
+#error "On an arduino Zero, BNO055's ADR pin must be high. Fix that, then delete this line."
     Adafruit_BNO055 ( int32_t sensorID = -1, uint8_t address = BNO055_ADDRESS_B );
-#else/Users/lemarchandantoine/Documents/GitRepo/sandbox/libraries/Adafruit_BNO055/Adafruit_BNO055.cpp
-    Adafruit_BNO055 ( int32_t sensorID = -1, uint8_t address = BNO055_ADDRESS_A );
+    Adafruit_BNO055 ( uint8_t address = BNO055_ADDRESS_B,TwoWire &someWire = Wire);
+    Adafruit_BNO055 ( TwoWire &someWire = Wire );
+#else
+    Adafruit_BNO055 ( int32_t sensorID = -1, uint8_t address = BNO055_ADDRESS_A);
+    Adafruit_BNO055 ( uint8_t address = BNO055_ADDRESS_A,TwoWire &someWire = Wire);
+    Adafruit_BNO055 ( TwoWire &someWire = Wire );
 #endif
     bool  begin               ( adafruit_bno055_opmode_t mode = OPERATION_MODE_NDOF );
     void  setMode             ( adafruit_bno055_opmode_t mode );
+    void  setMode_gyro        ( adafruit_bno055_gyro_mode_t gyro_mode );
+    void  setAxisRemap        ( adafruit_bno055_axis_remap_config_t remapcode );
+    void  setAxisSign         ( adafruit_bno055_axis_remap_sign_t remapsign );
     void  getRevInfo          ( adafruit_bno055_rev_info_t* );
     void  displayRevInfo      ( void );
     void  setExtCrystalUse    ( boolean usextal );
@@ -296,6 +316,10 @@ class Adafruit_BNO055 : public Adafruit_Sensor
     void  getCalibration      ( uint8_t* system, uint8_t* gyro, uint8_t* accel, uint8_t* mag);
 
     imu::Vector<3>  getVector ( adafruit_vector_type_t vector_type );
+    bool  getVector_gyro (void); //added
+    bool readLen1(adafruit_bno055_reg_t reg, uint8_t len); //added
+    bool readLen2(byte * buffer, uint8_t len); //added
+    
     imu::Quaternion getQuat   ( void );
     int8_t          getTemp   ( void );
 
@@ -317,6 +341,10 @@ class Adafruit_BNO055 : public Adafruit_Sensor
 
     uint8_t _address;
     int32_t _sensorID;
+    TwoWire &myWire = Wire; //added
+    bool READING_START = false;
+
+
     adafruit_bno055_opmode_t _mode;
 };
 

@@ -38,11 +38,21 @@
 */
 /**************************************************************************/
 Adafruit_BNO055::Adafruit_BNO055(int32_t sensorID, uint8_t address)
-{
+{ 
+
   _sensorID = sensorID;
   _address = address;
-}
 
+}
+Adafruit_BNO055::Adafruit_BNO055 ( uint8_t address, TwoWire &someWire = Wire): myWire(someWire)
+{
+  _sensorID = -1;
+}
+Adafruit_BNO055::Adafruit_BNO055(TwoWire &someWire): myWire(someWire)
+{
+  _sensorID = -1;
+  _address = BNO055_ADDRESS_A;
+}
 /***************************************************************************
  PUBLIC FUNCTIONS
  ***************************************************************************/
@@ -55,13 +65,12 @@ Adafruit_BNO055::Adafruit_BNO055(int32_t sensorID, uint8_t address)
 bool Adafruit_BNO055::begin(adafruit_bno055_opmode_t mode)
 {
   /* Enable I2C */
-  Wire.begin();
-
+  myWire.begin();
+  
   // BNO055 clock stretches for 500us or more!
 #ifdef ESP8266
-  Wire.setClockStretchLimit(1000); // Allow for 1000us of clock stretching
+  myWire.setClockStretchLimit(1000); // Allow for 1000us of clock stretching
 #endif
-
   /* Make sure we have the right device */
   uint8_t id = read8(BNO055_CHIP_ID_ADDR);
   if(id != BNO055_ID)
@@ -107,7 +116,7 @@ bool Adafruit_BNO055::begin(adafruit_bno055_opmode_t mode)
   write8(BNO055_AXIS_MAP_SIGN_ADDR, REMAP_SIGN_P2); // P0-P7, Default is P1
   delay(10);
   */
-  
+
   write8(BNO055_SYS_TRIGGER_ADDR, 0x0);
   delay(10);
   /* Set the requested operating mode (see section 3.3) */
@@ -128,6 +137,59 @@ void Adafruit_BNO055::setMode(adafruit_bno055_opmode_t mode)
   write8(BNO055_OPR_MODE_ADDR, _mode);
   delay(30);
 }
+//added in order to modify gyro bandwith 
+void Adafruit_BNO055::setMode_gyro(adafruit_bno055_gyro_mode_t gyro_mode)
+{ 
+  // setMode(OPERATION_MODE_CONFIG);
+  // delay(10);
+  write8(BNO055_PAGE_ID_ADDR, 0x01);
+  delay(10);
+  write8(GYRO_CONFIG_0, gyro_mode);
+  delay(30);
+}
+
+// void Adafruit_BNO055::setMode_gyro(adafruit_bno055_opmode_t mode)
+// {
+//   _mode = mode;
+//   write8(OPERATION_MODE_M4G, _mode);
+//   delay(30);
+// }
+/**************************************************************************/
+/*!
+    @brief  Changes the chip's axis remap
+*/
+/**************************************************************************/
+void Adafruit_BNO055::setAxisRemap( adafruit_bno055_axis_remap_config_t remapcode )
+{
+  adafruit_bno055_opmode_t modeback = _mode;
+
+  setMode(OPERATION_MODE_CONFIG);
+  delay(25);
+  write8(BNO055_AXIS_MAP_CONFIG_ADDR, remapcode);
+  delay(10);
+  /* Set the requested operating mode (see section 3.3) */
+  setMode(modeback);
+  delay(20);
+}
+
+/**************************************************************************/
+/*!
+    @brief  Changes the chip's axis signs
+*/
+/**************************************************************************/
+void Adafruit_BNO055::setAxisSign( adafruit_bno055_axis_remap_sign_t remapsign )
+{
+  adafruit_bno055_opmode_t modeback = _mode;
+
+  setMode(OPERATION_MODE_CONFIG);
+  delay(25);
+  write8(BNO055_AXIS_MAP_SIGN_ADDR, remapsign);
+  delay(10);
+  /* Set the requested operating mode (see section 3.3) */
+  setMode(modeback);
+  delay(20);
+}
+
 
 /**************************************************************************/
 /*!
@@ -304,10 +366,10 @@ imu::Vector<3> Adafruit_BNO055::getVector(adafruit_vector_type_t vector_type)
       xyz[2] = ((double)z)/16.0;
       break;
     case VECTOR_GYROSCOPE:
-      /* 1rps = 900 LSB */
-      xyz[0] = ((double)x)/900.0;
-      xyz[1] = ((double)y)/900.0;
-      xyz[2] = ((double)z)/900.0;
+      /* 1dps = 16 LSB */
+      xyz[0] = ((double)x)/16.0;
+      xyz[1] = ((double)y)/16.0;
+      xyz[2] = ((double)z)/16.0;
       break;
     case VECTOR_EULER:
       /* 1 degree = 16 LSB */
@@ -328,6 +390,46 @@ imu::Vector<3> Adafruit_BNO055::getVector(adafruit_vector_type_t vector_type)
   return xyz;
 }
 
+bool Adafruit_BNO055::getVector_gyro(void )
+{ 
+  bool ret_bool = false;
+   /* Read vector data (6 bytes) */
+  // readLen((adafruit_bno055_reg_t)vector_type, buffer, 6);
+  if (!READING_START)
+  {    
+       adafruit_vector_type_t vector_type = VECTOR_GYROSCOPE;
+       READING_START = readLen1( (adafruit_bno055_reg_t)vector_type, 6);
+  }
+  else
+  {   
+    if ( myWire.available() + 1 > 6)
+    {
+      uint8_t buffer[6];
+      memset (buffer, 0, 6);
+
+      int16_t x, y, z;
+      x = y = z = 0;
+
+      READING_START = false;
+      
+      readLen2(buffer, 6);
+      
+      x = ((int16_t)buffer[0]) | (((int16_t)buffer[1]) << 8);
+      y = ((int16_t)buffer[2]) | (((int16_t)buffer[3]) << 8);
+      z = ((int16_t)buffer[4]) | (((int16_t)buffer[5]) << 8);
+
+      /* Convert the value to an appropriate range (section 3.6.4) */
+      /* and assign the value to the Vector type */
+          /* 1dps = 16 LSB */
+          gyro_xyz[0] = ((double)x)/16.0;
+          gyro_xyz[1] = ((double)y)/16.0;
+          gyro_xyz[2] = ((double)z)/16.0;
+      
+      ret_bool = true;
+    }
+  }
+  return ret_bool;
+}
 /**************************************************************************/
 /*!
     @brief  Gets a quaternion reading from the specified source
@@ -429,25 +531,41 @@ bool Adafruit_BNO055::getSensorOffsets(uint8_t* calibData)
 /**************************************************************************/
 bool Adafruit_BNO055::getSensorOffsets(adafruit_bno055_offsets_t &offsets_type)
 {
-    //if (isFullyCalibrated())
+    if (isFullyCalibrated())
     {
         adafruit_bno055_opmode_t lastMode = _mode;
         setMode(OPERATION_MODE_CONFIG);
         delay(25);
 
+        /* Accel offset range depends on the G-range:
+           +/-2g  = +/- 2000 mg
+           +/-4g  = +/- 4000 mg
+           +/-8g  = +/- 8000 mg
+           +/-1§g = +/- 16000 mg */
         offsets_type.accel_offset_x = (read8(ACCEL_OFFSET_X_MSB_ADDR) << 8) | (read8(ACCEL_OFFSET_X_LSB_ADDR));
         offsets_type.accel_offset_y = (read8(ACCEL_OFFSET_Y_MSB_ADDR) << 8) | (read8(ACCEL_OFFSET_Y_LSB_ADDR));
         offsets_type.accel_offset_z = (read8(ACCEL_OFFSET_Z_MSB_ADDR) << 8) | (read8(ACCEL_OFFSET_Z_LSB_ADDR));
 
-        offsets_type.gyro_offset_x = (read8(GYRO_OFFSET_X_MSB_ADDR) << 8) | (read8(GYRO_OFFSET_X_LSB_ADDR));
-        offsets_type.gyro_offset_y = (read8(GYRO_OFFSET_Y_MSB_ADDR) << 8) | (read8(GYRO_OFFSET_Y_LSB_ADDR));
-        offsets_type.gyro_offset_z = (read8(GYRO_OFFSET_Z_MSB_ADDR) << 8) | (read8(GYRO_OFFSET_Z_LSB_ADDR));
-
+        /* Magnetometer offset range = +/- 6400 LSB where 1uT = 16 LSB */
         offsets_type.mag_offset_x = (read8(MAG_OFFSET_X_MSB_ADDR) << 8) | (read8(MAG_OFFSET_X_LSB_ADDR));
         offsets_type.mag_offset_y = (read8(MAG_OFFSET_Y_MSB_ADDR) << 8) | (read8(MAG_OFFSET_Y_LSB_ADDR));
         offsets_type.mag_offset_z = (read8(MAG_OFFSET_Z_MSB_ADDR) << 8) | (read8(MAG_OFFSET_Z_LSB_ADDR));
 
+        /* Gyro offset range depends on the DPS range:
+          2000 dps = +/- 32000 LSB
+          1000 dps = +/- 16000 LSB
+           500 dps = +/- 8000 LSB
+           250 dps = +/- 4000 LSB
+           125 dps = +/- 2000 LSB
+           ... where 1 DPS = 16 LSB */
+        offsets_type.gyro_offset_x = (read8(GYRO_OFFSET_X_MSB_ADDR) << 8) | (read8(GYRO_OFFSET_X_LSB_ADDR));
+        offsets_type.gyro_offset_y = (read8(GYRO_OFFSET_Y_MSB_ADDR) << 8) | (read8(GYRO_OFFSET_Y_LSB_ADDR));
+        offsets_type.gyro_offset_z = (read8(GYRO_OFFSET_Z_MSB_ADDR) << 8) | (read8(GYRO_OFFSET_Z_LSB_ADDR));
+
+        /* Accelerometer radius = +/- 1000 LSB */
         offsets_type.accel_radius = (read8(ACCEL_RADIUS_MSB_ADDR) << 8) | (read8(ACCEL_RADIUS_LSB_ADDR));
+
+        /* Magnetometer radius = +/- 960 LSB */
         offsets_type.mag_radius = (read8(MAG_RADIUS_MSB_ADDR) << 8) | (read8(MAG_RADIUS_LSB_ADDR));
 
         setMode(lastMode);
@@ -468,6 +586,11 @@ void Adafruit_BNO055::setSensorOffsets(const uint8_t* calibData)
     setMode(OPERATION_MODE_CONFIG);
     delay(25);
 
+    /* Note: Configuration will take place only when user writes to the last
+       byte of each config data pair (ex. ACCEL_OFFSET_Z_MSB_ADDR, etc.).
+       Therefore the last byte must be written whenever the user wants to
+       changes the configuration. */
+
     /* A writeLen() would make this much cleaner */
     write8(ACCEL_OFFSET_X_LSB_ADDR, calibData[0]);
     write8(ACCEL_OFFSET_X_MSB_ADDR, calibData[1]);
@@ -476,19 +599,19 @@ void Adafruit_BNO055::setSensorOffsets(const uint8_t* calibData)
     write8(ACCEL_OFFSET_Z_LSB_ADDR, calibData[4]);
     write8(ACCEL_OFFSET_Z_MSB_ADDR, calibData[5]);
 
-    write8(GYRO_OFFSET_X_LSB_ADDR, calibData[6]);
-    write8(GYRO_OFFSET_X_MSB_ADDR, calibData[7]);
-    write8(GYRO_OFFSET_Y_LSB_ADDR, calibData[8]);
-    write8(GYRO_OFFSET_Y_MSB_ADDR, calibData[9]);
-    write8(GYRO_OFFSET_Z_LSB_ADDR, calibData[10]);
-    write8(GYRO_OFFSET_Z_MSB_ADDR, calibData[11]);
+    write8(MAG_OFFSET_X_LSB_ADDR, calibData[6]);
+    write8(MAG_OFFSET_X_MSB_ADDR, calibData[7]);
+    write8(MAG_OFFSET_Y_LSB_ADDR, calibData[8]);
+    write8(MAG_OFFSET_Y_MSB_ADDR, calibData[9]);
+    write8(MAG_OFFSET_Z_LSB_ADDR, calibData[10]);
+    write8(MAG_OFFSET_Z_MSB_ADDR, calibData[11]);
 
-    write8(MAG_OFFSET_X_LSB_ADDR, calibData[12]);
-    write8(MAG_OFFSET_X_MSB_ADDR, calibData[13]);
-    write8(MAG_OFFSET_Y_LSB_ADDR, calibData[14]);
-    write8(MAG_OFFSET_Y_MSB_ADDR, calibData[15]);
-    write8(MAG_OFFSET_Z_LSB_ADDR, calibData[16]);
-    write8(MAG_OFFSET_Z_MSB_ADDR, calibData[17]);
+    write8(GYRO_OFFSET_X_LSB_ADDR, calibData[12]);
+    write8(GYRO_OFFSET_X_MSB_ADDR, calibData[13]);
+    write8(GYRO_OFFSET_Y_LSB_ADDR, calibData[14]);
+    write8(GYRO_OFFSET_Y_MSB_ADDR, calibData[15]);
+    write8(GYRO_OFFSET_Z_LSB_ADDR, calibData[16]);
+    write8(GYRO_OFFSET_Z_MSB_ADDR, calibData[17]);
 
     write8(ACCEL_RADIUS_LSB_ADDR, calibData[18]);
     write8(ACCEL_RADIUS_MSB_ADDR, calibData[19]);
@@ -510,6 +633,11 @@ void Adafruit_BNO055::setSensorOffsets(const adafruit_bno055_offsets_t &offsets_
     setMode(OPERATION_MODE_CONFIG);
     delay(25);
 
+    /* Note: Configuration will take place only when user writes to the last
+       byte of each config data pair (ex. ACCEL_OFFSET_Z_MSB_ADDR, etc.).
+       Therefore the last byte must be written whenever the user wants to
+       changes the configuration. */
+
     write8(ACCEL_OFFSET_X_LSB_ADDR, (offsets_type.accel_offset_x) & 0x0FF);
     write8(ACCEL_OFFSET_X_MSB_ADDR, (offsets_type.accel_offset_x >> 8) & 0x0FF);
     write8(ACCEL_OFFSET_Y_LSB_ADDR, (offsets_type.accel_offset_y) & 0x0FF);
@@ -517,19 +645,19 @@ void Adafruit_BNO055::setSensorOffsets(const adafruit_bno055_offsets_t &offsets_
     write8(ACCEL_OFFSET_Z_LSB_ADDR, (offsets_type.accel_offset_z) & 0x0FF);
     write8(ACCEL_OFFSET_Z_MSB_ADDR, (offsets_type.accel_offset_z >> 8) & 0x0FF);
 
-    write8(GYRO_OFFSET_X_LSB_ADDR, (offsets_type.gyro_offset_x) & 0x0FF);
-    write8(GYRO_OFFSET_X_MSB_ADDR, (offsets_type.gyro_offset_x >> 8) & 0x0FF);
-    write8(GYRO_OFFSET_Y_LSB_ADDR, (offsets_type.gyro_offset_y) & 0x0FF);
-    write8(GYRO_OFFSET_Y_MSB_ADDR, (offsets_type.gyro_offset_y >> 8) & 0x0FF);
-    write8(GYRO_OFFSET_Z_LSB_ADDR, (offsets_type.gyro_offset_z) & 0x0FF);
-    write8(GYRO_OFFSET_Z_MSB_ADDR, (offsets_type.gyro_offset_z >> 8) & 0x0FF);
-
     write8(MAG_OFFSET_X_LSB_ADDR, (offsets_type.mag_offset_x) & 0x0FF);
     write8(MAG_OFFSET_X_MSB_ADDR, (offsets_type.mag_offset_x >> 8) & 0x0FF);
     write8(MAG_OFFSET_Y_LSB_ADDR, (offsets_type.mag_offset_y) & 0x0FF);
     write8(MAG_OFFSET_Y_MSB_ADDR, (offsets_type.mag_offset_y >> 8) & 0x0FF);
     write8(MAG_OFFSET_Z_LSB_ADDR, (offsets_type.mag_offset_z) & 0x0FF);
     write8(MAG_OFFSET_Z_MSB_ADDR, (offsets_type.mag_offset_z >> 8) & 0x0FF);
+
+    write8(GYRO_OFFSET_X_LSB_ADDR, (offsets_type.gyro_offset_x) & 0x0FF);
+    write8(GYRO_OFFSET_X_MSB_ADDR, (offsets_type.gyro_offset_x >> 8) & 0x0FF);
+    write8(GYRO_OFFSET_Y_LSB_ADDR, (offsets_type.gyro_offset_y) & 0x0FF);
+    write8(GYRO_OFFSET_Y_MSB_ADDR, (offsets_type.gyro_offset_y >> 8) & 0x0FF);
+    write8(GYRO_OFFSET_Z_LSB_ADDR, (offsets_type.gyro_offset_z) & 0x0FF);
+    write8(GYRO_OFFSET_Z_MSB_ADDR, (offsets_type.gyro_offset_z >> 8) & 0x0FF);
 
     write8(ACCEL_RADIUS_LSB_ADDR, (offsets_type.accel_radius) & 0x0FF);
     write8(ACCEL_RADIUS_MSB_ADDR, (offsets_type.accel_radius >> 8) & 0x0FF);
@@ -540,6 +668,11 @@ void Adafruit_BNO055::setSensorOffsets(const adafruit_bno055_offsets_t &offsets_
     setMode(lastMode);
 }
 
+/**************************************************************************/
+/*!
+    @brief  Checks of all cal status values are set to 3 (fully calibrated)
+*/
+/**************************************************************************/
 bool Adafruit_BNO055::isFullyCalibrated(void)
 {
     uint8_t system, gyro, accel, mag;
@@ -561,15 +694,15 @@ bool Adafruit_BNO055::isFullyCalibrated(void)
 /**************************************************************************/
 bool Adafruit_BNO055::write8(adafruit_bno055_reg_t reg, byte value)
 {
-  Wire.beginTransmission(_address);
+  myWire.beginTransmission(_address);
   #if ARDUINO >= 100
-    Wire.write((uint8_t)reg);
-    Wire.write((uint8_t)value);
+    myWire.write((uint8_t)reg);
+    myWire.write((uint8_t)value);
   #else
-    Wire.send(reg);
-    Wire.send(value);
+    myWire.send(reg);
+    myWire.send(value);
   #endif
-  Wire.endTransmission();
+  myWire.endTransmission();
 
   /* ToDo: Check for error! */
   return true;
@@ -584,18 +717,18 @@ byte Adafruit_BNO055::read8(adafruit_bno055_reg_t reg )
 {
   byte value = 0;
 
-  Wire.beginTransmission(_address);
+  myWire.beginTransmission(_address);
   #if ARDUINO >= 100
-    Wire.write((uint8_t)reg);
+    myWire.write((uint8_t)reg);
   #else
-    Wire.send(reg);
+    myWire.send(reg);
   #endif
-  Wire.endTransmission();
-  Wire.requestFrom(_address, (byte)1);
+  myWire.endTransmission();
+  myWire.requestFrom(_address, (byte)1);
   #if ARDUINO >= 100
-    value = Wire.read();
+    value = myWire.read();
   #else
-    value = Wire.receive();
+    value = myWire.receive();
   #endif
 
   return value;
@@ -608,24 +741,51 @@ byte Adafruit_BNO055::read8(adafruit_bno055_reg_t reg )
 /**************************************************************************/
 bool Adafruit_BNO055::readLen(adafruit_bno055_reg_t reg, byte * buffer, uint8_t len)
 {
-  Wire.beginTransmission(_address);
+  myWire.beginTransmission(_address);
   #if ARDUINO >= 100
-    Wire.write((uint8_t)reg);
+    myWire.write((uint8_t)reg);
   #else
-    Wire.send(reg);
+    myWire.send(reg);
   #endif
-  Wire.endTransmission();
-  Wire.requestFrom(_address, (byte)len);
-
+  myWire.endTransmission();
+  myWire.requestFrom(_address, (byte)len);
+ 
   for (uint8_t i = 0; i < len; i++)
   {
     #if ARDUINO >= 100
-      buffer[i] = Wire.read();
+      buffer[i] = myWire.read();
     #else
-      buffer[i] = Wire.receive();
+      buffer[i] = myWire.receive();
     #endif
+      
   }
+  return true;
+}
 
+bool Adafruit_BNO055::readLen1(adafruit_bno055_reg_t reg, uint8_t len)
+{ 
+  
+  myWire.beginTransmission(_address);
+  myWire.write((uint8_t)reg);
+  myWire.endTransmission();
+  
+  myWire.requestFrom(_address, (byte)len, true);
+
+  /* ToDo: Check for errors! */
+  return true;
+}
+
+bool Adafruit_BNO055::readLen2(byte * buffer, uint8_t len)
+{ 
+  
+  // if ( myWire.available() + 1 > len)
+  // {
+    for (uint8_t i = 0; i < len; i++)
+    {
+        buffer[i] = myWire.read();      
+    }
+  // }
+ 
   /* ToDo: Check for errors! */
   return true;
 }

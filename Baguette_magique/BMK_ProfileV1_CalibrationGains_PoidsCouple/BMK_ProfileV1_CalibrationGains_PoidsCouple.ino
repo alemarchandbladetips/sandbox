@@ -113,8 +113,8 @@ void loop()
         Serial.print( poids_f );Serial.print("\t");
         Serial.print( couple_f );Serial.print("\n");
         
-        //Serial.print( mesure_couple );Serial.print("\t");
-        //Serial.print( mesure_couple_f );Serial.print("\n");
+        Serial.print( mesure_couple );Serial.print("\t");
+        Serial.print( mesure_couple_f );Serial.print("\n");
       }
     }
   }

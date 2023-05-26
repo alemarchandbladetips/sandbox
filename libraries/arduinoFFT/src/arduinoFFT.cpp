@@ -23,7 +23,7 @@
 
 arduinoFFT::arduinoFFT(void)
 { // Constructor
-	#warning("This method is deprecated and will be removed on future revisions.")
+	#warning("This method is deprecated and may be removed on future revisions.")
 }
 
 arduinoFFT::arduinoFFT(double *vReal, double *vImag, uint16_t samples, double samplingFrequency)
@@ -47,7 +47,7 @@ uint8_t arduinoFFT::Revision(void)
 
 void arduinoFFT::Compute(double *vReal, double *vImag, uint16_t samples, uint8_t dir)
 {
-	#warning("This method is deprecated and will be removed on future revisions.")
+	#warning("This method is deprecated and may be removed on future revisions.")
 	Compute(vReal, vImag, samples, Exponent(samples), dir);
 }
 
@@ -69,6 +69,9 @@ void arduinoFFT::Compute(uint8_t dir)
 		j += k;
 	}
 	// Compute the FFT  /
+#ifdef __AVR__
+	uint8_t index = 0;
+#endif
 	double c1 = -1.0;
 	double c2 = 0.0;
 	uint16_t l2 = 1;
@@ -91,11 +94,17 @@ void arduinoFFT::Compute(uint8_t dir)
 			 u2 = ((u1 * c2) + (u2 * c1));
 			 u1 = z;
 		}
+#ifdef __AVR__
+		c2 = pgm_read_float_near(&(_c2[index]));
+		c1 = pgm_read_float_near(&(_c1[index]));
+		index++;
+#else
 		c2 = sqrt((1.0 - c1) / 2.0);
+		c1 = sqrt((1.0 + c1) / 2.0);
+#endif
 		if (dir == FFT_FORWARD) {
 			c2 = -c2;
 		}
-		c1 = sqrt((1.0 + c1) / 2.0);
 	}
 	// Scaling for reverse transform /
 	if (dir != FFT_FORWARD) {
@@ -109,7 +118,7 @@ void arduinoFFT::Compute(uint8_t dir)
 void arduinoFFT::Compute(double *vReal, double *vImag, uint16_t samples, uint8_t power, uint8_t dir)
 {	// Computes in-place complex-to-complex FFT
 	// Reverse bits
-	#warning("This method is deprecated and will be removed on future revisions.")
+	#warning("This method is deprecated and may be removed on future revisions.")
 	uint16_t j = 0;
 	for (uint16_t i = 0; i < (samples - 1); i++) {
 		if (i < j) {
@@ -125,6 +134,9 @@ void arduinoFFT::Compute(double *vReal, double *vImag, uint16_t samples, uint8_t
 		j += k;
 	}
 	// Compute the FFT
+#ifdef __AVR__
+	uint8_t index = 0;
+#endif
 	double c1 = -1.0;
 	double c2 = 0.0;
 	uint16_t l2 = 1;
@@ -147,11 +159,17 @@ void arduinoFFT::Compute(double *vReal, double *vImag, uint16_t samples, uint8_t
 			 u2 = ((u1 * c2) + (u2 * c1));
 			 u1 = z;
 		}
+#ifdef __AVR__
+		c2 = pgm_read_float_near(&(_c2[index]));
+		c1 = pgm_read_float_near(&(_c1[index]));
+		index++;
+#else
 		c2 = sqrt((1.0 - c1) / 2.0);
+		c1 = sqrt((1.0 + c1) / 2.0);
+#endif
 		if (dir == FFT_FORWARD) {
 			c2 = -c2;
 		}
-		c1 = sqrt((1.0 + c1) / 2.0);
 	}
 	// Scaling for reverse transform
 	if (dir != FFT_FORWARD) {
@@ -171,9 +189,42 @@ void arduinoFFT::ComplexToMagnitude()
 
 void arduinoFFT::ComplexToMagnitude(double *vReal, double *vImag, uint16_t samples)
 {	// vM is half the size of vReal and vImag
-	#warning("This method is deprecated and will be removed on future revisions.")
+	#warning("This method is deprecated and may be removed on future revisions.")
 	for (uint16_t i = 0; i < samples; i++) {
 		vReal[i] = sqrt(sq(vReal[i]) + sq(vImag[i]));
+	}
+}
+
+void arduinoFFT::DCRemoval()
+{
+	// calculate the mean of vData
+	double mean = 0;
+	for (uint16_t i = 0; i < this->_samples; i++)
+	{
+		mean += this->_vReal[i];
+	}
+	mean /= this->_samples;
+	// Subtract the mean from vData
+	for (uint16_t i = 0; i < this->_samples; i++)
+	{
+		this->_vReal[i] -= mean;
+	}
+}
+
+void arduinoFFT::DCRemoval(double *vData, uint16_t samples)
+{
+	// calculate the mean of vData
+	#warning("This method is deprecated and may be removed on future revisions.")
+	double mean = 0;
+	for (uint16_t i = 0; i < samples; i++)
+	{
+		mean += vData[i];
+	}
+	mean /= samples;
+	// Subtract the mean from vData
+	for (uint16_t i = 0; i < samples; i++)
+	{
+		vData[i] -= mean;
 	}
 }
 
@@ -197,10 +248,23 @@ void arduinoFFT::Windowing(uint8_t windowType, uint8_t dir)
 			weighingFactor = 0.54 * (1.0 - cos(twoPi * ratio));
 			break;
 		case FFT_WIN_TYP_TRIANGLE: // triangle (Bartlett)
+			#if defined(ESP8266) || defined(ESP32)
+			weighingFactor = 1.0 - ((2.0 * fabs(indexMinusOne - (samplesMinusOne / 2.0))) / samplesMinusOne);
+			#else
 			weighingFactor = 1.0 - ((2.0 * abs(indexMinusOne - (samplesMinusOne / 2.0))) / samplesMinusOne);
+			#endif
 			break;
-		case FFT_WIN_TYP_BLACKMAN: // blackmann
+		case FFT_WIN_TYP_NUTTALL: // nuttall
+			weighingFactor = 0.355768 - (0.487396 * (cos(twoPi * ratio))) + (0.144232 * (cos(fourPi * ratio))) - (0.012604 * (cos(sixPi * ratio)));
+			break;
+		case FFT_WIN_TYP_BLACKMAN: // blackman
 			weighingFactor = 0.42323 - (0.49755 * (cos(twoPi * ratio))) + (0.07922 * (cos(fourPi * ratio)));
+			break;
+		case FFT_WIN_TYP_BLACKMAN_NUTTALL: // blackman nuttall
+			weighingFactor = 0.3635819 - (0.4891775 * (cos(twoPi * ratio))) + (0.1365995 * (cos(fourPi * ratio))) - (0.0106411 * (cos(sixPi * ratio)));
+			break;
+		case FFT_WIN_TYP_BLACKMAN_HARRIS: // blackman harris
+			weighingFactor = 0.35875 - (0.48829 * (cos(twoPi * ratio))) + (0.14128 * (cos(fourPi * ratio))) - (0.01168 * (cos(sixPi * ratio)));
 			break;
 		case FFT_WIN_TYP_FLT_TOP: // flat top
 			weighingFactor = 0.2810639 - (0.5208972 * cos(twoPi * ratio)) + (0.1980399 * cos(fourPi * ratio));
@@ -224,7 +288,7 @@ void arduinoFFT::Windowing(uint8_t windowType, uint8_t dir)
 void arduinoFFT::Windowing(double *vData, uint16_t samples, uint8_t windowType, uint8_t dir)
 {// Weighing factors are computed once before multiple use of FFT
 // The weighing function is symetric; half the weighs are recorded
-	#warning("This method is deprecated and will be removed on future revisions.")
+	#warning("This method is deprecated and may be removed on future revisions.")
 	double samplesMinusOne = (double(samples) - 1.0);
 	for (uint16_t i = 0; i < (samples >> 1); i++) {
 		double indexMinusOne = double(i);
@@ -242,10 +306,23 @@ void arduinoFFT::Windowing(double *vData, uint16_t samples, uint8_t windowType, 
 			weighingFactor = 0.54 * (1.0 - cos(twoPi * ratio));
 			break;
 		case FFT_WIN_TYP_TRIANGLE: // triangle (Bartlett)
+			#if defined(ESP8266) || defined(ESP32)
+			weighingFactor = 1.0 - ((2.0 * fabs(indexMinusOne - (samplesMinusOne / 2.0))) / samplesMinusOne);
+			#else
 			weighingFactor = 1.0 - ((2.0 * abs(indexMinusOne - (samplesMinusOne / 2.0))) / samplesMinusOne);
+			#endif
 			break;
-		case FFT_WIN_TYP_BLACKMAN: // blackmann
+		case FFT_WIN_TYP_NUTTALL: // nuttall
+			weighingFactor = 0.355768 - (0.487396 * (cos(twoPi * ratio))) + (0.144232 * (cos(fourPi * ratio))) - (0.012604 * (cos(sixPi * ratio)));
+			break;
+		case FFT_WIN_TYP_BLACKMAN: // blackman
 			weighingFactor = 0.42323 - (0.49755 * (cos(twoPi * ratio))) + (0.07922 * (cos(fourPi * ratio)));
+			break;
+		case FFT_WIN_TYP_BLACKMAN_NUTTALL: // blackman nuttall
+			weighingFactor = 0.3635819 - (0.4891775 * (cos(twoPi * ratio))) + (0.1365995 * (cos(fourPi * ratio))) - (0.0106411 * (cos(sixPi * ratio)));
+			break;
+		case FFT_WIN_TYP_BLACKMAN_HARRIS: // blackman harris
+			weighingFactor = 0.35875 - (0.48829 * (cos(twoPi * ratio))) + (0.14128 * (cos(fourPi * ratio))) - (0.01168 * (cos(sixPi * ratio)));
 			break;
 		case FFT_WIN_TYP_FLT_TOP: // flat top
 			weighingFactor = 0.2810639 - (0.5208972 * cos(twoPi * ratio)) + (0.1980399 * cos(fourPi * ratio));
@@ -283,13 +360,40 @@ double arduinoFFT::MajorPeak()
 	double interpolatedX = ((IndexOfMaxY + delta)  * this->_samplingFrequency) / (this->_samples-1);
 	if(IndexOfMaxY==(this->_samples >> 1)) //To improve calculation on edge values
 		interpolatedX = ((IndexOfMaxY + delta)  * this->_samplingFrequency) / (this->_samples);
-	// retuned value: interpolated frequency peak apex
+	// returned value: interpolated frequency peak apex
 	return(interpolatedX);
+}
+
+void arduinoFFT::MajorPeak(double *f, double *v)
+{
+	double maxY = 0;
+	uint16_t IndexOfMaxY = 0;
+	//If sampling_frequency = 2 * max_frequency in signal,
+	//value would be stored at position samples/2
+	for (uint16_t i = 1; i < ((this->_samples >> 1) + 1); i++) {
+		if ((this->_vReal[i - 1] < this->_vReal[i]) && (this->_vReal[i] > this->_vReal[i + 1])) {
+			if (this->_vReal[i] > maxY) {
+				maxY = this->_vReal[i];
+				IndexOfMaxY = i;
+			}
+		}
+	}
+	double delta = 0.5 * ((this->_vReal[IndexOfMaxY - 1] - this->_vReal[IndexOfMaxY + 1]) / (this->_vReal[IndexOfMaxY - 1] - (2.0 * this->_vReal[IndexOfMaxY]) + this->_vReal[IndexOfMaxY + 1]));
+	double interpolatedX = ((IndexOfMaxY + delta)  * this->_samplingFrequency) / (this->_samples - 1);
+	if (IndexOfMaxY == (this->_samples >> 1)) //To improve calculation on edge values
+		interpolatedX = ((IndexOfMaxY + delta)  * this->_samplingFrequency) / (this->_samples);
+	// returned value: interpolated frequency peak apex
+	*f = interpolatedX;
+	#if defined(ESP8266) || defined(ESP32)
+	*v = fabs(this->_vReal[IndexOfMaxY - 1] - (2.0 * this->_vReal[IndexOfMaxY]) + this->_vReal[IndexOfMaxY + 1]);
+	#else
+	*v = abs(this->_vReal[IndexOfMaxY - 1] - (2.0 * this->_vReal[IndexOfMaxY]) + this->_vReal[IndexOfMaxY + 1]);
+	#endif
 }
 
 double arduinoFFT::MajorPeak(double *vD, uint16_t samples, double samplingFrequency)
 {
-	#warning("This method is deprecated and will be removed on future revisions.")
+	#warning("This method is deprecated and may be removed on future revisions.")
 	double maxY = 0;
 	uint16_t IndexOfMaxY = 0;
 	//If sampling_frequency = 2 * max_frequency in signal,
@@ -310,9 +414,38 @@ double arduinoFFT::MajorPeak(double *vD, uint16_t samples, double samplingFreque
 	return(interpolatedX);
 }
 
+void arduinoFFT::MajorPeak(double *vD, uint16_t samples, double samplingFrequency, double *f, double *v)
+{
+	#warning("This method is deprecated and may be removed on future revisions.")
+	double maxY = 0;
+	uint16_t IndexOfMaxY = 0;
+	//If sampling_frequency = 2 * max_frequency in signal,
+	//value would be stored at position samples/2
+	for (uint16_t i = 1; i < ((samples >> 1) + 1); i++) {
+		if ((vD[i - 1] < vD[i]) && (vD[i] > vD[i + 1])) {
+			if (vD[i] > maxY) {
+				maxY = vD[i];
+				IndexOfMaxY = i;
+			}
+		}
+	}
+	double delta = 0.5 * ((vD[IndexOfMaxY - 1] - vD[IndexOfMaxY + 1]) / (vD[IndexOfMaxY - 1] - (2.0 * vD[IndexOfMaxY]) + vD[IndexOfMaxY + 1]));
+	double interpolatedX = ((IndexOfMaxY + delta)  * samplingFrequency) / (samples - 1);
+	//double popo =
+	if (IndexOfMaxY == (samples >> 1)) //To improve calculation on edge values
+		interpolatedX = ((IndexOfMaxY + delta)  * samplingFrequency) / (samples);
+	// returned value: interpolated frequency peak apex
+	*f = interpolatedX;
+	#if defined(ESP8266) || defined(ESP32)
+	*v = fabs(vD[IndexOfMaxY - 1] - (2.0 * vD[IndexOfMaxY]) + vD[IndexOfMaxY + 1]);
+	#else
+	*v = abs(vD[IndexOfMaxY - 1] - (2.0 * vD[IndexOfMaxY]) + vD[IndexOfMaxY + 1]);
+	#endif
+}
+
 uint8_t arduinoFFT::Exponent(uint16_t value)
 {
-	#warning("This method will not be accessible on future revisions.")
+	#warning("This method may not be accessible on future revisions.")
 	// Calculates the base 2 logarithm of a value
 	uint8_t result = 0;
 	while (((value >> result) & 1) != 1) result++;

@@ -2,7 +2,7 @@
 
 * [Product Page: LIDAR-Lite v3](https://buy.garmin.com/en-US/US/p/557294) - See product page for operating manual
 * [Product Page: LIDAR-Lite v3HP](https://buy.garmin.com/en-US/US/p/578152) - See product page for operating manual
-* [Product Page: LIDAR-Lite v4 LED](https://buy.garmin.com/en-US/US/p/610275) - See product page for operating manual
+* [Product Page: LIDAR-Lite v4 LED](https://buy.garmin.com/en-US/US/p/610275) - See product page for operating manual and **device firmware updates**
 * [Product Support](https://support.garmin.com) - Please direct any support issues to Garmin's Support Team. They're smart, helpful, and super nice!
 
 This library provides quick access to basic functions of LIDAR-Lite
@@ -32,11 +32,24 @@ This example shows various methods to run LIDAR-Lite v3HP.
 ### v3HP/v3HP_MONITOR
 Use the MODE pin to monitor STATUS of the LIDAR-Lite v3HP.
 
-### v4LED/v4LED_I2C/
-Operation examples for LIDAR-Lite v4 LED.
+### v3HP/v3HP_PWM
+Use PWM output to read distances from LIDAR-Lite v3HP.
+
+### v4LED/v4LED
+Various operation examples for LIDAR-Lite v4 LED.
+
+### v4LED/v4LED_fast
+High rep rate example using the optional GPIO pins or I2C port to trigger measurements.
+
+### v4LED/v4LED_lowpower
+Take single distance measurements using the I2C port in a lower power state.
 
 ## Version History
-* [3.0.2](https://github.com/garmin/LIDARLite_Arduino_Library/tree/3.0.1) - Add v4 LED examples and link to ANT Library
+* [3.0.6](https://github.com/garmin/LIDARLite_Arduino_Library/tree/3.0.6) - Copy alt requestFrom() to LLv4LED library
+* [3.0.5](https://github.com/garmin/LIDARLite_Arduino_Library/tree/3.0.5) - v3HP library updated for alternate requestFrom()
+* [3.0.4](https://github.com/garmin/LIDARLite_Arduino_Library/tree/3.0.4) - v4 LED and v3HP library updates. New v3HP PWM example.
+* [3.0.3](https://github.com/garmin/LIDARLite_Arduino_Library/tree/3.0.3) - Add v3HP library function to read peak stack
+* [3.0.2](https://github.com/garmin/LIDARLite_Arduino_Library/tree/3.0.2) - Add v4 LED examples and link to ANT Library
 * [3.0.1](https://github.com/garmin/LIDARLite_Arduino_Library/tree/3.0.1) - v4 LED example clean up and library fixes
 * [3.0.0](https://github.com/garmin/LIDARLite_Arduino_Library/tree/3.0.0) - Support for LIDAR-Lite v4 LED
 * [2.0.6](https://github.com/garmin/LIDARLite_Arduino_Library/tree/2.0.6) - Add v3HP library function to reset the reference filter

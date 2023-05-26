@@ -47,21 +47,22 @@ void setup()
 {
   sampling_period_us = round(1000000*(1.0/samplingFrequency));
   Serial.begin(115200);
+  while(!Serial);
   Serial.println("Ready");
 }
 
 void loop()
 {
   /*SAMPLING*/
+  microseconds = micros();
   for(int i=0; i<samples; i++)
   {
-      microseconds = micros();    //Overflows after around 70 minutes!
-
       vReal[i] = analogRead(CHANNEL);
       vImag[i] = 0;
-      while(micros() < (microseconds + sampling_period_us)){
+      while(micros() - microseconds < sampling_period_us){
         //empty loop
       }
+      microseconds += sampling_period_us;
   }
   /* Print the results of the sampling according to time */
   Serial.println("Data:");

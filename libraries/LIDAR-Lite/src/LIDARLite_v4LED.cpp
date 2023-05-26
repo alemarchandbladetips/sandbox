@@ -112,6 +112,11 @@ void LIDARLite_v4LED::setI2Caddr (uint8_t newAddress, uint8_t disableDefault,
 {
     uint8_t dataBytes[5];
 
+    // Enable flash storage
+    dataBytes[0] = 0x11;
+    write(0xEA, dataBytes, 1, lidarliteAddress);
+    delay(100);
+
     // Read 4-byte device serial number
     read (0x16, dataBytes, 4, lidarliteAddress);
 
@@ -121,12 +126,23 @@ void LIDARLite_v4LED::setI2Caddr (uint8_t newAddress, uint8_t disableDefault,
     // Write the serial number and new address in one 5-byte transaction
     write(0x16, dataBytes, 5, lidarliteAddress);
 
+    // Wait for the I2C peripheral to be restarted with new device address
+    delay(100);
+
     // If desired, disable default I2C device address (using the new I2C device address)
     if (disableDefault)
     {
         dataBytes[0] = 0x01; // set bit to disable default address
         write(0x1b, dataBytes, 1, newAddress);
+
+        // Wait for the I2C peripheral to be restarted with new device address
+        delay(100);
     }
+
+    // Disable flash storage
+    dataBytes[0] = 0;
+    write(0xEA, dataBytes, 1, newAddress);
+    delay(100);
 } /* LIDARLite_v4LED::setI2Caddr */
 
 /*------------------------------------------------------------------------------
@@ -284,7 +300,7 @@ uint16_t LIDARLite_v4LED::readDistance(uint8_t lidarliteAddress)
 /*------------------------------------------------------------------------------
   Write
 
-  Perform I2C write to device. The I2C peripheral in the LidarLite v3 HP
+  Perform I2C write to device. The I2C peripheral in the LidarLite v4 LED
   will receive multiple bytes in one I2C transmission. The first byte is
   always the register address. The the bytes that follow will be written
   into the specified register address first and then the internal address
@@ -301,15 +317,15 @@ uint16_t LIDARLite_v4LED::readDistance(uint8_t lidarliteAddress)
 void LIDARLite_v4LED::write(uint8_t regAddr,  uint8_t * dataBytes,
                             uint8_t numBytes, uint8_t lidarliteAddress)
 {
-    int nackCatcher;
+    uint8_t nackCatcher;
 
-    Wire.beginTransmission((int) lidarliteAddress);
+    Wire.beginTransmission(lidarliteAddress);
 
     // First byte of every write sets the LidarLite's internal register address pointer
-    Wire.write((int) regAddr);
+    Wire.write(regAddr);
 
     // Subsequent bytes are data writes
-    Wire.write(dataBytes, (int) numBytes);
+    Wire.write(dataBytes, numBytes);
 
     // A nack means the device is not responding. Report the error over serial.
     nackCatcher = Wire.endTransmission();
@@ -322,13 +338,40 @@ void LIDARLite_v4LED::write(uint8_t regAddr,  uint8_t * dataBytes,
 /*------------------------------------------------------------------------------
   Read
 
-  Perform I2C read from device.  The I2C peripheral in the LidarLite v3 HP
+  Perform I2C read from device.  The I2C peripheral in the LidarLite v4 LED
   will send multiple bytes in one I2C transmission. The register address must
   be set up by a previous I2C write. The bytes that follow will be read
   from the specified register address first and then the internal address
   pointer in the Lidar Lite will be auto-incremented for following bytes.
 
-  Will detect an unresponsive device and report the error over serial.
+    // **************************************************************
+    // If you are here because compilation fails trying to feed five
+    // parameters to "requestFrom" it could be because your
+    // processor does not include support for all versions of the
+    // overloaded function in it's implementation of the Wire library.
+    // The five parameter function appears to be necessary to
+    // stabalize the Arduino Due and help it perform repeated starts.
+    // See LEGACY_I2C below for an alternate implementation.
+    // **************************************************************
+    // In order to use the documented version of requestFrom() with
+    // fewer parameters, you can copy this code and create your
+    // own library, or you may define LEGACY_I2C in your application
+    // and use this library. The recommended way to do this is to use
+    // the -D compiler option.
+    //
+    // 1) Find the platform directory pointed to by your Arduino IDE
+    //    - This will typically be in the Programs (x86) directory
+    //      or in your user directory under AppData in Windows.
+    //    - To get help locating it, turn on verbose compiler output
+    //      in the Arduino IDE in File->Preferences. The next output
+    //      will show "Using board '????' from platform in folder ..."
+    // 2) Under that directory tree will be a "platform.txt" file
+    //    which defines your board and system.
+    //    - Along side that text file, create a new text file called
+    //      "platform.local.txt" (without the quotes)
+    // 3) Inside "platform.local.txt" add only the following line of text
+    //    build.extra_flags=-DLEGACY_I2C
+    // **************************************************************
 
   Parameters
   ------------------------------------------------------------------------------
@@ -341,29 +384,56 @@ void LIDARLite_v4LED::write(uint8_t regAddr,  uint8_t * dataBytes,
 void LIDARLite_v4LED::read(uint8_t regAddr,  uint8_t * dataBytes,
                            uint8_t numBytes, uint8_t lidarliteAddress)
 {
-    uint16_t i = 0;
-    int nackCatcher = 0;
 
-    // Set the internal register address pointer in the Lidar Lite
-    Wire.beginTransmission((int) lidarliteAddress);
-    Wire.write((int) regAddr); // Set the register to be read
+#ifdef LEGACY_I2C
+
+    #define SEND_STOP ((uint8_t) true)
+    #define DONT_STOP ((uint8_t) false)
+
+    Wire.beginTransmission(lidarliteAddress);
+    Wire.write(regAddr);
 
     // A nack means the device is not responding, report the error over serial
-    nackCatcher = Wire.endTransmission(false); // false means perform repeated start
-    if (nackCatcher != 0)
+    if (Wire.endTransmission(DONT_STOP)) // performs repeated start
     {
-        // handle nack issues in here
+        Serial.println("> nack");
     }
 
     // Perform read, save in dataBytes array
-    Wire.requestFrom((int)lidarliteAddress, (int) numBytes);
-    if ((int) numBytes <= Wire.available())
+    Wire.requestFrom(lidarliteAddress, numBytes, SEND_STOP);
+
+#else
+
+    // This single function performs the following actions -
+    //     1) I2C START
+    //     2) I2C write to set the address
+    //     3) I2C REPEATED START
+    //     4) I2C read to fetch the required data
+    //     5) I2C STOP
+
+    // **************************************************************
+    // If you are here because compilation fails trying to feed five
+    // parameters to "requestFrom" see function header comments above
+    // **************************************************************
+
+    Wire.requestFrom
+    (
+        lidarliteAddress, // Slave address
+        numBytes,         // number of consecutive bytes to read
+        regAddr,          // address of first register to read
+        1,                // number of bytes in regAddr
+        true              // true = set STOP condition following I2C read
+    );
+
+#endif
+
+    uint8_t   numHere = Wire.available();
+    uint8_t   i       = 0;
+
+    while (i < numHere)
     {
-        while (i < numBytes)
-        {
-            dataBytes[i] = (uint8_t) Wire.read();
-            i++;
-        }
+        dataBytes[i] = Wire.read();
+        i++;
     }
 
 } /* LIDARLite_v4LED::read */

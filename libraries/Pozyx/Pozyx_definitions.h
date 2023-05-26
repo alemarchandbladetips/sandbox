@@ -1,4 +1,4 @@
-/**
+/*
   Pozyx_definitions.h - Library for Arduino Pozyx shield.
   Copyright (c) Pozyx Laboratories.  All right reserved.
 
@@ -28,7 +28,7 @@
 #define _POZYX_FORMAT_FOOT
 #define _POZYX_FORMAT_INCH
 
-// maximum number of anchors to be stored in the interal anchor list on the pozyx device
+/* Maximum number of anchors to be stored in the interal anchor list on the pozyx device */
 #define MAX_ANCHORS_IN_LIST          20
 
 #define POZYX_I2C_ADDRESS        0x4B
@@ -149,7 +149,7 @@
 
 /* Macro's to test if registers are readable/writable */
 
-#define IS_REG_READABLE(x)       (((((x)>=0x0)&&((x)<0x7)) || (((x)>=0x10)&&((x)<0x12)) || (((x)>=0x14)&&((x)<0x24)) || (((x)>=0x27)&&((x)<0x2b)) || (((x)>=0x30)&&((x)<0x48)) || (((x)>=0x50)&&((x)<0x89)))?1:0)
+#define IS_REG_READABLE(x)       (((((x)>=0x0)&&((x)<0x7)) || (((x)>=0x10)&&((x)<0x12)) || (((x)>=0x14)&&((x)<0x24)) || (((x)>=0x27)&&((x)<0x2b)) || (((x)>=0x30)&&((x)<0x48)) || (((x)>=0x4E)&&((x)<0x89)))?1:0)
 #define IS_REG_WRITABLE(x)       (((((x)>=0x10)&&((x)<0x12)) || (((x)>=0x14)&&((x)<0x24)) || (((x)>=0x27)&&((x)<0x2b)) || (((x)>=0x30)&&((x)<0x3c)) || (((x)>=0x85)&&((x)<0x89)))?1:0)
 #define IS_FUNCTIONCALL(x)       (((((x)>=0xb0)&&((x)<0xbc)) || (((x)>=0xc0)&&((x)<0xc9)))?1:0)
 
@@ -184,6 +184,12 @@
 #define POZYX_POS_ALG_LS            0x00 // deprecated so default to UWB only
 #define POZYX_POS_ALG_TRACKING      0x04
 
+/* Bit masks for POZYX_POS_FILTER */
+#define FILTER_TYPE_NONE            0x00
+#define FILTER_TYPE_FIR             0x01
+#define FILTER_TYPE_MOVINGAVERAGE   0x03
+#define FILTER_TYPE_MOVINGMEDIAN    0x04
+
 /* Bit mask for POZYX_RANGE_PROTOCOL */
 #define POZYX_RANGE_PROTOCOL_PRECISION  0x00
 #define POZYX_RANGE_PROTOCOL_FAST    0x01
@@ -210,6 +216,8 @@
 #define POZYX_DELAY_REMOTE_WRITE    5
 #define POZYX_DELAY_REMOTE_FUNCTION 10
 #define POZYX_DELAY_INTERRUPT       100
+#define POZYX_DELAY_POSITIONING     1000
+#define POZYX_DELAY_REMOTE_POSITIONING     1000
 #define POZYX_DELAY_CALIBRATION     1000
 #define POZYX_FAILURE               0x0
 #define POZYX_SUCCESS               0x1
@@ -253,6 +261,8 @@
 
 // Division factors for converting the raw register values to meaningful physical quantities
 #define POZYX_POS_DIV_MM               1.0f
+#define POZYX_PRESS_DIVPOSITIONING     1000
+#define POZYX_PRESS_DIVREMOTE_POSITIONING     1000
 #define POZYX_PRESS_DIV_PA             1000.0f
 #define POZYX_ACCEL_DIV_MG             1.0f
 #define POZYX_GYRO_DIV_DPS             16.0f

@@ -56,6 +56,9 @@ Destructor
 * **Compute**(double *vReal, double *vImag, uint16_t samples, uint8_t power, uint8_t dir);
 * **Compute**(uint8_t dir);
 Calcuates the Fast Fourier Transform.
+* **DCRemoval**(double *vData, uint16_t samples);
+* **DCRemoval**();
+Removes the DC component from the sample data.
 * **MajorPeak**(double *vD, uint16_t samples, double samplingFrequency);
 * **MajorPeak**();
 Looks for and returns the frequency of the biggest spike in the analyzed signal.
@@ -68,7 +71,10 @@ Performs a windowing function on the values array. The possible windowing option
     * FFT_WIN_TYP_HAMMING
     * FFT_WIN_TYP_HANN
     * FFT_WIN_TYP_TRIANGLE
+    * FFT_WIN_TYP_NUTTALL
     * FFT_WIN_TYP_BLACKMAN
+    * FFT_WIN_TYP_BLACKMAN_NUTTALL
+    * FFT_WIN_TYP_BLACKMAN_HARRIS
     * FFT_WIN_TYP_FLT_TOP
     * FFT_WIN_TYP_WELCH
 * **Exponent**(uint16_t value);

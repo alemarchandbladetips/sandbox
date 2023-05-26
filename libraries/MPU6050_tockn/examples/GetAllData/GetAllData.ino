@@ -16,17 +16,31 @@ void setup() {
 void loop() {
   mpu6050.update();
 
-  if(micros() - timer > 10000){
+  if(millis() - timer > 1000){
     
-    timer = micros();
-    
-//    Serial.print(mpu6050.getAccX());Serial.print("\t");
-//    Serial.print(mpu6050.getAccY());Serial.print("\t");
-//    Serial.println(mpu6050.getAccZ());Serial.print("\t");
+    Serial.println("=======================================================");
+    Serial.print("temp : ");Serial.println(mpu6050.getTemp());
+    Serial.print("accX : ");Serial.print(mpu6050.getAccX());
+    Serial.print("\taccY : ");Serial.print(mpu6050.getAccY());
+    Serial.print("\taccZ : ");Serial.println(mpu6050.getAccZ());
   
-    Serial.print(mpu6050.getGyroX());Serial.print("\t");
-    Serial.print(mpu6050.getGyroY());Serial.print("\t");
-    Serial.println(mpu6050.getGyroZ());
+    Serial.print("gyroX : ");Serial.print(mpu6050.getGyroX());
+    Serial.print("\tgyroY : ");Serial.print(mpu6050.getGyroY());
+    Serial.print("\tgyroZ : ");Serial.println(mpu6050.getGyroZ());
+  
+    Serial.print("accAngleX : ");Serial.print(mpu6050.getAccAngleX());
+    Serial.print("\taccAngleY : ");Serial.println(mpu6050.getAccAngleY());
+  
+    Serial.print("gyroAngleX : ");Serial.print(mpu6050.getGyroAngleX());
+    Serial.print("\tgyroAngleY : ");Serial.print(mpu6050.getGyroAngleY());
+    Serial.print("\tgyroAngleZ : ");Serial.println(mpu6050.getGyroAngleZ());
+    
+    Serial.print("angleX : ");Serial.print(mpu6050.getAngleX());
+    Serial.print("\tangleY : ");Serial.print(mpu6050.getAngleY());
+    Serial.print("\tangleZ : ");Serial.println(mpu6050.getAngleZ());
+    Serial.println("=======================================================\n");
+    timer = millis();
+    
   }
 
 }

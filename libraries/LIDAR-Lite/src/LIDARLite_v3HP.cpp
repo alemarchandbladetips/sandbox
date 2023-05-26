@@ -336,12 +336,10 @@ void LIDARLite_v3HP::resetReferenceFilter(uint8_t lidarliteAddress)
   lidarliteAddress: Default 0x62. Fill in new address here if changed. See
     operating manual for instructions.
 ------------------------------------------------------------------------------*/
-void LIDARLite_v3HP::write(uint8_t regAddr, uint8_t * dataBytes,
-                           uint16_t numBytes, uint8_t lidarliteAddress)
+void LIDARLite_v3HP::write(uint8_t regAddr,  uint8_t * dataBytes,
+                           uint8_t numBytes, uint8_t lidarliteAddress)
 {
-    int nackCatcher;
-
-    Wire.beginTransmission((int) lidarliteAddress);
+    Wire.beginTransmission(lidarliteAddress);
 
     // Wire.write Syntax
     // -----------------------------------------------------------------
@@ -350,14 +348,13 @@ void LIDARLite_v3HP::write(uint8_t regAddr, uint8_t * dataBytes,
     // Wire.write(data, length)  - an array of data to send as bytes
 
     // First byte of every write sets the LidarLite's internal register address pointer
-    Wire.write((int) regAddr);
+    Wire.write(regAddr);
 
     // Subsequent bytes are data writes
-    Wire.write(dataBytes, (int) numBytes);
+    Wire.write(dataBytes, numBytes);
 
     // A nack means the device is not responding. Report the error over serial.
-    nackCatcher = Wire.endTransmission();
-    if (nackCatcher != 0)
+    if ( Wire.endTransmission() )
     {
         Serial.println("> nack");
     }
@@ -376,6 +373,35 @@ void LIDARLite_v3HP::write(uint8_t regAddr, uint8_t * dataBytes,
 
   Will detect an unresponsive device and report the error over serial.
 
+    // **************************************************************
+    // If you are here because compilation fails trying to feed five
+    // parameters to "requestFrom" it could be because your
+    // processor does not include support for all versions of the
+    // overloaded function in it's implementation of the Wire library.
+    // The five parameter function appears to be necessary to
+    // stabalize the Arduino Due and help it perform repeated starts.
+    // See LEGACY_I2C below for an alternate implementation.
+    // **************************************************************
+    // In order to use the documented version of requestFrom() with
+    // fewer parameters, you can copy this code and create your
+    // own library, or you may define LEGACY_I2C in your application
+    // and use this library. The recommended way to do this is to use
+    // the -D compiler option.
+    //
+    // 1) Find the platform directory pointed to by your Arduino IDE
+    //    - This will typically be in the Programs (x86) directory
+    //      or in your user directory under AppData in Windows.
+    //    - To get help locating it, turn on verbose compiler output
+    //      in the Arduino IDE in File->Preferences. The next output
+    //      will show "Using board '????' from platform in folder ..."
+    // 2) Under that directory tree will be a "platform.txt" file
+    //    which defines your board and system.
+    //    - Along side that text file, create a new text file called
+    //      "platform.local.txt" (without the quotes)
+    // 3) Inside "platform.local.txt" add only the following line of text
+    //    build.extra_flags=-DLEGACY_I2C
+    // **************************************************************
+
   Parameters
   ------------------------------------------------------------------------------
   regAddr:   register address to write to
@@ -384,34 +410,62 @@ void LIDARLite_v3HP::write(uint8_t regAddr, uint8_t * dataBytes,
   lidarliteAddress: Default 0x62. Fill in new address here if changed. See
     operating manual for instructions.
 ------------------------------------------------------------------------------*/
-void LIDARLite_v3HP::read(uint8_t regAddr, uint8_t * dataBytes,
-                          uint16_t numBytes, uint8_t lidarliteAddress)
+void LIDARLite_v3HP::read(uint8_t regAddr,  uint8_t * dataBytes,
+                          uint8_t numBytes, uint8_t lidarliteAddress)
 {
-    uint16_t i = 0;
-    int nackCatcher = 0;
 
-    // Set the internal register address pointer in the Lidar Lite
-    Wire.beginTransmission((int) lidarliteAddress);
-    Wire.write((int) regAddr); // Set the register to be read
+#ifdef LEGACY_I2C
+
+    #define SEND_STOP ((uint8_t) true)
+    #define DONT_STOP ((uint8_t) false)
+
+    Wire.beginTransmission(lidarliteAddress);
+    Wire.write(regAddr);
 
     // A nack means the device is not responding, report the error over serial
-    nackCatcher = Wire.endTransmission(false); // false means perform repeated start
-    if (nackCatcher != 0)
+    if (Wire.endTransmission(DONT_STOP)) // performs repeated start
     {
         Serial.println("> nack");
     }
 
     // Perform read, save in dataBytes array
-    Wire.requestFrom((int)lidarliteAddress, (int) numBytes);
-    if ((int) numBytes <= Wire.available())
+    Wire.requestFrom(lidarliteAddress, numBytes, SEND_STOP);
+
+#else
+
+    // This single function performs the following actions -
+    //     1) I2C START
+    //     2) I2C write to set the address
+    //     3) I2C REPEATED START
+    //     4) I2C read to fetch the required data
+    //     5) I2C STOP
+
+    // **************************************************************
+    // If you are here because compilation fails trying to feed five
+    // parameters to "requestFrom" see function header comments above
+    // **************************************************************
+
+    Wire.requestFrom
+    (
+        lidarliteAddress, // Slave address
+        numBytes,         // number of consecutive bytes to read
+        regAddr,          // address of first register to read
+        1,                // number of bytes in regAddr
+        true              // true = set STOP condition following I2C read
+    );
+
+#endif
+
+    uint8_t  numHere = Wire.available();
+    uint8_t  i       = 0;
+
+    while (i < numHere)
     {
-        while (i < numBytes)
-        {
-            dataBytes[i] = (uint8_t) Wire.read();
-            i++;
-        }
+        dataBytes[i] = Wire.read();
+        i++;
     }
 
+    delayMicroseconds(100); // 100 us delay for robustness with successive reads and writes
 } /* LIDARLite_v3HP::read */
 
 /*------------------------------------------------------------------------------
@@ -434,7 +488,6 @@ void LIDARLite_v3HP::read(uint8_t regAddr, uint8_t * dataBytes,
 
   Parameters
   ------------------------------------------------------------------------------
-  separator: the separator between serial data words
   numberOfReadings: Default: 1024. Maximum of 1024
   lidarliteAddress: Default 0x62. Fill in new address here if changed. See
     operating manual for instructions.
@@ -470,3 +523,104 @@ void LIDARLite_v3HP::correlationRecordToSerial(
     dataBytes[0] = 0;
     write(0x40, dataBytes, 1, lidarliteAddress);
 } /* LIDARLite_v3HP::correlationRecordToSerial */
+
+/*------------------------------------------------------------------------------
+  Correlation Peak Stack Read
+
+  Following a distance measurement, the correlation record is searched and a peak
+  stack table is built. The nine total entries in the peak stack table are
+  readable via registers, as illustrated below. This function reads all stack
+  entries, calculates distances from those entries, and then returns arrays
+  containing the peak magnitudes and associated distances.
+
+  - The first stack entry represents internal reference measurement data.
+  - The next eight entries represent the largest peaks in the correlation record.
+      - The eight range entries are sorted largest peak to smallest peak.
+      - The first of these eight entries is assumed to be the intended target
+        and is used to calculate the distance data stored in I2C registers.
+      - The remaining entries most often represent system noise.
+
+  Each stack entry is comprised of three 16-bit values (6 total bytes)
+      1st value = Peak Strength (Magnitude of Peak)
+      2nd value = Zero crossing address (Coarse Distance)
+      3rd value = Interpolated value (Fine Distance)
+
+  Note: There are calibration and compensation circuits not available
+        outside the LIDAR-Lite system, but the following shows how to
+        quickly extract multiple signatures from the correlation results.
+        Using this method does not result in data that matches the
+        device distance registers exactly, but it is representative.
+
+  Note: Using this method, some negative distances can be produced
+        if noise artifacts exist very early in the correlation record.
+        This is normal. Any negative distances should be ignored.
+
+  Note: LIDAR-Lite must be idle (not BUSY) in order to perform this function.
+
+  Process
+  ------------------------------------------------------------------------------
+  1.  Take a distance reading (there is no peak stack data available before
+      at least one distance reading is performed)
+  2.  Read stack entries
+
+  Parameters
+  ------------------------------------------------------------------------------
+  peakArray: Pointer to an array of eight 16-bit unsigned data values
+             for storing the Peak Strengths (Magnitude) from the stack
+  distArray: Pointer to an array of eight 16-bit unsigned data values
+             for storing the effective distance associated with each peak
+  lidarliteAddress: Default 0x62. Fill in the new address here if changed. See
+    operating manual for instructions.
+------------------------------------------------------------------------------*/
+void LIDARLite_v3HP::peakStackRead(
+    int16_t * peakArray, int16_t * distArray, uint8_t lidarliteAddress)
+{
+    #define RECORD_OFFSET ((63*18) + 1)
+    #define FREQ_ADJUST   (1.067)
+
+    uint8_t   idx;
+    uint8_t   dataBytes[2];
+    int16_t   peakVal;
+    int16_t   coarseDist;  // Zero crossing address (Coarse Distance)
+    int16_t   fineDist; // Interpolated value (Fine Distance)
+    int16_t   LLref;
+    int16_t   LLtarget;
+
+    // Reset the peak stack internal address pointer
+    dataBytes[0] = 1;
+    write(0x26, dataBytes, 1, lidarliteAddress);
+
+    // Each time through the loop read one peak stack "entry."
+    // First time through the loop always retrieves reference data entry.
+    for (idx = 0 ; idx < 9 ; idx++)
+    {
+        // *** Read "Peak Strength"
+        read(0x26, dataBytes, 2, lidarliteAddress);
+        peakVal    = (int16_t) ((dataBytes[0] << 8) + dataBytes[1]);
+
+        // *** Read "Zero Crossing Address"
+        read(0x26, dataBytes, 2, lidarliteAddress);
+        coarseDist = (int16_t) ((dataBytes[0] << 8) + dataBytes[1]);
+
+        // *** Read "Interpolated Value"
+        read(0x26, dataBytes, 2, lidarliteAddress);
+        fineDist   = (int16_t) ((dataBytes[0] << 8) + dataBytes[1]);
+
+        // ---------- Calculate distance from peak stack data -------------
+
+        LLtarget = (coarseDist * 18) + fineDist;
+
+        // The first entry in the peak stack contains reference data
+        if (idx == 0)
+            LLref  = LLtarget;
+
+        // The remaining eight entries contain data corresponding to the
+        // eight largest peaks in the correlation record
+        if (idx != 0)
+        {
+            peakArray[idx-1] = peakVal;
+            distArray[idx-1] = ((LLtarget - RECORD_OFFSET) - LLref) * FREQ_ADJUST;
+        }
+    }
+} /* LIDARLite_v3HP::peakStackRead */
+

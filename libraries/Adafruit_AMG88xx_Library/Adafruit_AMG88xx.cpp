@@ -1,26 +1,25 @@
 #include "Adafruit_AMG88xx.h"
 
-//#define I2C_DEBUG
-
-#if defined(ESP32)
-// https://github.com/espressif/arduino-esp32/issues/839
-#define AMG_I2C_CHUNKSIZE 16
-#else
-#define AMG_I2C_CHUNKSIZE 32
-#endif
+Adafruit_AMG88xx::~Adafruit_AMG88xx(void) {
+  if (i2c_dev)
+    delete i2c_dev;
+}
 
 /**************************************************************************/
 /*!
     @brief  Setups the I2C interface and hardware
     @param  addr Optional I2C address the sensor can be found on. Default is
    0x69
+    @param  theWire the I2C object to use, defaults to &Wire
     @returns True if device is set up, false on any failure
 */
 /**************************************************************************/
-bool Adafruit_AMG88xx::begin(uint8_t addr) {
-  _i2caddr = addr;
-
-  _i2c_init();
+bool Adafruit_AMG88xx::begin(uint8_t addr, TwoWire *theWire) {
+  if (i2c_dev)
+    delete i2c_dev;
+  i2c_dev = new Adafruit_I2CDevice(addr, theWire);
+  if (!i2c_dev->begin())
+    return false;
 
   // enter normal mode
   _pctl.PCTL = AMG88xx_NORMAL_MODE;
@@ -78,21 +77,21 @@ void Adafruit_AMG88xx::setInterruptLevels(float high, float low,
   int highConv = high / AMG88xx_PIXEL_TEMP_CONVERSION;
   highConv = constrain(highConv, -4095, 4095);
   _inthl.INT_LVL_H = highConv & 0xFF;
-  _inthh.INT_LVL_H = (highConv & 0xF) >> 4;
+  _inthh.INT_LVL_H = (highConv & 0x0F00) >> 8;
   this->write8(AMG88xx_INTHL, _inthl.get());
   this->write8(AMG88xx_INTHH, _inthh.get());
 
   int lowConv = low / AMG88xx_PIXEL_TEMP_CONVERSION;
   lowConv = constrain(lowConv, -4095, 4095);
   _intll.INT_LVL_L = lowConv & 0xFF;
-  _intlh.INT_LVL_L = (lowConv & 0xF) >> 4;
+  _intlh.INT_LVL_L = (lowConv & 0x0F00) >> 8;
   this->write8(AMG88xx_INTLL, _intll.get());
   this->write8(AMG88xx_INTLH, _intlh.get());
 
   int hysConv = hysteresis / AMG88xx_PIXEL_TEMP_CONVERSION;
   hysConv = constrain(hysConv, -4095, 4095);
   _ihysl.INT_HYS = hysConv & 0xFF;
-  _ihysh.INT_HYS = (hysConv & 0xF) >> 4;
+  _ihysh.INT_HYS = (hysConv & 0x0F00) >> 8;
   this->write8(AMG88xx_IHYSL, _ihysl.get());
   this->write8(AMG88xx_IHYSH, _ihysh.get());
 }
@@ -170,22 +169,38 @@ float Adafruit_AMG88xx::readThermistor() {
 
 /**************************************************************************/
 /*!
-    @brief  Read Infrared sensor values
+    @brief  Read Infrared sensor raw values
     @param  buf the array to place the pixels in
-    @param  size Optionsl number of bytes to read (up to 64). Default is 64
-   bytes.
-    @return up to 64 bytes of pixel data in buf
+    @param  pixels Optional number of pixels to read (up to 64). Default is
+   64 pixels. Each pixel value is 12 bits, so it is stored in 2 bytes of
+   the buf array,
+    @return up to 128 bytes of pixel data in buf
 */
 /**************************************************************************/
-void Adafruit_AMG88xx::readPixels(float *buf, uint8_t size) {
+void Adafruit_AMG88xx::readPixelsRaw(uint8_t *buf, uint8_t pixels) {
+  uint8_t bytesToRead =
+      min((uint8_t)(pixels << 1), (uint8_t)(AMG88xx_PIXEL_ARRAY_SIZE << 1));
+  this->read(AMG88xx_PIXEL_OFFSET, buf, bytesToRead);
+}
+
+/**************************************************************************/
+/*!
+    @brief  Read Infrared sensor values
+    @param  buf the array to place the pixels in
+    @param  pixels Optional number of pixels to read (up to 64). Default is
+   64 pixels.
+    @return up to 64 float values of pixel data in buf
+*/
+/**************************************************************************/
+void Adafruit_AMG88xx::readPixels(float *buf, uint8_t pixels) {
   uint16_t recast;
   float converted;
   uint8_t bytesToRead =
-      min((uint8_t)(size << 1), (uint8_t)(AMG88xx_PIXEL_ARRAY_SIZE << 1));
+      min((uint8_t)(pixels << 1), (uint8_t)(AMG88xx_PIXEL_ARRAY_SIZE << 1));
   uint8_t rawArray[bytesToRead];
   this->read(AMG88xx_PIXEL_OFFSET, rawArray, bytesToRead);
 
-  for (int i = 0; i < size; i++) {
+  for (int i = 0; i < pixels; i++) {
     uint8_t pos = i << 1;
     recast = ((uint16_t)rawArray[pos + 1] << 8) | ((uint16_t)rawArray[pos]);
 
@@ -219,60 +234,14 @@ uint8_t Adafruit_AMG88xx::read8(byte reg) {
   return ret;
 }
 
-void Adafruit_AMG88xx::_i2c_init() { Wire.begin(); }
-
 void Adafruit_AMG88xx::read(uint8_t reg, uint8_t *buf, uint8_t num) {
-  uint8_t value;
-  uint8_t pos = 0;
-
-  // on arduino we need to read in AMG_I2C_CHUNKSIZE byte chunks
-  while (pos < num) {
-    uint8_t read_now = min((uint8_t)AMG_I2C_CHUNKSIZE, (uint8_t)(num - pos));
-    Wire.beginTransmission((uint8_t)_i2caddr);
-    Wire.write((uint8_t)reg + pos);
-    Wire.endTransmission();
-    Wire.requestFrom((uint8_t)_i2caddr, read_now);
-
-#ifdef I2C_DEBUG
-    Serial.print("[$");
-    Serial.print(reg + pos, HEX);
-    Serial.print("] -> ");
-#endif
-    for (int i = 0; i < read_now; i++) {
-      buf[pos] = Wire.read();
-#ifdef I2C_DEBUG
-      Serial.print("0x");
-      Serial.print(buf[pos], HEX);
-      Serial.print(", ");
-#endif
-      pos++;
-    }
-#ifdef I2C_DEBUG
-    Serial.println();
-#endif
-  }
+  uint8_t buffer[1] = {reg};
+  i2c_dev->write_then_read(buffer, 1, buf, num);
 }
 
 void Adafruit_AMG88xx::write(uint8_t reg, uint8_t *buf, uint8_t num) {
-#ifdef I2C_DEBUG
-  Serial.print("[$");
-  Serial.print(reg, HEX);
-  Serial.print("] <- ");
-#endif
-  Wire.beginTransmission((uint8_t)_i2caddr);
-  Wire.write((uint8_t)reg);
-  for (int i = 0; i < num; i++) {
-    Wire.write(buf[i]);
-#ifdef I2C_DEBUG
-    Serial.print("0x");
-    Serial.print(buf[i], HEX);
-    Serial.print(", ");
-#endif
-  }
-  Wire.endTransmission();
-#ifdef I2C_DEBUG
-  Serial.println();
-#endif
+  uint8_t prefix[1] = {reg};
+  i2c_dev->write(buf, num, true, prefix, 1);
 }
 
 /**************************************************************************/

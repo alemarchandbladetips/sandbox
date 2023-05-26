@@ -49,9 +49,9 @@ void setup(){
 ```
 Serial monitor:
 ```
-calculate gyro offsets
-DO NOT MOVE A MPU6050.....
-Done!!!
+Calculate gyro offsets
+DO NOT MOVE MPU6050.....
+Done!
 X : 1.45
 Y : 1.23
 Z : -1.32
@@ -77,4 +77,4 @@ void setup(){
 MIT
 ## Author
 
-[Tockn](https://github.com/tockn)
+[tockn](https://github.com/tockn)

@@ -8,20 +8,24 @@
 // flitrage entrées de commande
 #define ALPHA_JOYSTICK 0.006
 #define M_JOYSTICK 0.8
-#define ALPHA_FALL_JOYSTICK 0.01
+#define ALPHA_FALL_JOYSTICK_FRONT 0.015
+#define ALPHA_FALL_JOYSTICK_LAT 0.1
 
 // définition de la vitesse max
 #define FRONT_SPEED_GAIN 115.0f
 //120.0f 
 // Vitesse max arrière par rapport à la vitesse avant (la vitesse peut être saturé par les controleurs, sas que l'on puisse le configurer)
-#define REAR_VS_FRONT_GAIN 0.25f 
+#define REAR_VS_FRONT_GAIN 0.15f 
 // Vitesse différentielle max par rapport à la vitesse avant
 #define LAT_VS_FRONT_GAIN 0.3f 
+// vitesse max en mode régulation de vitesse
+#define CRUISE_SPEED_MAX 1.0f
 
-// Définition des créneaux pourle freinage
+// Définition des créneaux pour le freinage
 #define BRAKE_LEVEL 8
 #define BRAKE_LEVEL_MAX0 15
-//#define BRAKE_LEVEL_MAX1 20
+#define BRAKE_LEVEL_MAX1 20
+#define BRAKE_LEVEL_MAX2 25
 
 uint8_t brake_level_max = BRAKE_LEVEL_MAX0;
 uint8_t brake_level = BRAKE_LEVEL;
@@ -32,7 +36,7 @@ uint32_t brake_time;
 #define PARKING_BRAKE_LEVEL_PWM 255
 
 // Temps de perte de connexion
-#define CONNEXION_LOST_TIME_MS 1000 
+#define CONNEXION_LOST_TIME_MS 2000 
 // Temps maximal d'enclanchement du régulateur de vitesse
 #define CRUISE_CONTROL_TIME 20000 
 
@@ -63,7 +67,7 @@ bte_tricycle_controller controlleur_L = bte_tricycle_controller(acc_pin_L, brake
 uint8_t serial_data;
 
 float joyX_f, joyX, joyY_f, joyY, joyY_tmp, joyX_f1, joyY_f1, joyX_f2, joyY_f2 = 0;
-float constant_cruise_speed = 0.25f;
+float constant_cruise_speed = 0.1f;
 uint8_t button_cruise, button_brake;
 int8_t last_button_cruise = 0;
 
@@ -98,6 +102,7 @@ int8_t parking_brake_flag = 1;
 // timers
 uint32_t timer, timer_parking, timer_remote, timer_cruise_control, timer_speed,timer_brake;
 uint32_t time_since_since_last_data;
+uint32_t time_tmp;
 uint32_t dt_us = 10000;
 uint32_t dt_speed_us = 1000;
 
@@ -165,7 +170,15 @@ void loop() {
           joyX=0;
         } else
         {
-          joyX = joyX*joyX*joyX;
+          joyX = joyX;
+          /*
+          if(joyX > 0)
+          {
+            joyX = joyX*joyX;
+          } else
+          {
+            joyX = -joyX*joyX;
+          }*/
         }
         serial_data = WIFI_SERIAL.read();
         //Serial.print(x);Serial.println("\t");
@@ -175,7 +188,14 @@ void loop() {
           joyY=0;
         } else
         {
-          joyY = joyY*joyY*joyY;
+          joyY = joyY;
+          /*if(joyY > 0)
+          {
+            joyY = joyY*joyY;
+          } else
+          {
+            joyY = -joyY*joyY;
+          }*/
         }
         button_cruise = WIFI_SERIAL.read();
         button_brake = WIFI_SERIAL.read();
@@ -200,19 +220,22 @@ void loop() {
       front_speed_ref = 0;
       lateral_speed_ref = 0;
       speed_ref_L = 0;
-      parking_brake_flag = 1;
       constant_cruise_flag = 0;
       joyX_f = 0;
+      joyX_f2 = joyX_f;
+      joyX_f1 = joyX_f;
       joyY_f = 0;
+      joyY_f2 = joyY_f;
+      joyY_f1 = joyY_f;
       controlleur_R.update_reference(speed_ref_R);
       controlleur_L.update_reference(speed_ref_L);
-      controlleur_R.brake(PARKING_BRAKE_LEVEL_PWM);
-      controlleur_L.brake(PARKING_BRAKE_LEVEL_PWM);
+      //controlleur_R.brake(PARKING_BRAKE_LEVEL_PWM);
+      //controlleur_L.brake(PARKING_BRAKE_LEVEL_PWM);
       connexion_flag = 0;
     } else
     {
       connexion_flag = 1;
-
+    }
 
       ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -229,7 +252,13 @@ void loop() {
         joyX_f = kx*(joyX + a1x*joyX_f1 + a2x*joyX_f2);
       } else
       {
-        joyX_f = 4*ALPHA_FALL_JOYSTICK*joyX + (1-4*ALPHA_FALL_JOYSTICK)*joyX_f1;
+        if(constant_cruise_flag ==0 )
+        {
+          joyX_f = ALPHA_FALL_JOYSTICK_LAT*joyX + (1-ALPHA_FALL_JOYSTICK_LAT)*joyX_f1;
+        } else
+        {
+          joyX_f = joyX;
+        }
         if (abs(joyX_f)<DEAD_ZONE)
         {
           joyX_f = 0;
@@ -242,7 +271,7 @@ void loop() {
 
       if(constant_cruise_flag==1)
       {
-        joyY_tmp = 1;// constant_cruise_speed;
+        joyY_tmp = 1.0f;// constant_cruise_speed;
       } else
       {
         joyY_tmp = joyY;
@@ -276,11 +305,19 @@ void loop() {
         } else if(joyY_f<0)
         {
           joyY_tmp = min(joyY_tmp,0);
-        }        
-        joyY_f = ALPHA_FALL_JOYSTICK*joyY_tmp + (1-ALPHA_FALL_JOYSTICK)*joyY_f;
+        } 
+        joyY_f = ALPHA_FALL_JOYSTICK_FRONT*joyY_tmp + (1-ALPHA_FALL_JOYSTICK_FRONT)*joyY_f;
         if (abs(joyY_f)<DEAD_ZONE)
         {
           joyY_f = 0;
+        }
+        if(constant_cruise_flag==1)
+        {
+          joyY_f = min(joyY_f,constant_cruise_speed);
+        } else
+        {
+          joyY_f = min(joyY_f,1);
+          joyY_f = max(joyY_f,-REAR_VS_FRONT_GAIN);
         }
         joyY_f2 = joyY_f;
         joyY_f1 = joyY_f;
@@ -301,7 +338,7 @@ void loop() {
       last_brake_flagL = brake_flagL;
 
       //// Lecture du bouton de frein ///
-      if(button_brake == 0 )
+      if(button_brake == 0 && connexion_flag == 1)
       {
         brake_flagR = 0;
         brake_flagL = 0;
@@ -312,7 +349,16 @@ void loop() {
           if(joyX>0.25)
           {
             brake_flagR = 1;
-            brake_level_max = BRAKE_LEVEL_MAX0;
+            if(front_speed_ref<0.33f)
+            {
+              brake_level_max = BRAKE_LEVEL_MAX0;
+            } else if (front_speed_ref<0.66f)
+            {
+              brake_level_max = BRAKE_LEVEL_MAX1;
+            } else
+            {
+              brake_level_max = BRAKE_LEVEL_MAX2;
+            }
           } else
           {
             brake_flagR = 0;
@@ -320,7 +366,16 @@ void loop() {
           if(joyX<-0.25)
           {
             brake_flagL = 1;
-            brake_level_max = BRAKE_LEVEL_MAX0;
+            if(front_speed_ref<0.33f)
+            {
+              brake_level_max = BRAKE_LEVEL_MAX0;
+            } else if (front_speed_ref<0.66f)
+            {
+              brake_level_max = BRAKE_LEVEL_MAX1;
+            } else
+            {
+              brake_level_max = BRAKE_LEVEL_MAX2;
+            }
           } else
           {
             brake_flagL = 0;
@@ -329,22 +384,32 @@ void loop() {
           if(joyY>0.5)
           {
             constant_cruise_speed += 0.001;
+            constant_cruise_speed = min(constant_cruise_speed,CRUISE_SPEED_MAX);
           }
           if(joyY<-0.5)
           {
             constant_cruise_speed -= 0.001;
+            constant_cruise_speed = max(0,constant_cruise_speed);
           }
         }
       } else
       {
         if(last_button_brake==0)
         {
-          brake_time = abs(joyY_f)*1000 + 1000;
+          brake_time = abs(joyY_f)*1000 + 2000;
+        } else if (connexion_flag == 0)
+        {
+          brake_time = 2000;
         }
         brake_flagR = 1;
         brake_flagL = 1;
         brake_level = BRAKE_LEVEL;
-        if((millis() - timer_brake) < brake_time )
+        time_tmp = millis();
+        if( (time_tmp - timer_brake) < (brake_time-2000) )
+        {
+          brake_level_max = BRAKE_LEVEL_MAX1;
+        }
+        else if((time_tmp - timer_brake) < brake_time )
         {
           brake_level_max = BRAKE_LEVEL_MAX0;
         } else
@@ -387,7 +452,7 @@ void loop() {
       }
 
       //// On réinitialise le compteur d'inactivité si le joystick n'est pas en position centrale
-      if( abs(joyY)>2*DEAD_ZONE || constant_cruise_flag==1 )
+      if( abs(joyY_f)>0.005 || constant_cruise_flag==1 )
       {
         timer_parking = millis();
         parking_brake_flag = 0;
@@ -433,22 +498,10 @@ void loop() {
 
       if(joyY_f>0) // marche avant
       {
-        if(joyY>DEAD_ZONE)
-        {
-          front_speed_ref = joyY_f;
-        } else
-        {
-          front_speed_ref = 0;
-        }
+        front_speed_ref = joyY_f;
       } else // marche arrière on applique le REAR_VS_FRONT_GAIN sur la vitesse
       {
-        if(joyY<-DEAD_ZONE)
-        {
-          front_speed_ref = max(-REAR_VS_FRONT_GAIN,joyY_f);
-        } else
-        {
-          front_speed_ref = 0;
-        }
+        front_speed_ref = max(-REAR_VS_FRONT_GAIN,joyY_f);
       }
 
       //// Vitesse diffèrentielle ////
@@ -491,11 +544,15 @@ void loop() {
             if(lateral_speed_ref>=0)
             {
               speed_ref_R = max(0,front_speed_ref - lateral_speed_ref);
-              speed_ref_L = max(0,front_speed_ref + 0.0*lateral_speed_ref);
+              d_lateral_speed_ref = speed_ref_R-(front_speed_ref - lateral_speed_ref);
+              speed_ref_L = front_speed_ref + d_lateral_speed_ref;
+              speed_ref_L = max(0,speed_ref_L);
             } else
             {
-              speed_ref_R = max(0,front_speed_ref - 0.0*lateral_speed_ref);
               speed_ref_L = max(0,front_speed_ref + lateral_speed_ref);
+              d_lateral_speed_ref = speed_ref_L-(front_speed_ref + lateral_speed_ref);
+              speed_ref_R = front_speed_ref + d_lateral_speed_ref;
+              speed_ref_R = max(0,speed_ref_R);
             }
           }
         } else if (front_speed_ref<0)
@@ -517,7 +574,6 @@ void loop() {
       //// Envoie des commandes aux controleurs de moteur ////
       controlleur_R.update_reference(speed_ref_R);
       controlleur_L.update_reference(speed_ref_L);
-    }
 
     //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -553,13 +609,12 @@ void loop() {
     if (ENABLE_PRINT_DEBUG)
     {
       Serial.print(joyY);Serial.print("\t");
-      Serial.print(joyY);Serial.print("\t");
+      Serial.print(joyY_f);Serial.print("\t");
       Serial.print(front_speed_ref);Serial.print("\t");
-      Serial.print(lateral_speed_ref);Serial.print("\t");
+      Serial.print(constant_cruise_speed);Serial.print("\t");
       Serial.print(speed_ref_L);Serial.print("\t");
       Serial.print(speed_ref_R);
       Serial.println("\t");
     }
-    
   }
 }

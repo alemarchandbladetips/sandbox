@@ -8,7 +8,7 @@
 // flitrage entrées de commande
 #define ALPHA_JOYSTICK 0.006
 #define M_JOYSTICK 0.8
-#define ALPHA_FALL_JOYSTICK_FRONT 0.015
+#define ALPHA_FALL_JOYSTICK_FRONT 0.02
 #define ALPHA_FALL_JOYSTICK_LAT 0.1
 
 // définition de la vitesse max
@@ -24,8 +24,8 @@
 // Définition des créneaux pour le freinage
 #define BRAKE_LEVEL 8
 #define BRAKE_LEVEL_MAX0 15
-#define BRAKE_LEVEL_MAX1 20
-#define BRAKE_LEVEL_MAX2 25
+#define BRAKE_LEVEL_MAX1 19
+#define BRAKE_LEVEL_MAX2 23
 
 uint8_t brake_level_max = BRAKE_LEVEL_MAX0;
 uint8_t brake_level = BRAKE_LEVEL;
@@ -252,7 +252,7 @@ void loop() {
         joyX_f = kx*(joyX + a1x*joyX_f1 + a2x*joyX_f2);
       } else
       {
-        if(constant_cruise_flag ==0 )
+        if(constant_cruise_flag == 0 )
         {
           joyX_f = ALPHA_FALL_JOYSTICK_LAT*joyX + (1-ALPHA_FALL_JOYSTICK_LAT)*joyX_f1;
         } else
@@ -383,12 +383,12 @@ void loop() {
 
           if(joyY>0.5)
           {
-            constant_cruise_speed += 0.001;
+            constant_cruise_speed += 0.0015;
             constant_cruise_speed = min(constant_cruise_speed,CRUISE_SPEED_MAX);
           }
           if(joyY<-0.5)
           {
-            constant_cruise_speed -= 0.001;
+            constant_cruise_speed -= 0.002;
             constant_cruise_speed = max(0,constant_cruise_speed);
           }
         }
@@ -396,20 +396,19 @@ void loop() {
       {
         if(last_button_brake==0)
         {
-          brake_time = abs(joyY_f)*1000 + 2000;
+          brake_time = front_speed_ref*front_speed_ref*1000 + 2000;
         } else if (connexion_flag == 0)
         {
-          brake_time = 2000;
+          brake_time = 3000;
         }
         brake_flagR = 1;
         brake_flagL = 1;
         brake_level = BRAKE_LEVEL;
         time_tmp = millis();
-        if( (time_tmp - timer_brake) < (brake_time-2000) )
+        if( ((time_tmp - timer_brake) < (brake_time-2250)) && (brake_time>2250) )
         {
           brake_level_max = BRAKE_LEVEL_MAX1;
-        }
-        else if((time_tmp - timer_brake) < brake_time )
+        } else if((time_tmp - timer_brake) < brake_time )
         {
           brake_level_max = BRAKE_LEVEL_MAX0;
         } else
@@ -481,6 +480,7 @@ void loop() {
         if ( constant_cruise_flag == 0 )
         {
           constant_cruise_flag = 1;
+          constant_cruise_speed = min(constant_cruise_speed,0.75);
         } else
         {
           constant_cruise_flag = 0;

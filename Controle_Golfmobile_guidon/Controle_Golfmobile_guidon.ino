@@ -1,4 +1,7 @@
 #include "bte_tricycle.h"
+#include <WiiChuck.h>
+
+Accessory nunchuck;
 
 #define ENABLE_PRINT 1
 #define ENABLE_PRINT_DEBUG 0
@@ -116,9 +119,13 @@ void setup() {
   Serial.begin(115200);
   WIFI_SERIAL.begin(115200);
 
+  nunchuck.begin();
+	if (nunchuck.type == Unknown) {
+		nunchuck.type = NUNCHUCK;
+	}
 
   //// Configuration des timers pour accélérer les PWM à 32kHz
-
+/*
   // pins 9 & 10;
   TCCR1A = 0b00000001; // 8bit
   TCCR1B = 0b00000001; // 32kHz
@@ -131,7 +138,7 @@ void setup() {
   TCCR4A = 0b00000001; // 8bit
   TCCR4B = 0b00000001; // 32kHz
 
-
+*/
   //// configuration des contrôleur de moteur
   controlleur_R.set_motor_gain(FRONT_SPEED_GAIN);
   controlleur_L.set_motor_gain(FRONT_SPEED_GAIN);
@@ -151,6 +158,7 @@ void loop() {
   ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
   //// Lecture des commandes de la télécommande via le sérial ////
+  /*
   if(WIFI_SERIAL.available()>5)
   {
     //Serial.println("6 bytes available on serial");
@@ -178,7 +186,7 @@ void loop() {
           } else
           {
             joyX = -joyX*joyX;
-          }*/
+          }
         }
         serial_data = WIFI_SERIAL.read();
         //Serial.print(x);Serial.println("\t");
@@ -195,7 +203,7 @@ void loop() {
           } else
           {
             joyY = -joyY*joyY;
-          }*/
+          }
         }
         button_cruise = WIFI_SERIAL.read();
         button_brake = WIFI_SERIAL.read();
@@ -203,7 +211,8 @@ void loop() {
       }
     }
   }
-
+  */
+  
 
     /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -211,6 +220,13 @@ void loop() {
   if( micros()-timer > dt_us)
   {
     timer += dt_us;
+
+    nunchuck.readData();
+    joyX = ((float)nunchuck.getJoyX()-128.0)/128.0;
+    joyY = ((float)nunchuck.getJoyY()-128.0)/128.0;
+    button_cruise = nunchuck.getButtonC();
+    button_brake = nunchuck.getButtonZ();
+    timer_remote = millis();
 
     //// Vérification du temps de la dernière info reçue de la télécommande, si trop vieux, on arrête tout ////
     time_since_since_last_data = (millis() - timer_remote);

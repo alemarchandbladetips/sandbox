@@ -304,6 +304,8 @@ void loop() {
         if(constant_cruise_flag==1)
         {
           joyY_f = min(joyY_f,constant_cruise_speed);
+          joyY_f1 = min(joyY_f1,constant_cruise_speed);
+          joyY_f2 = min(joyY_f2,constant_cruise_speed);
         } else
         {
           joyY_f = min(joyY_f,1);

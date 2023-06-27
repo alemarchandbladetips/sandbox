@@ -9,7 +9,8 @@ Accessory nunchuck;
 //// Definition des paramètres des la loi de contrôle
 
 // flitrage entrées de commande
-#define ALPHA_JOYSTICK 0.006
+#define ALPHA_JOYSTICK_FRONT 0.006
+#define ALPHA_JOYSTICK_LAT 0.02
 #define M_JOYSTICK 0.8
 #define ALPHA_FALL_JOYSTICK_FRONT 0.02
 #define ALPHA_FALL_JOYSTICK_LAT 0.1
@@ -26,9 +27,14 @@ Accessory nunchuck;
 
 // Définition des créneaux pour le freinage
 #define BRAKE_LEVEL 8
-#define BRAKE_LEVEL_MAX0 15
-#define BRAKE_LEVEL_MAX1 19
-#define BRAKE_LEVEL_MAX2 23
+#define BRAKE_LEVEL_MAX0 16
+#define BRAKE_LEVEL_MAX1 20
+#define BRAKE_LEVEL_MAX2 25
+
+#define BRAKE_TIME_PROP 2000
+#define BRAKE_TIME_CSTE 2000
+#define BRAKE_LEVEL2_TIME 3000
+#define BRAKE_LEVEL1_TIME 1500
 
 uint8_t brake_level_max = BRAKE_LEVEL_MAX0;
 uint8_t brake_level = BRAKE_LEVEL;
@@ -75,16 +81,14 @@ uint8_t button_cruise, button_brake;
 int8_t last_button_cruise = 0;
 
 // Définition des paramètres des filtres
-#define ALPHA_JOYSTICK 0.006
-#define M_JOYSTICK 0.8
 
-float ky = 1/(1+2*M_JOYSTICK/ALPHA_JOYSTICK+(1/ALPHA_JOYSTICK)*(1/ALPHA_JOYSTICK));
-float a1y = 2*M_JOYSTICK/ALPHA_JOYSTICK+2*(1/ALPHA_JOYSTICK)*(1/ALPHA_JOYSTICK);
-float a2y = -(1/ALPHA_JOYSTICK)*(1/ALPHA_JOYSTICK);
+float ky = 1/(1+2*M_JOYSTICK/ALPHA_JOYSTICK_FRONT+(1/ALPHA_JOYSTICK_FRONT)*(1/ALPHA_JOYSTICK_FRONT));
+float a1y = 2*M_JOYSTICK/ALPHA_JOYSTICK_FRONT+2*(1/ALPHA_JOYSTICK_FRONT)*(1/ALPHA_JOYSTICK_FRONT);
+float a2y = -(1/ALPHA_JOYSTICK_FRONT)*(1/ALPHA_JOYSTICK_FRONT);
 
-float kx = 1/(1+2*M_JOYSTICK/(ALPHA_JOYSTICK/LAT_VS_FRONT_GAIN)+(LAT_VS_FRONT_GAIN/ALPHA_JOYSTICK)*(LAT_VS_FRONT_GAIN/ALPHA_JOYSTICK));
-float a1x = 2*M_JOYSTICK/(ALPHA_JOYSTICK/LAT_VS_FRONT_GAIN)+2*(LAT_VS_FRONT_GAIN/ALPHA_JOYSTICK)*(LAT_VS_FRONT_GAIN/ALPHA_JOYSTICK);
-float a2x = -(LAT_VS_FRONT_GAIN/ALPHA_JOYSTICK)*(LAT_VS_FRONT_GAIN/ALPHA_JOYSTICK);
+float kx = 1/(1+2*M_JOYSTICK/ALPHA_JOYSTICK_LAT+(1/ALPHA_JOYSTICK_LAT)*(1/ALPHA_JOYSTICK_LAT));
+float a1x = 2*M_JOYSTICK/ALPHA_JOYSTICK_LAT+2*(1/ALPHA_JOYSTICK_LAT)*(1/ALPHA_JOYSTICK_LAT);
+float a2x = -(1/ALPHA_JOYSTICK_LAT)*(1/ALPHA_JOYSTICK_LAT);
 
 // Variables de contrôle
 float front_speed_ref = 0.0f;
@@ -179,14 +183,6 @@ void loop() {
         } else
         {
           joyX = joyX;
-          /*
-          if(joyX > 0)
-          {
-            joyX = joyX*joyX;
-          } else
-          {
-            joyX = -joyX*joyX;
-          }
         }
         serial_data = WIFI_SERIAL.read();
         //Serial.print(x);Serial.println("\t");
@@ -197,13 +193,6 @@ void loop() {
         } else
         {
           joyY = joyY;
-          /*if(joyY > 0)
-          {
-            joyY = joyY*joyY;
-          } else
-          {
-            joyY = -joyY*joyY;
-          }
         }
         button_cruise = WIFI_SERIAL.read();
         button_brake = WIFI_SERIAL.read();
@@ -362,43 +351,44 @@ void loop() {
         brake_flagL = 0;
         timer_brake = millis();
         
+        
+        if(joyX_f>0.25)
+        {
+          brake_flagR = 1;
+          if(front_speed_ref<0.25f)
+          {
+            brake_level_max = BRAKE_LEVEL_MAX0;
+          } else if (front_speed_ref<0.50f)
+          {
+            brake_level_max = BRAKE_LEVEL_MAX1;
+          } else
+          {
+            brake_level_max = BRAKE_LEVEL_MAX2;
+          }
+        } else
+        {
+          brake_flagR = 0;
+        }
+        if(joyX_f<-0.25)
+        {
+          brake_flagL = 1;
+          if(front_speed_ref<0.25f)
+          {
+            brake_level_max = BRAKE_LEVEL_MAX0;
+          } else if (front_speed_ref<0.50f)
+          {
+            brake_level_max = BRAKE_LEVEL_MAX1;
+          } else
+          {
+            brake_level_max = BRAKE_LEVEL_MAX2;
+          }
+        } else
+        {
+          brake_flagL = 0;
+        }
+        
         if(constant_cruise_flag==1)
         {
-          if(joyX>0.25)
-          {
-            brake_flagR = 1;
-            if(front_speed_ref<0.33f)
-            {
-              brake_level_max = BRAKE_LEVEL_MAX0;
-            } else if (front_speed_ref<0.66f)
-            {
-              brake_level_max = BRAKE_LEVEL_MAX1;
-            } else
-            {
-              brake_level_max = BRAKE_LEVEL_MAX2;
-            }
-          } else
-          {
-            brake_flagR = 0;
-          }
-          if(joyX<-0.25)
-          {
-            brake_flagL = 1;
-            if(front_speed_ref<0.33f)
-            {
-              brake_level_max = BRAKE_LEVEL_MAX0;
-            } else if (front_speed_ref<0.66f)
-            {
-              brake_level_max = BRAKE_LEVEL_MAX1;
-            } else
-            {
-              brake_level_max = BRAKE_LEVEL_MAX2;
-            }
-          } else
-          {
-            brake_flagL = 0;
-          }
-
           if(joyY>0.5)
           {
             constant_cruise_speed += 0.0015;
@@ -410,20 +400,23 @@ void loop() {
             constant_cruise_speed = max(0,constant_cruise_speed);
           }
         }
-      } else
+      } else if (parking_brake_flag==0)
       {
         if(last_button_brake==0)
         {
-          brake_time = front_speed_ref*front_speed_ref*1000 + 2000;
+          brake_time = abs(front_speed_ref)*BRAKE_TIME_PROP + BRAKE_TIME_CSTE;
         } else if (connexion_flag == 0)
         {
-          brake_time = 3000;
+          brake_time = BRAKE_LEVEL2_TIME;
         }
         brake_flagR = 1;
         brake_flagL = 1;
         brake_level = BRAKE_LEVEL;
         time_tmp = millis();
-        if( ((time_tmp - timer_brake) < (brake_time-2250)) && (brake_time>2250) )
+        if( ((time_tmp - timer_brake) < (brake_time-BRAKE_LEVEL2_TIME)) && (brake_time>BRAKE_LEVEL2_TIME) )
+        {
+          brake_level_max = BRAKE_LEVEL_MAX2;
+        } else if( ((time_tmp - timer_brake) < (brake_time-BRAKE_LEVEL1_TIME)) && (brake_time>BRAKE_LEVEL1_TIME) )
         {
           brake_level_max = BRAKE_LEVEL_MAX1;
         } else if((time_tmp - timer_brake) < brake_time )
@@ -493,7 +486,7 @@ void loop() {
       }
 
       //// Enclanchement du régulateur de vitesse, ou désenclanchement si il était activé ////
-      if( (last_button_cruise == 0 && button_cruise == 1) )
+      if( 0 )//(last_button_cruise == 0 && button_cruise == 1) )
       {
         if ( constant_cruise_flag == 0 )
         {
@@ -542,36 +535,18 @@ void loop() {
       {
         if(front_speed_ref>=0)
         {
-          if(constant_cruise_flag==0)
+          if(lateral_speed_ref>=0)
           {
-            if(lateral_speed_ref>=0)
-            {
-              speed_ref_R = max(0,front_speed_ref - lateral_speed_ref);
-              d_lateral_speed_ref = speed_ref_R-(front_speed_ref - lateral_speed_ref);
-              speed_ref_L = front_speed_ref + d_lateral_speed_ref;
-              speed_ref_L = max(0,speed_ref_L);
-            } else
-            {
-              speed_ref_L = max(0,front_speed_ref + lateral_speed_ref);
-              d_lateral_speed_ref = speed_ref_L-(front_speed_ref + lateral_speed_ref);
-              speed_ref_R = front_speed_ref + d_lateral_speed_ref;
-              speed_ref_R = max(0,speed_ref_R);
-            }
+            speed_ref_R = max(0,front_speed_ref - lateral_speed_ref);
+            d_lateral_speed_ref = speed_ref_R-(front_speed_ref - lateral_speed_ref);
+            speed_ref_L = front_speed_ref + d_lateral_speed_ref;
+            speed_ref_L = max(0,speed_ref_L);
           } else
           {
-            if(lateral_speed_ref>=0)
-            {
-              speed_ref_R = max(0,front_speed_ref - lateral_speed_ref);
-              d_lateral_speed_ref = speed_ref_R-(front_speed_ref - lateral_speed_ref);
-              speed_ref_L = front_speed_ref + d_lateral_speed_ref;
-              speed_ref_L = max(0,speed_ref_L);
-            } else
-            {
-              speed_ref_L = max(0,front_speed_ref + lateral_speed_ref);
-              d_lateral_speed_ref = speed_ref_L-(front_speed_ref + lateral_speed_ref);
-              speed_ref_R = front_speed_ref + d_lateral_speed_ref;
-              speed_ref_R = max(0,speed_ref_R);
-            }
+            speed_ref_L = max(0,front_speed_ref + lateral_speed_ref);
+            d_lateral_speed_ref = speed_ref_L-(front_speed_ref + lateral_speed_ref);
+            speed_ref_R = front_speed_ref + d_lateral_speed_ref;
+            speed_ref_R = max(0,speed_ref_R);
           }
         } else if (front_speed_ref<0)
         {
@@ -599,19 +574,20 @@ void loop() {
     {
       Serial.print(time_since_since_last_data);Serial.print("\t");
       Serial.print("Remote:");Serial.print("\t");
-      Serial.print(joyY);Serial.print("\t");
-      Serial.print(joyX);Serial.print("\t");
-      Serial.print(button_cruise);Serial.print("\t");
-      Serial.print(button_brake);Serial.print("\t");
+      //Serial.print(joyY);Serial.print("\t");
+      //Serial.print(joyX);Serial.print("\t");
+      //Serial.print(button_cruise);Serial.print("\t");
+      //Serial.print(button_brake);Serial.print("\t");
       Serial.print(joyY_f);Serial.print("\t");
       Serial.print(joyX_f);Serial.print("\t");
+      Serial.print(brake_level_max);Serial.print("\t");
 
       Serial.print("Flags:");Serial.print("\t");
       Serial.print(constant_cruise_flag);Serial.print("\t");
       Serial.print(brake_flagL);Serial.print("\t");
       Serial.print(brake_flagR);Serial.print("\t");
       Serial.print(parking_brake_flag);Serial.print("\t");
-      Serial.print(connexion_flag);Serial.print("\t");
+      //Serial.print(connexion_flag);Serial.print("\t");
 
       Serial.print("Vitesses:");Serial.print("\t");
       Serial.print(front_speed_ref);Serial.print("\t");

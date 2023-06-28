@@ -355,10 +355,10 @@ void loop() {
         if(joyX_f>0.25)
         {
           brake_flagR = 1;
-          if(front_speed_ref<0.25f)
+          if(front_speed_ref<0.3f)
           {
             brake_level_max = BRAKE_LEVEL_MAX0;
-          } else if (front_speed_ref<0.50f)
+          } else if (front_speed_ref<0.6f)
           {
             brake_level_max = BRAKE_LEVEL_MAX1;
           } else
@@ -372,10 +372,10 @@ void loop() {
         if(joyX_f<-0.25)
         {
           brake_flagL = 1;
-          if(front_speed_ref<0.25f)
+          if(front_speed_ref<0.3f)
           {
             brake_level_max = BRAKE_LEVEL_MAX0;
-          } else if (front_speed_ref<0.50f)
+          } else if (front_speed_ref<0.6f)
           {
             brake_level_max = BRAKE_LEVEL_MAX1;
           } else

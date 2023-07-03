@@ -129,7 +129,7 @@ void loop() {
     {
       if(joyY_f>0)
       {
-        front_speed_ref = joyY_f;²
+        front_speed_ref = joyY_f;
       } else
       {
         front_speed_ref = 0.75*joyY_f;

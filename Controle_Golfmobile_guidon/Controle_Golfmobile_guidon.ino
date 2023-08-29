@@ -13,7 +13,7 @@ Accessory nunchuck;
 //// Definition des paramètres des la loi de contrôle
 
 // flitrage entrées de commande
-#define ALPHA_JOYSTICK_FRONT 0.006
+#define ALPHA_JOYSTICK_FRONT 0.005
 #define ALPHA_JOYSTICK_LAT 0.02
 #define M_JOYSTICK 0.8
 #define ALPHA_FALL_JOYSTICK_FRONT 0.02
@@ -65,15 +65,16 @@ uint32_t brake_time;
 //// Définition des variables ////
 
 // Contrôleur moteur droit
-int8_t acc_pin_R = 10;
-int8_t brake_pin_R = 5;
-int8_t reverse_pin_R = 4;
+int8_t acc_pin_R = 6;
+int8_t brake_pin_R = 9;
+int8_t reverse_pin_R = 7;
 bte_tricycle_controller controlleur_R = bte_tricycle_controller(acc_pin_R, brake_pin_R, reverse_pin_R );
 
+
 // controleur moteur gauche
-int8_t acc_pin_L = 6;
-int8_t brake_pin_L = 9;
-int8_t reverse_pin_L = 7;
+int8_t acc_pin_L = 10;
+int8_t brake_pin_L = 5;
+int8_t reverse_pin_L = 4;
 bte_tricycle_controller controlleur_L = bte_tricycle_controller(acc_pin_L, brake_pin_L, reverse_pin_L );
 
 // Télécommande
@@ -517,14 +518,21 @@ void loop() {
 
       if(joyY_f>0) // marche avant
       {
-        front_speed_ref = joyY_f;
-      } else // marche arrière on applique le REAR_VS_FRONT_GAIN sur la vitesse
+        if(joyY<=0) // si le joystick est complétement relaché, on met la consigne frontale à 0.
+        {
+            front_speed_ref = 0;
+        } else 
+        {
+          front_speed_ref = joyY_f;
+        }
+      } else // marche arrière on sature la vitesse à REAR_VS_FRONT_GAIN.
       {
         front_speed_ref = max(-REAR_VS_FRONT_GAIN,joyY_f);
       }
 
       //// Vitesse diffèrentielle ////
-      lateral_speed_ref = (1+0.5*abs(front_speed_ref))*LAT_VS_FRONT_GAIN*joyX_f;
+      // désactivé : //on utilise une vitesse différentielle plus grande quand on a une consigne frontale plus grande.
+      lateral_speed_ref = LAT_VS_FRONT_GAIN*joyX_f; //(1+0.5*abs(front_speed_ref))*LAT_VS_FRONT_GAIN*joyX_f;
 
       //// Mixage des vitesse différentielle et frontale pour calculer les consignes du moteur droit et gauche ////
       if(button_brake == 1) // Si le frein est actif on met les consignes de vitesse à 0
@@ -565,8 +573,8 @@ void loop() {
             speed_ref_L = min(0,speed_ref_L);
           } else
           {
-            speed_ref_R = front_speed_ref - 0.0*lateral_speed_ref;
             speed_ref_L = min(0,front_speed_ref + lateral_speed_ref);
+            speed_ref_R = front_speed_ref;
             speed_ref_R = min(0,speed_ref_R);
           }
         }
@@ -613,7 +621,6 @@ void loop() {
       Serial.print(joyY);Serial.print("\t");
       Serial.print(joyY_f);Serial.print("\t");
       Serial.print(front_speed_ref);Serial.print("\t");
-      Serial.print(constant_cruise_speed);Serial.print("\t");
       Serial.print(speed_ref_L);Serial.print("\t");
       Serial.print(speed_ref_R);
       Serial.println("\t");

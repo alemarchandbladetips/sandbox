@@ -32,12 +32,12 @@ Accessory nunchuck;
 // Définition des créneaux pour le freinage
 #define BRAKE_LEVEL 8
 #define BRAKE_LEVEL_MAX0 16
-#define BRAKE_LEVEL_MAX1 20
-#define BRAKE_LEVEL_MAX2 25
+#define BRAKE_LEVEL_MAX1 18
+#define BRAKE_LEVEL_MAX2 22
 
 #define BRAKE_TIME_PROP 2000
-#define BRAKE_TIME_CSTE 2000
-#define BRAKE_LEVEL2_TIME 3000
+#define BRAKE_TIME_CSTE 1500
+#define BRAKE_LEVEL2_TIME 2500
 #define BRAKE_LEVEL1_TIME 1500
 
 uint8_t brake_level_max = BRAKE_LEVEL_MAX0;

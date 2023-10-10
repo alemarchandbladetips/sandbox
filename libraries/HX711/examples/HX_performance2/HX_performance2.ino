@@ -47,6 +47,7 @@ void loop()
 void measure()
 {
   Serial.println("Counting get_units() calls for 1 minute...");
+  delay(20);
   uint32_t count = 0;
   uint32_t start = millis();
   while (millis() - start < 60000)
@@ -65,4 +66,3 @@ void measure()
 
 
 // -- END OF FILE --
-

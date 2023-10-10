@@ -46,7 +46,7 @@ void loop() {
     Serial.print(angle);Serial.print("\t");
 
     consigne_servoI -= 0.3*angle;
-    consigne_servo = 1500-5*angle +consigne_servoI;
+    consigne_servo = 1500-5*angle + consigne_servoI;
 
     Serial.print(consigne_servoI);Serial.print("\t");
     Serial.print(consigne_servo);Serial.print("\t");

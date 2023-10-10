@@ -16,6 +16,12 @@ The leds are also used to show the state of the wifi pairing with the GolfMobile
 #include <WiFi.h>
 #include <WiFiUdp.h>
 
+
+// Usefull when using the nunchuck
+#include <WiiChuck.h>
+Accessory nunchuck;
+
+
 // Defining input pins
 //#define GM_JOYX_PIN 2
 //#define GM_JOYY_PIN 4
@@ -100,6 +106,14 @@ int8_t connect_to_Golfmobile(void);
 
 void setup() {
   Serial.begin(115200);
+
+  
+  // Usefull when using the nunchuck
+  nunchuck.begin();
+	if (nunchuck.type == Unknown) {
+		nunchuck.type = NUNCHUCK;
+	}
+
   
   //// Defining PINS
 
@@ -158,7 +172,7 @@ void loop() {
     led_counter ++;
 
     input_read();
-    input_scale();
+    //input_scale();
     print_inputs();
     
     if(!connected2AP_flag)// && link_button == 1)
@@ -209,12 +223,23 @@ void loop() {
 
 void input_read(void)
 {
+
+  
+    // Usefull when using the nunchuck
+    nunchuck.readData();
+    joyX_U8 = nunchuck.getJoyX();
+    joyY_U8 = nunchuck.getJoyY();
+    cruise_button = nunchuck.getButtonC();
+    brake_button = nunchuck.getButtonZ();
+    
+/*
   joyX_raw = analogRead(GM_JOYX_PIN);
   joyY_raw = analogRead(GM_JOYY_PIN);
   batt_level_raw = analogRead(GM_BATT_PIN);
   cruise_button = !digitalRead(GM_CRUISE_PIN);
   brake_button = !digitalRead(GM_BRAKE_PIN);
   link_button = !digitalRead(GM_LINK_PIN);
+  */
 }
 
 void input_scale(void)

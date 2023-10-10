@@ -1,9 +1,13 @@
 
+
 [![Arduino CI](https://github.com/RobTillaart/HX711/workflows/Arduino%20CI/badge.svg)](https://github.com/marketplace/actions/arduino_ci)
 [![Arduino-lint](https://github.com/RobTillaart/HX711/actions/workflows/arduino-lint.yml/badge.svg)](https://github.com/RobTillaart/HX711/actions/workflows/arduino-lint.yml)
 [![JSON check](https://github.com/RobTillaart/HX711/actions/workflows/jsoncheck.yml/badge.svg)](https://github.com/RobTillaart/HX711/actions/workflows/jsoncheck.yml)
+[![GitHub issues](https://img.shields.io/github/issues/RobTillaart/HX711.svg)](https://github.com/RobTillaart/HX711/issues)
+
 [![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](https://github.com/RobTillaart/HX711/blob/master/LICENSE)
 [![GitHub release](https://img.shields.io/github/release/RobTillaart/HX711.svg?maxAge=3600)](https://github.com/RobTillaart/HX711/releases)
+[![PlatformIO Registry](https://badges.registry.platformio.org/packages/robtillaart/library/HX711.svg)](https://registry.platformio.org/libraries/robtillaart/HX711)
 
 
 # HX711
@@ -19,6 +23,11 @@ Some missing functions were added to get more info from the library.
 Another important difference is that this library uses floats. 
 The 23 bits mantissa of the IEEE754 float matches the 24 bit ADC very well. 
 Furthermore using floats gave a smaller footprint on the Arduino UNO.
+
+Note that the 24 bits of the HX711 contains some noise so depending on setup, 
+load etc. only 16 to 20 of the bits are expected significant in practice. 
+This translates roughly to 4 or max 5 significant digits in a single measurement
+That's why multiple measurements are advised to average and reduce the noise.
 
 
 #### Breaking change 0.3.0
@@ -53,13 +62,32 @@ This multi-point calibration allows to compensate for non-linear behaviour
 in the sensor readings.
 
 
+#### 10 or 80 SPS
+
+The datasheet mentions that the HX711 can run at 80 samples per second SPS. 
+To select this mode connect the **RATE** pin(15) of the chip to VCC (HIGH).
+Connecting **RATE** to GND (LOW) gives 10 SPS.
+
+All breakout boards I tested have **RATE** connected to GND and offer no
+pin to control this from the outside.
+
+This library does not provide means to control the **RATE** yet.
+If there is a need (issue) I will implement this in the library.
+For now one can add an IOpin for this and use **digitalWrite()**.
+
+
+#### Related
+
+- https://github.com/RobTillaart/weight  (conversions kg <> stone etc.)
+- https://github.com/RobTillaart/HX711_MP
+
 
 ## Main flow
 
 First action is to call **begin(dataPin, clockPin)** to make connection to the **HX711**.
 
 Second step is calibration for which a number of functions exist.
-- **tare()** measures zero point
+- **tare()** measures zero point.
 - **set_scale(factor)** set a known conversion factor e.g. from EEPROM.
 - **calibrate_scale(WEIGHT, TIMES)** determines the scale factor based upon a known weight e.g. 1 Kg.
 
@@ -170,26 +198,62 @@ Note that in **HX711_RAW_MODE** times will be ignored => just call **read()** on
 
 - **float get_value(uint8_t times = 1)** read value, corrected for offset.
 - **float get_units(uint8_t times = 1)** read value, converted to proper units.
-- **void set_scale(float scale = 1.0)** set scale factor; scale > 0.
+- **bool set_scale(float scale = 1.0)** set scale factor which is normally a positive number larger than 50. Depends on load-cell used.
+Returns false if scale == 0.
 - **float get_scale()** returns set scale factor.
 - **void set_offset(long offset = 0)** idem.
 - **long get_offset()** idem.
 
 
-#### Tare & calibration
+#### Tare & calibration I
 
 Steps to take for calibration
-1. clear the scale
-1. call tare() to set the zero offset
-1. put a known weight on the scale 
-1. call calibrate_scale(weight) 
+1. clear the scale.
+1. call **tare()** to determine and set the zero offset.
+1. put a known weight on the scale.
+1. call **calibrate_scale(weight)**.
 1. scale is calculated.
 1. save the offset and scale for later use e.g. EEPROM.
 
-- **void tare(uint8_t times = 10)** call tare to calibrate zero level
-- **float get_tare()** idem.
+- **void tare(uint8_t times = 10)** call tare to determine the offset
+to calibrate the zero (reference) level. See below.
+- **float get_tare()** returns the offset \* scale.
+Note this differs after calls to **calibrate_scale()**.
+Use **get_offset()** to get only the offset.
 - **bool tare_set()** checks if a tare has been set.
+Assumes offset is not zero, which is true for all load cells tested.
 - **void calibrate_scale(uint16_t weight, uint8_t times = 10)** idem.
+
+
+#### Tare & calibration II
+
+A load cell + HX711 module without weight gives a raw value, mostly not equal to zero.
+The function **get_tare()** is used to measure this raw value and allows the user
+to define this value as a zero weight (force) point.
+This zero point is normally without any load, however it is possible to define 
+a zero point with a "fixed" load e.g. a cup, a dish, even a spring or whatever.
+This allows the system to automatically subtract the weight of the cup etc.
+
+Warning: The user must be aware that the "fixed" load together with the 
+"variable" load does not exceed the specifications of the load cell.
+
+E.g. a load cell which can handle 1000 grams with a cup of 300 grams should not 
+be calibrated with a weight of more than 700 grams.
+In fact it is better to calibrate with a weight in the order of 80 to 90% of 
+the maximum load so in this example a weight of 500 to 600 grams.
+
+Furthermore it is also important to do the calibration at the temperature you 
+expect to do the weight measurements. See temperature section below.
+
+
+#### Inner formula
+
+Weight = **get_scale()** x raw + **get_tare()**.
+
+With the two parameters one can interpolate the inner formula.
+This can be used e.g to make an ideal graph of the conversion.
+This can be compared with actual values to get an indication
+of the accuracy of the load cell.
 
 
 #### Power management
@@ -253,6 +317,47 @@ Another way to handle this is to add a good temperature sensor
 differences in your code.
 
 
+## Multiple HX711
+
+
+#### Separate lines
+
+Simplest way to control multiple HX711's is to have a separate **DOUT** and **CLK** 
+line for every HX711 connected.
+
+
+#### Multiplexer
+
+Alternative one could use a multiplexer like the https://github.com/RobTillaart/HC4052
+or possibly an https://github.com/RobTillaart/TCA9548.
+Although to control the multiplexer one need some extra lines and code.
+
+
+#### Share CLOCK line
+
+See **HX_loadcell_array.ino**
+
+Another way to control multiple HX711's is to share the **CLK** line. 
+This has a few side effects which might be acceptable or not.
+
+Known side effects - page 4 and 5 datasheet.
+
+- The **CLK** is used to select channel and to select gain for the NEXT sample.
+- The **CLK** is used for power down.
+- After wake up after power down all HX711's will reset to channel A and gain 128.
+**WARNING:** if one of the objects does a **powerDown()** or **reset()** it resets its internal states.
+The other objects however won't reset their internal state, so a mismatch can occur.
+
+So in short, sharing the **CLK** line causes all HX711 modules share the same state.
+This can introduce extra complexity if one uses mixed gains or channels.
+If all HX711's use the same settings it should work, however extra care is needed for
+**powerDown()** and **reset()**.
+
+**WARNING: Sharing the data lines is NOT possible as it could cause short circuit.**
+
+See https://github.com/RobTillaart/HX711/issues/40
+
+
 ## Future
 
 
@@ -266,26 +371,37 @@ differences in your code.
 
 #### Should
 
-- add examples
-- optimize the build-in **ShiftIn()** function to improve performance again.
 - investigate read()
   - investigate the need of yield after interrupts
-  - investigate blocking loop at begin of read()
-- why store the gain as \_gain while the iterations m = 1..3 is used most
-  - read() less code (changes from explanatory code to vague)
-  - very small performance gain.
-  - code moves to both get/set_gain() so footprint might rise.
+  - investigate blocking loop at begin => less yield() calls ?
 
 
 #### Could
 
 - test different load cells
 - make enum of the MODE's
-- move code to .cpp
-- example the adding scale
+- add examples
+  - example the adding scale
   - void weight_clr(), void weight_add(), float weight_get() - adding scale
+- decide pricing keep/not => move to .cpp
+- add **setRate()** and **getRate()**
+  - optional?
 
 
 #### Wont
 
+- why store the gain as \_gain while the iterations m = 1..3 is used most
+  - read() less code
+  - **changes from explanatory code to vague**
+  - very small performance gain.
+  - code moves to both get/set_gain() so footprint might rise.
+
+
+## Support
+
+If you appreciate my libraries, you can support the development and maintenance.
+Improve the quality of the libraries by providing issues and Pull Requests, or
+donate through PayPal or GitHub sponsors.
+
+Thank you,
 

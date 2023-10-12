@@ -7,7 +7,7 @@ uint8_t START1 = 137, START2 = 157, STOP = 173;
 
 //GPS DATA to main T40
 // RxTxSerial GPS_DATA_comm(Serial1, true);
-RxTxSerial GPS_DATA_comm(Serial2, false);
+RxTxSerial GPS_DATA_comm(Serial1, true);
 
 //const int NbXB_TX = 27 + 3; //DATA + 3 params
 const int NbXB_TX = 9; //DATA + 3 params

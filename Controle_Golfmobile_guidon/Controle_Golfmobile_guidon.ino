@@ -7,23 +7,23 @@
 Accessory nunchuck;
 */
 
-#define ENABLE_PRINT 1
-#define ENABLE_PRINT_DEBUG 0
+#define ENABLE_PRINT 0
+#define ENABLE_PRINT_DEBUG 1
 
 //// Definition des paramètres des la loi de contrôle
 
 // flitrage entrées de commande
-#define ALPHA_JOYSTICK_FRONT 0.005
+#define ALPHA_JOYSTICK_FRONT 0.003
 #define ALPHA_JOYSTICK_LAT 0.02
 #define M_JOYSTICK 0.8
-#define ALPHA_FALL_JOYSTICK_FRONT 0.02
-#define ALPHA_FALL_JOYSTICK_LAT 0.1
+#define ALPHA_FALL_JOYSTICK_FRONT 0.05
+#define ALPHA_FALL_JOYSTICK_LAT 0.05
 
 // définition de la vitesse max
 #define FRONT_SPEED_GAIN 115.0f
 //120.0f 
 // Vitesse max arrière par rapport à la vitesse avant (la vitesse peut être saturé par les controleurs, sas que l'on puisse le configurer)
-#define REAR_VS_FRONT_GAIN 0.15f 
+#define REAR_VS_FRONT_GAIN 0.05f 
 // Vitesse différentielle max par rapport à la vitesse avant
 #define LAT_VS_FRONT_GAIN 0.3f 
 // vitesse max en mode régulation de vitesse
@@ -31,8 +31,8 @@ Accessory nunchuck;
 
 // Définition des créneaux pour le freinage
 #define BRAKE_LEVEL 8
-#define BRAKE_LEVEL_MAX0 16
-#define BRAKE_LEVEL_MAX1 18
+#define BRAKE_LEVEL_MAX0 18
+#define BRAKE_LEVEL_MAX1 20
 #define BRAKE_LEVEL_MAX2 22
 
 #define BRAKE_TIME_PROP 2000
@@ -55,6 +55,7 @@ uint32_t brake_time;
 
 // Largeur de la zone morte normalisée (utilisé pour désenclancher le régulateur de vitesse)
 #define DEAD_ZONE 0.05f 
+#define DEAD_ZONE_X 0.4f 
 
 //// Définition des paramètres de la connexion série avec le BT
 
@@ -184,12 +185,18 @@ void loop() {
         serial_data = WIFI_SERIAL.read();
         //Serial.print(x);Serial.print("\t");
         joyX = (((float)serial_data)-128)/128;
-        if(abs(joyX)<DEAD_ZONE)
+        if(abs(joyX)<DEAD_ZONE_X)
         {
           joyX=0;
         } else
         {
-          joyX = joyX;
+          if(joyX>0)
+          {
+            joyX = (joyX-DEAD_ZONE_X)/(1-DEAD_ZONE_X);
+          } else if(joyX<0)
+          {
+            joyX = (joyX+DEAD_ZONE_X)/(1-DEAD_ZONE_X);
+          }
         }
         serial_data = WIFI_SERIAL.read();
         //Serial.print(x);Serial.println("\t");
@@ -200,6 +207,10 @@ void loop() {
         } else
         {
           joyY = joyY;
+          if (joyY<0)
+          {
+            joyX=0;
+          }
         }
         button_cruise = WIFI_SERIAL.read();
         button_brake = WIFI_SERIAL.read();
@@ -428,14 +439,10 @@ void loop() {
         } else if( ((time_tmp - timer_brake) < (brake_time-BRAKE_LEVEL1_TIME)) && (brake_time>BRAKE_LEVEL1_TIME) )
         {
           brake_level_max = BRAKE_LEVEL_MAX1;
-        } else if((time_tmp - timer_brake) < brake_time )
-        {
-          brake_level_max = BRAKE_LEVEL_MAX0;
         } else
         {
-          brake_level_max = 1;
-          parking_brake_flag = 1;
-        }
+          brake_level_max = BRAKE_LEVEL_MAX0;
+        } 
       }
       last_button_brake = button_brake;
 
@@ -566,6 +573,9 @@ void loop() {
           }
         } else if (front_speed_ref<0)
         {
+          speed_ref_R = front_speed_ref;
+          speed_ref_L = front_speed_ref;
+          /*
           if(lateral_speed_ref<0 )
           {
             speed_ref_R = min(0,front_speed_ref - lateral_speed_ref);
@@ -576,7 +586,7 @@ void loop() {
             speed_ref_L = min(0,front_speed_ref + lateral_speed_ref);
             speed_ref_R = front_speed_ref;
             speed_ref_R = min(0,speed_ref_R);
-          }
+          }*/
         }
       }
 
@@ -620,7 +630,10 @@ void loop() {
     {
       Serial.print(joyY);Serial.print("\t");
       Serial.print(joyY_f);Serial.print("\t");
+      Serial.print(joyX);Serial.print("\t");
+      Serial.print(joyX_f);Serial.print("\t");
       Serial.print(front_speed_ref);Serial.print("\t");
+      Serial.print(lateral_speed_ref);Serial.print("\t");
       Serial.print(speed_ref_L);Serial.print("\t");
       Serial.print(speed_ref_R);
       Serial.println("\t");

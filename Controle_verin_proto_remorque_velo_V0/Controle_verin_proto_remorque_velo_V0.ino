@@ -3,7 +3,7 @@
 #include "functions.h"
 #include "GlobalVariables.h"
 
-#define PRINT_DEBUG 0
+#define PRINT_DEBUG 1
 
 #define PIN_PLUS 9
 #define PIN_MINUS 10
@@ -14,23 +14,27 @@
 #define DT_US 20000
 #define DT_S 0.02
 
-#define HYST_ANGLE 3*DEG2RAD
+#define HYST_ANGLE_SUP 3*DEG2RAD
+#define HYST_ANGLE_INF 1.5*DEG2RAD
 
-#define ALPHA_ACC 0.05
+#define W_VERIN 4.8
+
+#define ALPHA_ACC 0.3
 #define M_ACC 1
 
 #define ALPHA_GYR 0.5
 #define M_GYR 1
 
 
-#define OFF_NACELLE -7.25*DEG2RAD
+#define OFF_NACELLE -5.25*DEG2RAD
 #define OFF_CHASSIS 2.1*DEG2RAD
 
-float alpha_Kalman = 0.01;
+float alpha_Kalman_parallelogramme = 0.01;
+float alpha_Kalman_route = 0.02;
 
 float angle_nacelle, angle_chassis = 0;
 float angle_nacelle_f, angle_chassis_f = 0;
-float angle_parallelogramme = 0;
+float angle_parallelogramme_k, angle_route_k, angle_err_parallelogramme = 0;
 float v_gps, courbure_est, acc_courbure_est, angle_courbure_est, angle_err;
 
 
@@ -200,14 +204,16 @@ void loop() {
     angle_nacelle = atan2(acc_nacelle[1],acc_nacelle[2])+OFF_NACELLE;
     angle_chassis = atan2(acc_chassis[1],acc_chassis[2])+OFF_CHASSIS;
 
-    angle_parallelogramme += (gyr_nacelle[0] - gyr_chassis[0]) * DT_S * DEG2RAD;
-    angle_parallelogramme = (1-alpha_Kalman)*angle_parallelogramme + alpha_Kalman*(angle_nacelle-angle_chassis);
+    angle_parallelogramme_k += (gyr_nacelle[0] - gyr_chassis[0]) * DT_S * DEG2RAD;
+    angle_parallelogramme_k = (1-alpha_Kalman_parallelogramme)*angle_parallelogramme_k + alpha_Kalman_parallelogramme*(angle_nacelle-angle_chassis);
+
+    
 
     ///////////////////////////////////////////////////////////////////////////////////////////////////
     //////// Estimation de la courbure et de l'angle de consigne
 
     v_gps = sqrtf(vx_gps*vx_gps+vy_gps*vy_gps);
-    if(v_gps > 0.5)
+    if(v_gps > 1)
     {
       courbure_est = gyr_chassis_f[2]*DEG2RAD/v_gps;
       acc_courbure_est = gyr_chassis_f[2]*DEG2RAD*v_gps;
@@ -217,30 +223,43 @@ void loop() {
       acc_courbure_est = 0;
     }
 
+
     angle_courbure_est = -atan2(acc_courbure_est,9.81);
 
-    angle_err = (-1.435*angle_courbure_est+angle_parallelogramme);//+1.435*angle_nacelle_f);
+    angle_err_parallelogramme = (-angle_courbure_est+angle_parallelogramme_k/1.435);
+
+    ///////////////////////////////////////////////////////////////////////////////////////////////////
+    //////// Kalman sur l'angle nacelle
+
+    //angle_route_k += (gyr_chassis[0]-motor_direction*W_VERIN) * DT_S * DEG2RAD;
+    angle_route_k += (gyr_chassis[0]+motor_direction*W_VERIN) * DT_S * DEG2RAD;
+    angle_route_k = (1-alpha_Kalman_route)*angle_route_k + alpha_Kalman_route*(angle_nacelle-angle_err_parallelogramme);
+
+    ///////////////////////////////////////////////////////////////////////////////////////////////////
+    //////// Implementation de la commande par hysteresis
+
+    angle_err = angle_err_parallelogramme + angle_route_k;
 
     if(motor_direction == 0)
     {
-      if(angle_err > HYST_ANGLE)
+      if(angle_err > HYST_ANGLE_SUP)
       {
         motor_direction = -1;
       }
-      if(angle_err < -HYST_ANGLE )
+      if(angle_err < -HYST_ANGLE_SUP )
       {
         motor_direction = 1;
       }
     } else if(motor_direction < 0)
     {
-      if(angle_err < 0)
+      if(angle_err < HYST_ANGLE_INF)
       {
         motor_direction = 0;
       }
       
     } else if(motor_direction > 0)
     {
-      if(angle_err > -0)
+      if(angle_err > -HYST_ANGLE_SUP)
       {
         motor_direction = 0;
       }
@@ -271,7 +290,7 @@ void loop() {
       Serial.print(gyr_chassis.x(),2);Serial.print("\t");
       Serial.print(gyr_chassis.y(),2);Serial.print("\t");
       Serial.print(gyr_chassis.z(),2);Serial.print("\t");
-*/
+
       // GPS
       Serial.print(x_gps,2);Serial.print("\t");
       Serial.print(y_gps,2);Serial.print("\t");
@@ -280,17 +299,18 @@ void loop() {
       Serial.print(vy_gps,2);Serial.print("\t");
 
       Serial.print(GPS_init_done,2);Serial.print("\t");
-
-Serial.print(gyr_chassis.x(),2);Serial.print("\t");
-Serial.print(gyr_nacelle.x(),2);Serial.print("\t");
+*/
+      Serial.print(gyr_chassis.x(),2);Serial.print("\t");
+      Serial.print(gyr_nacelle.x(),2);Serial.print("\t");
+      Serial.print(gyr_chassis.x()+motor_direction*W_VERIN,2);Serial.print("\t");
+      Serial.print(motor_direction*W_VERIN,2);Serial.print("\t");
       Serial.print(angle_nacelle_f*RAD2DEG,2);Serial.print("\t");
-      Serial.print(angle_chassis_f*RAD2DEG,2);Serial.print("\t");
-      Serial.print(angle_nacelle*RAD2DEG,2);Serial.print("\t");
-      Serial.print(angle_chassis*RAD2DEG,2);Serial.print("\t");
-      Serial.print(angle_parallelogramme*RAD2DEG,2);Serial.print("\t");
-      Serial.print(acc_courbure_est,2);Serial.print("\t");
-      Serial.print(angle_courbure_est,2);Serial.print("\t");
+      Serial.print(angle_route_k*RAD2DEG,2);Serial.print("\t");
+      Serial.print(angle_parallelogramme_k/1.435*RAD2DEG,2);Serial.print("\t");
+
+      Serial.print(angle_err_parallelogramme*RAD2DEG,2);Serial.print("\t");
       Serial.print(angle_err*RAD2DEG,2);Serial.print("\t");
+
       Serial.print(motor_direction);Serial.print("\t");
 
       Serial.println("\t");
@@ -353,13 +373,16 @@ Serial.print(gyr_nacelle.x(),2);Serial.print("\t");
           dataFile.print(vy_gps,2);dataFile.print(";");
 
           dataFile.print(motor_direction);dataFile.print(";");
+
           dataFile.print(angle_nacelle_f*RAD2DEG,2);dataFile.print(";");
           dataFile.print(angle_chassis_f*RAD2DEG,2);dataFile.print(";");
-          dataFile.print(angle_parallelogramme*RAD2DEG);dataFile.print(";");
-          dataFile.print(acc_courbure_est,2);dataFile.print(";");
-          dataFile.print(angle_courbure_est*RAD2DEG,2);dataFile.print(";");
-          dataFile.print(angle_err*RAD2DEG,2);dataFile.print(";");
 
+          dataFile.print(angle_parallelogramme_k/1.435*RAD2DEG);dataFile.print(";");
+          dataFile.print(angle_courbure_est*RAD2DEG,2);dataFile.print(";");
+          dataFile.print(angle_err_parallelogramme*RAD2DEG,2);dataFile.print(";");
+
+          dataFile.print(angle_route_k*RAD2DEG,2);dataFile.print(";");
+          dataFile.print(angle_err*RAD2DEG,2);dataFile.print(";");
 
           dataFile.println(" "); // gaffe à la dernière ligne
           

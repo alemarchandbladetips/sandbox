@@ -5,30 +5,41 @@
 
 #define PRINT_DEBUG 1
 
+// definition des pins de controle du commutateur pour le verin
 #define PIN_PLUS 9
 #define PIN_MINUS 10
 
+// Conversion radian/degrès
 #define RAD2DEG 57.2957795
 #define DEG2RAD 0.01745329252
 
+// periode d'échantillonage
 #define DT_US 20000
 #define DT_S 0.02
 
-#define HYST_ANGLE_SUP 3*DEG2RAD
-#define HYST_ANGLE_INF 1.5*DEG2RAD
+// Largeur de l'hysteresis
+#define HYST_ANGLE_SUP 1.5*DEG2RAD
+#define HYST_ANGLE_INF 0.75*DEG2RAD
 
+// Vitesse minimale (m/s) pour activer le calcul de la courbure
+#define VITESSE_MIN_COURBURE 1.5
+
+// Vitesse angulaire de la base lors de l'activation du verin
 #define W_VERIN 4.8
 
+// Paramétres du filtre de second ordre pour Acc et gyr
 #define ALPHA_ACC 0.3
 #define M_ACC 1
 
-#define ALPHA_GYR 0.5
+#define ALPHA_GYR 0.2
 #define M_GYR 1
 
-
+// Offset nacelle et chassis  (montage des IMU)
 #define OFF_NACELLE -5.25*DEG2RAD
 #define OFF_CHASSIS 2.1*DEG2RAD
 
+
+//// Variables de commande
 float alpha_Kalman_parallelogramme = 0.01;
 float alpha_Kalman_route = 0.02;
 
@@ -36,13 +47,17 @@ float angle_nacelle, angle_chassis = 0;
 float angle_nacelle_f, angle_chassis_f = 0;
 float angle_parallelogramme_k, angle_route_k, angle_err_parallelogramme = 0;
 float v_gps, courbure_est, acc_courbure_est, angle_courbure_est, angle_err;
+int8_t motor_direction = 0;
 
+//// Variables de stockage des données capteur et mémoires des filtres
 
 float acc_nacelle[3], acc_nacelle_f[3], acc_nacelle_f1[3], acc_nacelle_f2[3] = {0,0,0};
 float acc_chassis[3], acc_chassis_f[3], acc_chassis_f1[3], acc_chassis_f2[3] = {0,0,0};
 
 float gyr_nacelle[3], gyr_nacelle_f[3], gyr_nacelle_f1[3], gyr_nacelle_f2[3] = {0,0,0};
 float gyr_chassis[3], gyr_chassis_f[3], gyr_chassis_f1[3], gyr_chassis_f2[3] = {0,0,0};
+
+//// Paramètres de filtrage
 
 float k_acc = 1/(1+2*M_ACC/ALPHA_ACC+(1/ALPHA_ACC)*(1/ALPHA_ACC));
 float a1_acc = 2*M_ACC/ALPHA_ACC+2*(1/ALPHA_ACC)*(1/ALPHA_ACC);
@@ -51,8 +66,6 @@ float a2_acc = -(1/ALPHA_ACC)*(1/ALPHA_ACC);
 float k_gyr = 1/(1+2*M_GYR/ALPHA_GYR+(1/ALPHA_GYR)*(1/ALPHA_GYR));
 float a1_gyr = 2*M_GYR/ALPHA_GYR+2*(1/ALPHA_GYR)*(1/ALPHA_GYR);
 float a2_gyr = -(1/ALPHA_GYR)*(1/ALPHA_GYR);
-
-int8_t motor_direction = 0;
 
 //// BN0s ////
 Adafruit_BNO055 bno_nacelle = Adafruit_BNO055(-1,BNO055_ADDRESS_A,&Wire);
@@ -87,13 +100,14 @@ uint8_t led_status = 0;
 
 
 void setup() {
-  // put your setup code here, to run once:
+  //// Parametrisation des pins
   pinMode(PIN_PLUS,OUTPUT);
   pinMode(PIN_MINUS,OUTPUT);
 
   digitalWrite(PIN_PLUS,0);
   digitalWrite(PIN_MINUS,0);
 
+  //// On utilise la diode de la pin 13 pour avoir un retour visuel de l'état
   pinMode(13,OUTPUT);
   digitalWrite(13,0);
 
@@ -123,6 +137,7 @@ void setup() {
   
   digitalWrite(13,0);
 
+  //// Ouverture carte SD
   SD_ok = SD.begin(BUILTIN_SDCARD);
   if ( !SD_ok )
   {
@@ -135,6 +150,7 @@ void setup() {
     checkExist(); //vérifie existence du fichier et l'écriture commence à partir du numéro de fichier que n'existe pas
   }
 
+  // led13 clognotte a la fin de l'init
   digitalWrite(13,0); delay(0.5);digitalWrite(13,1); delay(0.5);
   digitalWrite(13,0); delay(0.5);digitalWrite(13,1); delay(0.5);
   digitalWrite(13,0); delay(0.5);
@@ -169,7 +185,7 @@ void loop() {
     gyr_chassis[0] = gyr_chassis.x(); gyr_chassis[1] = gyr_chassis.y(); gyr_chassis[2] = gyr_chassis.z();
 
     ///////////////////////////////////////////////////////////////////////////////////////////////////
-    //////// Filytrage des données IMU et calcul des angles corespondants
+    //////// Filtrage des données IMU et calcul des angles corespondants
 
     for(int i=0;i<3;i++)
     {
@@ -207,13 +223,11 @@ void loop() {
     angle_parallelogramme_k += (gyr_nacelle[0] - gyr_chassis[0]) * DT_S * DEG2RAD;
     angle_parallelogramme_k = (1-alpha_Kalman_parallelogramme)*angle_parallelogramme_k + alpha_Kalman_parallelogramme*(angle_nacelle-angle_chassis);
 
-    
-
     ///////////////////////////////////////////////////////////////////////////////////////////////////
     //////// Estimation de la courbure et de l'angle de consigne
 
     v_gps = sqrtf(vx_gps*vx_gps+vy_gps*vy_gps);
-    if(v_gps > 1)
+    if(v_gps > VITESSE_MIN_COURBURE)
     {
       courbure_est = gyr_chassis_f[2]*DEG2RAD/v_gps;
       acc_courbure_est = gyr_chassis_f[2]*DEG2RAD*v_gps;
@@ -223,21 +237,24 @@ void loop() {
       acc_courbure_est = 0;
     }
 
-
     angle_courbure_est = -atan2(acc_courbure_est,9.81);
 
     angle_err_parallelogramme = (-angle_courbure_est+angle_parallelogramme_k/1.435);
 
     ///////////////////////////////////////////////////////////////////////////////////////////////////
-    //////// Kalman sur l'angle nacelle
+    //////// Kalman sur l'angle route
 
     //angle_route_k += (gyr_chassis[0]-motor_direction*W_VERIN) * DT_S * DEG2RAD;
-    angle_route_k += (gyr_chassis[0]+motor_direction*W_VERIN) * DT_S * DEG2RAD;
+    angle_route_k += (gyr_chassis_f[0]+motor_direction*W_VERIN) * DT_S * DEG2RAD;
     angle_route_k = (1-alpha_Kalman_route)*angle_route_k + alpha_Kalman_route*(angle_nacelle-angle_err_parallelogramme);
 
     ///////////////////////////////////////////////////////////////////////////////////////////////////
     //////// Implementation de la commande par hysteresis
 
+    //// Angle d'erreur
+    // Sans retour de boucle
+    //angle_err = angle_err_parallelogramme;
+    // Avec retour de boucle
     angle_err = angle_err_parallelogramme + angle_route_k;
 
     if(motor_direction == 0)
@@ -264,13 +281,17 @@ void loop() {
         motor_direction = 0;
       }
     }
+
+    // Application de la commande au commutateur.
     digitalWrite(PIN_PLUS,motor_direction > 0);
     digitalWrite(PIN_MINUS,motor_direction < 0);
 
+    ///////////////////////////////////////////////////////////////////////////////////////////////////
+    //////// Affichage sur serial pour debug
 
     if(PRINT_DEBUG)
     {
-      /*
+      
       Serial.print(enlapsed_time/1000.0);Serial.print("\t");
 
       // IMU nacelle
@@ -299,7 +320,7 @@ void loop() {
       Serial.print(vy_gps,2);Serial.print("\t");
 
       Serial.print(GPS_init_done,2);Serial.print("\t");
-*/
+
       Serial.print(gyr_chassis.x(),2);Serial.print("\t");
       Serial.print(gyr_nacelle.x(),2);Serial.print("\t");
       Serial.print(gyr_chassis.x()+motor_direction*W_VERIN,2);Serial.print("\t");
@@ -315,6 +336,10 @@ void loop() {
 
       Serial.println("\t");
     }
+
+    ///////////////////////////////////////////////////////////////////////////////////////////////////
+    //////// Enregistrement des données sur carte SD
+
     if (SD_ok) 
     {
       if(GPS_init_done)
@@ -399,7 +424,7 @@ void loop() {
   }
 }
 
-void checkExist(void)
+void checkExist(void) // Verification du dernier log créé pour pas écraser.
 {
   do
   {
@@ -413,7 +438,7 @@ void checkExist(void)
   nb_file = counter - 1;
 }
 
-void scan_GPS_serial_port()
+void scan_GPS_serial_port() // récupération de données GPS sur port série.
 {
   //Serial.println(Serial1.available());
   if ( GPS_DATA.getData_int16_t( 7, START1, STOP, DATA_GPS_RX) > 0 )

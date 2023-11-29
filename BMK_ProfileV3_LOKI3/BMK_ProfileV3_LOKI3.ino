@@ -10,15 +10,17 @@
 /****** Paramètres principaux de la procédure de test *************/
 
 #define PWM_START_PROCEDURE 1000
-#define PWM_STOP_PROCEDURE 1800//2000
-#define PWM_STEP_PROCEDURE 50
+#define PWM_STOP_PROCEDURE 1600
+#define PWM_STEP_PROCEDURE 30
 #define TEMPS_MESURE_PROCEDURE 6000000 //7000000
 
 /****** Gains des capteurs de poids/couple (procédure de calib) *************/
 
-#define GAIN_POIDS 0.377686
+#define GAIN_POIDS 0.3708
+//0.377686
 //0.3785
-#define GAIN_COUPLE -1.354722
+#define GAIN_COUPLE 1.374
+//-1.354722
 //-1.358637
 
 /******Capteur Poids/couple *************/
@@ -229,7 +231,7 @@ void setup()
   Serial.print( "Commandes disponible dans le Serial :");Serial.print("\n");
   Serial.print( "'t' tare des capteurs de couple et de poids");Serial.print("\n");
   Serial.print( "'p' affichage des mesures courantes");Serial.print("\n");
-  Serial.print( "'e' enable/disable debug plot");Serial.print("\n");Serial.print("\n");
+  Serial.print( "'e' enable/disable debug plot");Serial.print("\n");
   Serial.print( "'cXX' set thrust target to XXg");Serial.print("\n");Serial.print("\n");
 }
 
@@ -238,6 +240,7 @@ void loop()
 {  
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////
 ////// Lecture radio
+  
   SpeedMot.getData_float(1,137,173,&rpm_mean);
   lectureRadio(Serial1);
   

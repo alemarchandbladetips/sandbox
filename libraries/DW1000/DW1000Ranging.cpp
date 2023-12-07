@@ -151,6 +151,8 @@ void DW1000RangingClass::generalStart() {
 		Serial.println(msg);
 	}
 	
+	// Vincent changes
+	DW1000.large_power_init();
 	
 	// anchor starts in receiving mode, awaiting a ranging poll message
 	receiver();

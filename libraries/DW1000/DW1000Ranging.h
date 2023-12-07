@@ -26,9 +26,6 @@
  * - use enums instead of preprocessor constants
  */
 
-#ifndef _DW1000Ranging_H_INCLUDED
-#define _DW1000Ranging_H_INCLUDED
-
 #include "DW1000.h"
 #include "DW1000Time.h"
 #include "DW1000Device.h" 
@@ -46,7 +43,7 @@
 #define LEN_DATA 90
 
 //Max devices we put in the networkDevices array ! Each DW1000Device is 74 Bytes in SRAM memory for now.
-#define MAX_DEVICES 7
+#define MAX_DEVICES 4
 
 //Default Pin for module:
 #define DEFAULT_RST_PIN 9
@@ -211,5 +208,3 @@ private:
 };
 
 extern DW1000RangingClass DW1000Ranging;
-
-#endif

@@ -1,5 +1,4 @@
 /*
-  mods by SJR, last update 2/19/2022
  * Copyright (c) 2015 by Thomas Trojer <thomas@trojer.net>
  * Decawave DW1000 library for arduino.
  *
@@ -313,6 +312,10 @@ public:
 	// transmission state
 	static void newTransmit();
 	static void startTransmit();
+
+	// Vincent changes
+	// For large power moudle
+	static void large_power_init();
 	
 	/* ##### Operation mode selection ############################################ */
 	/** 

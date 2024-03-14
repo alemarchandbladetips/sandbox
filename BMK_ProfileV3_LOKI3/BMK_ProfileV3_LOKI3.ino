@@ -7,19 +7,26 @@
 #include "Adafruit_INA260.h"
 //#include "Adafruit_MLX90614.h"
 
+#define NBlades 3.0
+
 /****** Paramètres principaux de la procédure de test *************/
 
 #define PWM_START_PROCEDURE 1000
-#define PWM_STOP_PROCEDURE 1600
-#define PWM_STEP_PROCEDURE 30
-#define TEMPS_MESURE_PROCEDURE 6000000 //7000000
+#define PWM_STOP_PROCEDURE 1450
+#define PWM_STEP_PROCEDURE 45
+#define TEMPS_MESURE_PROCEDURE 7000000 //7000000
+
+int16_t PWM_tab[11] = {1000 , 1100 , 1200 , 1300 , 1350 , 1400 , 1450 , 1500 , 1600 , 1800 , 2000};
+#define N_PWM 11
+uint16_t i_PWM = 0;
 
 /****** Gains des capteurs de poids/couple (procédure de calib) *************/
 
 #define GAIN_POIDS 0.3708
 //0.377686
 //0.3785
-#define GAIN_COUPLE 1.374
+#define GAIN_COUPLE 1.352
+// 1.37
 //-1.354722
 //-1.358637
 
@@ -126,7 +133,7 @@ char caractere;
 
 // Timers procedure de test
 uint32_t tt_start_phase;
-uint32_t dt_init_filtres = 500000;//500000;
+uint32_t dt_init_filtres = 1000000;//500000;
 uint32_t dt_mesure = TEMPS_MESURE_PROCEDURE;
 
 uint16_t pwm_procedure;
@@ -262,6 +269,7 @@ void loop()
     procedure_state = 1;
     pwm_procedure = pwm_start_procedure;
     init_filtres = 0;
+    i_PWM = 0;
     Serial.print( "///////////////////////////////////////////" );Serial.print("\n");
     Serial.print( "Début de la procédure de test moteur automatique" );Serial.print("\n");Serial.print("\n");
     //tare_all();
@@ -279,6 +287,8 @@ void loop()
     }
   }
   last_switch_C = switch_C;
+
+
 
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -376,7 +386,7 @@ void loop()
         }
         else
         {
-          Motor1.pwm = pwm_procedure;
+          Motor1.pwm = PWM_tab[i_PWM];
           
           if( ((micros() - tt_start_phase) > dt_init_filtres) && !init_filtres) // Reset des filtre au bout de 'dt_init_filtres' pour accélérer la convergence
           {
@@ -387,10 +397,10 @@ void loop()
           if( (micros() - tt_start_phase) > dt_mesure ) // Prise de la mesure et initialisation pour la phase suivante
           {
             print_output_line();
-            pwm_procedure += pwm_step_procedure;
+            i_PWM++;
             tt_start_phase = micros();
             init_filtres = 0;
-            if (pwm_procedure > pwm_stop_procedure) // Condition d'arrêt de la procédure de test
+            if (i_PWM > N_PWM-1) // Condition d'arrêt de la procédure de test
             {
               procedure_state = 2;
             }
@@ -655,7 +665,7 @@ void print_output_line()
   Serial.print(sigma_poids_f);Serial.print("\t");
   Serial.print(couple_f);Serial.print("\t");
   Serial.print(sigma_couple_f);Serial.print("\t");
-  Serial.print(rpm_mean);Serial.print("\t");
+  Serial.print(rpm_mean/NBlades*3.0);Serial.print("\t");
   Serial.print(0);Serial.print("\t");
   Serial.print(poids_f/(tension_ina_f*courant_ina_f));Serial.print("\n");
 }

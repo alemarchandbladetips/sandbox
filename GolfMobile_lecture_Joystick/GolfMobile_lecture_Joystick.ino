@@ -18,8 +18,8 @@ The leds are also used to show the state of the wifi pairing with the GolfMobile
 
 
 // Usefull when using the nunchuck
-#include <WiiChuck.h>
-Accessory nunchuck;
+//#include <WiiChuck.h>
+//Accessory nunchuck;
 
 
 // Defining input pins
@@ -81,7 +81,7 @@ uint8_t joyX_U8, joyY_U8;
 
 float joyX_scale, joyY_scale, joyX0, joyY0 = 0;
 
-#define GM_JOY_DEAD_ZONE 50
+#define GM_JOY_DEAD_ZONE 200
 
 //// flags
 uint8_t count, connected2AP_flag, connected2UDP_flag;
@@ -109,10 +109,10 @@ void setup() {
 
   
   // Usefull when using the nunchuck
-  nunchuck.begin();
+ /* nunchuck.begin();
 	if (nunchuck.type == Unknown) {
 		nunchuck.type = NUNCHUCK;
-	}
+	}*/
 
   
   //// Defining PINS
@@ -150,8 +150,8 @@ void setup() {
   }
   led_switch_all(1);
 
-  joyX_scale = min((float)(4096.0-joyX0-GM_JOY_DEAD_ZONE), joyX0-GM_JOY_DEAD_ZONE);
-  joyY_scale = min((float)(4096.0-joyY0-GM_JOY_DEAD_ZONE), joyY0-GM_JOY_DEAD_ZONE);
+  joyX_scale = 0.8*min((float)(4096.0-joyX0-GM_JOY_DEAD_ZONE), joyX0-GM_JOY_DEAD_ZONE);
+  joyY_scale = 0.8*min((float)(4096.0-joyY0-GM_JOY_DEAD_ZONE), joyY0-GM_JOY_DEAD_ZONE);
 
   Serial.print("joystick :");Serial.print("\t");
   Serial.print(joyX0);Serial.print("\t");
@@ -172,7 +172,7 @@ void loop() {
     led_counter ++;
 
     input_read();
-    //input_scale();
+    input_scale();
     print_inputs();
     
     if(!connected2AP_flag)// && link_button == 1)
@@ -224,22 +224,22 @@ void loop() {
 void input_read(void)
 {
 
-  
+  /*
     // Usefull when using the nunchuck
     nunchuck.readData();
     joyX_U8 = nunchuck.getJoyX();
     joyY_U8 = nunchuck.getJoyY();
     cruise_button = nunchuck.getButtonC();
     brake_button = nunchuck.getButtonZ();
-    
-/*
+    */
+
   joyX_raw = analogRead(GM_JOYX_PIN);
   joyY_raw = analogRead(GM_JOYY_PIN);
   batt_level_raw = analogRead(GM_BATT_PIN);
   cruise_button = !digitalRead(GM_CRUISE_PIN);
   brake_button = !digitalRead(GM_BRAKE_PIN);
   link_button = !digitalRead(GM_LINK_PIN);
-  */
+  
 }
 
 void input_scale(void)

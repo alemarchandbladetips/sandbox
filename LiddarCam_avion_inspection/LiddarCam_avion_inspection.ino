@@ -26,7 +26,7 @@ int16_t pwm_angle0_servo, pwm_servo_prev;
 int16_t pwm0_servo = 1032;
 float alpha = 0.03;
 
-float gimbal_angle0 = 90.0;
+float gimbal_angle0 = 120.0;
 
 float gimbal_angle;
 

@@ -7,8 +7,8 @@
 Accessory nunchuck;
 */
 
-#define ENABLE_PRINT 0
-#define ENABLE_PRINT_DEBUG 1
+#define ENABLE_PRINT 1
+#define ENABLE_PRINT_DEBUG 0
 
 //// Definition des paramètres des la loi de contrôle
 
@@ -17,15 +17,15 @@ Accessory nunchuck;
 #define ALPHA_JOYSTICK_LAT 0.02
 #define M_JOYSTICK 0.8
 #define ALPHA_FALL_JOYSTICK_FRONT 0.05
-#define ALPHA_FALL_JOYSTICK_LAT 0.035
+#define ALPHA_FALL_JOYSTICK_LAT 0.05
 
 // définition de la vitesse max
 #define FRONT_SPEED_GAIN 115.0f
 //120.0f 
-// Vitesse max arrière par rapport à la vitesse avant (la vitesse peut être saturé par les controleurs, sas que l'on puisse le configurer)
+// Vitesse max arrière par rapport à la vitesse avant (la vitesse peut être saturé par les controleurs, sans que l'on puisse le configurer)
 #define REAR_VS_FRONT_GAIN 0.05f 
 // Vitesse différentielle max par rapport à la vitesse avant
-#define LAT_VS_FRONT_GAIN 0.3f 
+#define LAT_VS_FRONT_GAIN 0.2f 
 // vitesse max en mode régulation de vitesse
 #define CRUISE_SPEED_MAX 1.0f
 
@@ -55,7 +55,7 @@ uint32_t brake_time;
 
 // Largeur de la zone morte normalisée (utilisé pour désenclancher le régulateur de vitesse)
 #define DEAD_ZONE 0.05f 
-#define DEAD_ZONE_X 0.4f 
+#define DEAD_ZONE_X 0.1f 
 
 //// Définition des paramètres de la connexion série avec le BT
 
@@ -191,8 +191,9 @@ void loop() {
       if(serial_data == BLE_START2)
       {
         serial_data = WIFI_SERIAL.read();
-        //Serial.print(x);Serial.print("\t");
+        //Serial.print(serial_data);Serial.print("\t");
         joyX = (((float)serial_data)-128)/128;
+        //Serial.print(joyX);Serial.println("\t");
         if(abs(joyX)<DEAD_ZONE_X)
         {
           joyX=0;
@@ -207,15 +208,16 @@ void loop() {
           }
         }
         serial_data = WIFI_SERIAL.read();
-        //Serial.print(x);Serial.println("\t");
+        //Serial.print(serial_data);Serial.println("\t");
         joyY = (((float)serial_data)-128)/128;
+        //Serial.print(joyY);Serial.println("\t");
         if(abs(joyY)<DEAD_ZONE)
         {
           joyY=0;
         } else
         {
           joyY = min(joyY,0.75);
-          if (joyY<0)
+          if (joyY<-0.50)
           {
             joyX=0;
           }
@@ -277,10 +279,10 @@ void loop() {
       //// Axe gauche/droite ////
       if ( (joyX > DEAD_ZONE) && (joyX > joyX_f ) )
       {
-        joyX_f = kx*(joyX + a1x*joyX_f1 + a2x*joyX_f2);       
+        joyX_f = ALPHA_FALL_JOYSTICK_LAT*joyX + (1-ALPHA_FALL_JOYSTICK_LAT)*joyX_f1;     
       } else if ( (joyX < -DEAD_ZONE) && (joyX < joyX_f ) )
       {
-        joyX_f = kx*(joyX + a1x*joyX_f1 + a2x*joyX_f2);
+        joyX_f = ALPHA_FALL_JOYSTICK_LAT*joyX + (1-ALPHA_FALL_JOYSTICK_LAT)*joyX_f1;
       } else
       {
         if(constant_cruise_flag == 0 )
@@ -329,7 +331,7 @@ void loop() {
       } else if ( (joyY_tmp < -DEAD_ZONE) )
       {
         joyY_f = 0;
-        if ( (joyY_tmp < -4*DEAD_ZONE) )
+        if ( (joyY_tmp < -0.5f) )
         {
           button_brake = 1;
         } else
@@ -387,16 +389,13 @@ void loop() {
         if(joyX_f>0.1)
         {
           brake_flagR = 1;
-          if(front_speed_ref<0.3f)
-          {
-            brake_level_max = BRAKE_LEVEL_MAX0;
-          } else if (front_speed_ref<0.6f)
+          if(front_speed_ref+abs(lateral_speed_ref)<0.5f)
           {
             brake_level_max = BRAKE_LEVEL_MAX1;
           } else
           {
             brake_level_max = BRAKE_LEVEL_MAX2;
-          }
+          } 
         } else
         {
           brake_flagR = 0;
@@ -404,10 +403,7 @@ void loop() {
         if(joyX_f<-0.1)
         {
           brake_flagL = 1;
-          if(front_speed_ref<0.3f)
-          {
-            brake_level_max = BRAKE_LEVEL_MAX0;
-          } else if (front_speed_ref<0.6f)
+          if(front_speed_ref+abs(lateral_speed_ref)<0.5f)
           {
             brake_level_max = BRAKE_LEVEL_MAX1;
           } else
@@ -615,8 +611,8 @@ void loop() {
     {
       Serial.print(time_since_since_last_data);Serial.print("\t");
       Serial.print("Remote:");Serial.print("\t");
-      //Serial.print(joyY);Serial.print("\t");
-      //Serial.print(joyX);Serial.print("\t");
+      Serial.print(joyY);Serial.print("\t");
+      Serial.print(joyX);Serial.print("\t");
       //Serial.print(button_cruise);Serial.print("\t");
       //Serial.print(button_brake);Serial.print("\t");
       Serial.print(joyY_f);Serial.print("\t");
@@ -624,10 +620,10 @@ void loop() {
       Serial.print(brake_level_max);Serial.print("\t");
 
       Serial.print("Flags:");Serial.print("\t");
-      Serial.print(constant_cruise_flag);Serial.print("\t");
+      Serial.print(button_brake);Serial.print("\t");
       Serial.print(brake_flagL);Serial.print("\t");
       Serial.print(brake_flagR);Serial.print("\t");
-      Serial.print(parking_brake_flag);Serial.print("\t");
+      //Serial.print(parking_brake_flag);Serial.print("\t");
       //Serial.print(connexion_flag);Serial.print("\t");
 
       Serial.print("Vitesses:");Serial.print("\t");

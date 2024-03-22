@@ -14,10 +14,9 @@ Accessory nunchuck;
 
 // flitrage entrées de commande
 #define ALPHA_JOYSTICK_FRONT 0.003
-#define ALPHA_JOYSTICK_LAT 0.02
 #define M_JOYSTICK 0.8
 #define ALPHA_FALL_JOYSTICK_FRONT 0.05
-#define ALPHA_FALL_JOYSTICK_LAT 0.05
+#define ALPHA_JOYSTICK_LAT 0.05
 
 // définition de la vitesse max
 #define FRONT_SPEED_GAIN 115.0f
@@ -32,8 +31,8 @@ Accessory nunchuck;
 // Définition des créneaux pour le freinage
 #define BRAKE_LEVEL 8
 #define BRAKE_LEVEL_MAX0 16
-#define BRAKE_LEVEL_MAX1 18
-#define BRAKE_LEVEL_MAX2 20
+#define BRAKE_LEVEL_MAX1 19
+#define BRAKE_LEVEL_MAX2 21
 
 #define BRAKE_TIME_PROP 2000
 #define BRAKE_TIME_CSTE 1500
@@ -87,21 +86,15 @@ float acc_max = 850;
 
 // Télécommande
 uint8_t serial_data;
-
-float joyX_f, joyX, joyY_f, joyY, joyY_tmp, joyX_f1, joyY_f1, joyX_f2, joyY_f2 = 0;
-float constant_cruise_speed = 0.1f;
 uint8_t button_cruise, button_brake;
-int8_t last_button_cruise = 0;
 
 // Définition des paramètres des filtres
+
+float joyX_f, joyX, joyY_f, joyY, joyY_tmp, joyX_f1, joyY_f1, joyX_f2, joyY_f2 = 0;
 
 float ky = 1/(1+2*M_JOYSTICK/ALPHA_JOYSTICK_FRONT+(1/ALPHA_JOYSTICK_FRONT)*(1/ALPHA_JOYSTICK_FRONT));
 float a1y = 2*M_JOYSTICK/ALPHA_JOYSTICK_FRONT+2*(1/ALPHA_JOYSTICK_FRONT)*(1/ALPHA_JOYSTICK_FRONT);
 float a2y = -(1/ALPHA_JOYSTICK_FRONT)*(1/ALPHA_JOYSTICK_FRONT);
-
-float kx = 1/(1+2*M_JOYSTICK/ALPHA_JOYSTICK_LAT+(1/ALPHA_JOYSTICK_LAT)*(1/ALPHA_JOYSTICK_LAT));
-float a1x = 2*M_JOYSTICK/ALPHA_JOYSTICK_LAT+2*(1/ALPHA_JOYSTICK_LAT)*(1/ALPHA_JOYSTICK_LAT);
-float a2x = -(1/ALPHA_JOYSTICK_LAT)*(1/ALPHA_JOYSTICK_LAT);
 
 // Variables de contrôle
 float front_speed_ref = 0.0f;
@@ -111,7 +104,6 @@ float speed_ref_L = 0.0f;
 float d_lateral_speed_ref = 0.0f;
 
 // flags
-int8_t constant_cruise_flag = 0;
 int8_t brake_flagR = 0;
 int8_t brake_flagL = 0;
 int8_t last_brake_flagR = 0;
@@ -120,7 +112,7 @@ int8_t connexion_flag = 0;
 int8_t parking_brake_flag = 1;
 
 // timers
-uint32_t timer, timer_parking, timer_remote, timer_cruise_control, timer_speed,timer_brake;
+uint32_t timer, timer_parking, timer_remote, timer_speed,timer_brake;
 uint32_t time_since_since_last_data;
 uint32_t time_tmp;
 uint32_t dt_us = 10000;
@@ -171,7 +163,6 @@ void setup() {
   timer_brake = millis();
   timer_remote = millis();
   timer_parking = millis();
-  timer_cruise_control = millis();
 }
 
 void loop() {
@@ -237,8 +228,6 @@ void loop() {
   {
     timer += dt_us;
     
-    
-
     /*
     // Usefull when using the nunchuck
     nunchuck.readData();
@@ -274,60 +263,28 @@ void loop() {
 
       //////// Filtrage des commandes pour assouplir les accélérations ////////
       
-      joyX_f2 = joyX_f1;
       joyX_f1 = joyX_f;
       //// Axe gauche/droite ////
-      if ( (joyX > DEAD_ZONE) && (joyX > joyX_f ) )
+      if (abs(joyX_f)<DEAD_ZONE)
       {
-        joyX_f = ALPHA_FALL_JOYSTICK_LAT*joyX + (1-ALPHA_FALL_JOYSTICK_LAT)*joyX_f1;     
-      } else if ( (joyX < -DEAD_ZONE) && (joyX < joyX_f ) )
-      {
-        joyX_f = ALPHA_FALL_JOYSTICK_LAT*joyX + (1-ALPHA_FALL_JOYSTICK_LAT)*joyX_f1;
+        joyX_f = 0;
       } else
       {
-        if(constant_cruise_flag == 0 )
-        {
-          joyX_f = ALPHA_FALL_JOYSTICK_LAT*joyX + (1-ALPHA_FALL_JOYSTICK_LAT)*joyX_f1;
-        } else
-        {
-          joyX_f = joyX;
-        }
-        if (abs(joyX_f)<DEAD_ZONE)
-        {
-          joyX_f = 0;
-        }
-        joyX_f2 = joyX_f;
-        joyX_f1 = joyX_f;
+        joyX_f = ALPHA_JOYSTICK_LAT*joyX + (1-ALPHA_JOYSTICK_LAT)*joyX_f1; 
       }
       joyX_f = min(joyX_f,1);
       joyX_f = max(joyX_f,-1);
 
-      if(constant_cruise_flag==1)
-      {
-        joyY_tmp = 1.0f;// constant_cruise_speed;
-      } else
-      {
-        joyY_tmp = joyY;
-      }
-
+      //// AYe avant/arrière ////
+      joyY_tmp = joyY;
       joyY_f2 = joyY_f1;
       joyY_f1 = joyY_f;
 
-      //// AYe avant/arrière ////
       if ( (joyY_tmp > DEAD_ZONE) && (joyY_tmp > joyY_f ) )
       {
         joyY_f = ky*(joyY_tmp + a1y*joyY_f1 + a2y*joyY_f2);
-        
-        if(constant_cruise_flag==1)
-        {
-          joyY_f = min(joyY_f,constant_cruise_speed);
-          joyY_f1 = min(joyY_f1,constant_cruise_speed);
-          joyY_f2 = min(joyY_f2,constant_cruise_speed);
-        } else
-        {
-          joyY_f = min(joyY_f,1);
-          joyY_f = max(joyY_f,-REAR_VS_FRONT_GAIN);
-        }
+        joyY_f = min(joyY_f,1);
+        joyY_f = max(joyY_f,-REAR_VS_FRONT_GAIN);
       } else if ( (joyY_tmp < -DEAD_ZONE) )
       {
         joyY_f = 0;
@@ -352,14 +309,9 @@ void loop() {
         {
           joyY_f = 0;
         }
-        if(constant_cruise_flag==1)
-        {
-          joyY_f = min(joyY_f,constant_cruise_speed);
-        } else
-        {
-          joyY_f = min(joyY_f,1);
-          joyY_f = max(joyY_f,-REAR_VS_FRONT_GAIN);
-        }
+
+        joyY_f = min(joyY_f,1);
+        joyY_f = max(joyY_f,-REAR_VS_FRONT_GAIN);
         joyY_f2 = joyY_f;
         joyY_f1 = joyY_f;
       }
@@ -415,19 +367,6 @@ void loop() {
           brake_flagL = 0;
         }
         
-        if(constant_cruise_flag==1)
-        {
-          if(joyY>0.5)
-          {
-            constant_cruise_speed += 0.0015;
-            constant_cruise_speed = min(constant_cruise_speed,CRUISE_SPEED_MAX);
-          }
-          if(joyY<-0.5)
-          {
-            constant_cruise_speed -= 0.002;
-            constant_cruise_speed = max(0,constant_cruise_speed);
-          }
-        }
       } else if (parking_brake_flag==0)
       {
         if(last_button_brake==0)
@@ -487,7 +426,7 @@ void loop() {
       }
 
       //// On réinitialise le compteur d'inactivité si le joystick n'est pas en position centrale
-      if( abs(joyY_f)>0.005 || abs(joyX_f)>0.005|| constant_cruise_flag==1 )
+      if( abs(joyY_f)>0.005 || abs(joyX_f)>0.005 )
       {
         timer_parking = millis();
         parking_brake_flag = 0;
@@ -498,32 +437,6 @@ void loop() {
         controlleur_R.brake(PARKING_BRAKE_LEVEL_PWM);
         controlleur_L.brake(PARKING_BRAKE_LEVEL_PWM);
       }
-
-
-      //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-
-      //////// Gestion du régulateur de vitesse ////////
-
-      //// Désenclanchement du cruise control si on freine ////
-      if( button_brake == 1 )
-      {
-        constant_cruise_flag = 0;
-      }
-
-      //// Enclanchement du régulateur de vitesse, ou désenclanchement si il était activé ////
-      if( 0 )//(last_button_cruise == 0 && button_cruise == 1) )
-      {
-        if ( constant_cruise_flag == 0 )
-        {
-          constant_cruise_flag = 1;
-          constant_cruise_speed = min(constant_cruise_speed,0.75);
-        } else
-        {
-          constant_cruise_flag = 0;
-        }
-      }
-      last_button_cruise = button_cruise;
-
 
       //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -582,22 +495,6 @@ void loop() {
             speed_ref_R = front_speed_ref + d_lateral_speed_ref;
             speed_ref_R = max(0,speed_ref_R);
           }
-        } else if (front_speed_ref<0)
-        {
-          speed_ref_R = front_speed_ref;
-          speed_ref_L = front_speed_ref;
-          /*
-          if(lateral_speed_ref<0 )
-          {
-            speed_ref_R = min(0,front_speed_ref - lateral_speed_ref);
-            speed_ref_L = front_speed_ref;
-            speed_ref_L = min(0,speed_ref_L);
-          } else
-          {
-            speed_ref_L = min(0,front_speed_ref + lateral_speed_ref);
-            speed_ref_R = front_speed_ref;
-            speed_ref_R = min(0,speed_ref_R);
-          }*/
         }
       }
 
